@@ -1,0 +1,121 @@
+using System;
+using System.Device.Pwm;
+using System.Device.Pwm.Drivers;
+using System.Threading;
+using Iot.Device.ServoMotor;
+
+namespace robot_firmware
+{
+    class Program
+    {
+        static void Main(string[] args)
+        {
+            Console.WriteLine("Skittle sorter starting…");
+
+            // ------------------------------
+            // COLOR SENSOR SETUP
+            // ------------------------------
+            using var colorSensor = new TCS3472x();
+            Console.WriteLine("Sensor initialised.");
+
+            // ------------------------------
+            // SERVO SETUP
+            // ------------------------------
+            using PwmChannel pwm1 = PwmChannel.Create(0, 0, 50);
+            using ServoMotor servo1 = new ServoMotor(pwm1, 180, 700, 2400);
+
+            using PwmChannel pwm2 = PwmChannel.Create(0, 1, 50);
+            using ServoMotor servo2 = new ServoMotor(pwm2, 180, 700, 2400);
+
+            servo1.Start();
+            servo2.Start();
+
+            // Track current chute position
+            int currentChuteAngle = 22; // start at red
+
+            try
+            {
+                while (true)
+                {
+                    // ------------------------------
+                    // 1. PICK SKITTLE
+                    // ------------------------------
+                    MoveToAngle(servo1, 160);
+                    Thread.Sleep(1000);
+
+                    // ------------------------------
+                    // 2. MOVE UNDER SENSOR
+                    // ------------------------------
+                    MoveToAngle(servo1, 60);
+                    Thread.Sleep(500);
+
+                    // ------------------------------
+                    // 3. READ SENSOR
+                    // ------------------------------
+                    var (clear, red, green, blue) = colorSensor.ReadColor();
+
+                    Console.WriteLine($"C={clear} R={red} G={green} B={blue}");
+
+                    string colour = colorSensor.ClassifySkittleColor(red, green, blue, clear);
+                    Console.WriteLine($"Detected: {colour}");
+
+                    // ------------------------------
+                    // 4. HANDLE "NONE" CASE
+                    // ------------------------------
+                    if (colour == "None")
+                    {
+                        Console.WriteLine("No Skittle detected — returning to pick position.");
+                        MoveToAngle(servo1, 160);
+                        Thread.Sleep(1000);
+                        continue;
+                    }
+
+                    // ------------------------------
+                    // 5. DETERMINE TARGET CHUTE ANGLE
+                    // ------------------------------
+                    int targetAngle = colour switch
+                    {
+                        "Red" => 22,
+                        "Green" => 44,
+                        "Purple" => 66,
+                        "Yellow" => 88,
+                        "Orange" => 110,
+                        _ => currentChuteAngle
+                    };
+
+                    // ------------------------------
+                    // 6. MOVE SERVO2 ONLY IF NEEDED
+                    // ------------------------------
+                    if (targetAngle != currentChuteAngle)
+                    {
+                        MoveToAngle(servo2, targetAngle);
+                        Thread.Sleep(200);
+                        currentChuteAngle = targetAngle;
+                    }
+                    else
+                    {
+                        Console.WriteLine("Already at correct chute — skipping wait.");
+                    }
+
+                    // ------------------------------
+                    // 7. DROP SKITTLE
+                    // ------------------------------
+                    MoveToAngle(servo1, 0);
+                    Thread.Sleep(1500);
+
+                    Console.WriteLine("Sorted.\n");
+                }
+            }
+            finally
+            {
+                servo1.Stop();
+                servo2.Stop();
+            }
+        }
+
+        static void MoveToAngle(ServoMotor servo, int angle)
+        {
+            servo.WriteAngle(angle);
+        }
+    }
+}
