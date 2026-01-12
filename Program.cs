@@ -1,6 +1,7 @@
 using System;
 using System.Device.Pwm;
 using System.Device.Pwm.Drivers;
+using System.Text.Json;
 using System.Threading;
 using Iot.Device.ServoMotor;
 
@@ -12,20 +13,42 @@ namespace robot_firmware
         {
             Console.WriteLine("Skittle sorter starting…");
 
-            // ------------------------------
+            // ==============================
+            // LOAD CONFIGURATION FROM FILE
+            // ==============================
+            var config = LoadConfiguration();
+
+            Console.WriteLine($"Mock Mode - Color Sensor: {config.EnableMockColorSensor}, Servos: {config.EnableMockServos}\n");
+
+            // ==============================
             // COLOR SENSOR SETUP
-            // ------------------------------
-            using var colorSensor = new TCS3472x();
+            // ==============================
+            using var colorSensor = config.EnableMockColorSensor
+                ? new TCS3472x(true, config.MockColorSequence)
+                : new TCS3472x();
             Console.WriteLine("Sensor initialised.");
 
-            // ------------------------------
+            // ==============================
             // SERVO SETUP
-            // ------------------------------
-            using PwmChannel pwm1 = PwmChannel.Create(0, 0, 50);
-            using ServoMotor servo1 = new ServoMotor(pwm1, 180, 700, 2400);
+            // ==============================
+            PwmChannel? pwm1 = null;
+            PwmChannel? pwm2 = null;
+            dynamic servo1;
+            dynamic servo2;
 
-            using PwmChannel pwm2 = PwmChannel.Create(0, 1, 50);
-            using ServoMotor servo2 = new ServoMotor(pwm2, 180, 700, 2400);
+            if (config.EnableMockServos)
+            {
+                servo1 = new MockServoMotor("Servo 1 (Pick)");
+                servo2 = new MockServoMotor("Servo 2 (Chute)");
+            }
+            else
+            {
+                pwm1 = PwmChannel.Create(0, 0, 50);
+                servo1 = new ServoMotor(pwm1, 180, 700, 2400);
+
+                pwm2 = PwmChannel.Create(0, 1, 50);
+                servo2 = new ServoMotor(pwm2, 180, 700, 2400);
+            }
 
             servo1.Start();
             servo2.Start();
@@ -79,7 +102,7 @@ namespace robot_firmware
                         "Green" => 44,
                         "Purple" => 66,
                         "Yellow" => 88,
-                        "Orange" => 110,
+                        "Orange" => 112,
                         _ => currentChuteAngle
                     };
 
@@ -110,12 +133,73 @@ namespace robot_firmware
             {
                 servo1.Stop();
                 servo2.Stop();
+                pwm1?.Dispose();
+                pwm2?.Dispose();
             }
         }
 
-        static void MoveToAngle(ServoMotor servo, int angle)
+        static void MoveToAngle(dynamic servo, int angle)
         {
             servo.WriteAngle(angle);
+        }
+
+        static MockColorSensorConfig LoadConfiguration()
+        {
+            try
+            {
+                string configPath = "appsettings.json";
+                
+                if (!File.Exists(configPath))
+                {
+                    Console.WriteLine($"Warning: {configPath} not found. Using default settings.");
+                    return new MockColorSensorConfig();
+                }
+
+                string json = File.ReadAllText(configPath);
+                using var doc = JsonDocument.Parse(json);
+                var root = doc.RootElement;
+
+                if (!root.TryGetProperty("MockMode", out var mockModeElement))
+                {
+                    Console.WriteLine("Warning: MockMode section not found in config. Using defaults.");
+                    return new MockColorSensorConfig();
+                }
+
+                var config = new MockColorSensorConfig();
+
+                if (mockModeElement.TryGetProperty("EnableMockColorSensor", out var enableColorSensor))
+                {
+                    config.EnableMockColorSensor = enableColorSensor.GetBoolean();
+                }
+
+                if (mockModeElement.TryGetProperty("EnableMockServos", out var enableServos))
+                {
+                    config.EnableMockServos = enableServos.GetBoolean();
+                }
+
+                if (mockModeElement.TryGetProperty("MockColorSequence", out var colorSequence))
+                {
+                    config.MockColorSequence = new();
+                    foreach (var color in colorSequence.EnumerateArray())
+                    {
+                        if (color.ValueKind == JsonValueKind.String)
+                        {
+                            var colorValue = color.GetString();
+                            if (colorValue != null)
+                            {
+                                config.MockColorSequence.Add(colorValue);
+                            }
+                        }
+                    }
+                }
+
+                return config;
+            }
+            catch (Exception ex)
+            {
+                Console.WriteLine($"Error loading configuration: {ex.Message}");
+                return new MockColorSensorConfig();
+            }
         }
     }
 }
