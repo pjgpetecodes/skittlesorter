@@ -152,11 +152,11 @@ namespace skittle_sorter
             if (gr > 0.66 && br < 0.40)
                 return "Yellow";
 
-            if (gr > 0.53 && br > 0.36)
-                return "Red";
-
             if (gr > 0.48 && br < 0.38)
                 return "Orange";
+
+            if (gr > 0.53 && br > 0.38)
+                return "Red";
 
             return "Unknown";
         }
