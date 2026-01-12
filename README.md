@@ -21,6 +21,24 @@ The hardware design is based on the [PTC Education Candy Sorter](https://github.
   - 2x Servo motors
   - 3D printed sorter components
 
+## Hardware Wiring
+
+### Circuit Diagram
+
+![Circuit Diagram](circuit/circuit.png)
+
+### Wiring Table
+
+| Pi Pin | Item          | Pin |
+|--------|---------------|-----|
+| 1      | TCS34725      | LED |
+| 2      | TCS34725      | VIN |
+| 3      | TCS34725      | SDA |
+| 5      | TCS34725      | SCL |
+| 14     | Servo 1+2     | GND |
+| 32     | Servo 1       | Pulse |
+| 33     | Servo 2       | Pulse |
+
 ## Azure IoT Hub Setup
 
 To enable telemetry to Azure IoT Hub:
