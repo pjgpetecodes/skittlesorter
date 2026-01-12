@@ -110,12 +110,6 @@ namespace skittle_sorter
                     string colour = colorSensor.ClassifySkittleColor(red, green, blue, clear);
                     Console.WriteLine($"Detected: {colour}");
 
-                    // Send telemetry to IoT Hub
-                    if (iotConfig.SendTelemetry && deviceClient != null)
-                    {
-                        messageId = SendSkittleColorTelemetry(deviceClient, messageId, colour, iotConfig.DeviceId).Result;
-                    }
-
                     // ------------------------------
                     // 4. HANDLE "NONE" CASE
                     // ------------------------------
@@ -139,6 +133,12 @@ namespace skittle_sorter
                         "Orange" => 112,
                         _ => currentChuteAngle
                     };
+
+                    // Send telemetry to IoT Hub for detected skittles only
+                    if (iotConfig.SendTelemetry && deviceClient != null)
+                    {
+                        messageId = SendSkittleColorTelemetry(deviceClient, messageId, colour, iotConfig.DeviceId).Result;
+                    }
 
                     // ------------------------------
                     // 6. MOVE SERVO2 ONLY IF NEEDED
