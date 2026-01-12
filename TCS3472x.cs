@@ -3,7 +3,7 @@ using System.Collections.Generic;
 using System.Device.I2c;
 using System.Threading;
 
-namespace robot_firmware
+namespace skittle_sorter
 {
     /// <summary>
     /// TCS3472x RGB Color Sensor (with mock mode support)

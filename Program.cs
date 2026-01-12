@@ -5,7 +5,7 @@ using System.Text.Json;
 using System.Threading;
 using Iot.Device.ServoMotor;
 
-namespace robot_firmware
+namespace skittle_sorter
 {
     class Program
     {

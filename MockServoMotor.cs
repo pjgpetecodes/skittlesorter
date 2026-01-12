@@ -1,6 +1,6 @@
 using System;
 
-namespace robot_firmware
+namespace skittle_sorter
 {
     /// <summary>
     /// Mock servo motor for testing without hardware

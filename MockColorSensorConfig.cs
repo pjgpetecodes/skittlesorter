@@ -1,7 +1,7 @@
 using System;
 using System.Collections.Generic;
 
-namespace robot_firmware
+namespace skittle_sorter
 {
     /// <summary>
     /// Configuration for mock hardware mode
