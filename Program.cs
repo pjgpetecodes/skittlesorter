@@ -3,7 +3,10 @@ using System.Device.Pwm;
 using System.Device.Pwm.Drivers;
 using System.Text.Json;
 using System.Threading;
+using System.Text;
 using Iot.Device.ServoMotor;
+using Microsoft.Azure.Devices.Client;
+using Newtonsoft.Json;
 
 namespace skittle_sorter
 {
@@ -17,8 +20,10 @@ namespace skittle_sorter
             // LOAD CONFIGURATION FROM FILE
             // ==============================
             var config = LoadConfiguration();
+            var iotConfig = LoadIoTConfiguration();
 
             Console.WriteLine($"Mock Mode - Color Sensor: {config.EnableMockColorSensor}, Servos: {config.EnableMockServos}\n");
+            Console.WriteLine($"IoT Hub Telemetry Enabled: {iotConfig.SendTelemetry}\n");
 
             // ==============================
             // COLOR SENSOR SETUP
@@ -56,6 +61,29 @@ namespace skittle_sorter
             // Track current chute position
             int currentChuteAngle = 22; // start at red
 
+            // ==============================
+            // IOT HUB SETUP
+            // ==============================
+            DeviceClient? deviceClient = null;
+            int messageId = 0;
+
+            if (iotConfig.SendTelemetry)
+            {
+                try
+                {
+                    deviceClient = DeviceClient.CreateFromConnectionString(
+                        iotConfig.DeviceConnectionString,
+                        TransportType.Mqtt);
+                    Console.WriteLine("Connected to IoT Hub.\n");
+                }
+                catch (Exception ex)
+                {
+                    Console.WriteLine($"Warning: Failed to connect to IoT Hub: {ex.Message}");
+                    Console.WriteLine("Continuing without telemetry.\n");
+                    iotConfig.SendTelemetry = false;
+                }
+            }
+
             try
             {
                 while (true)
@@ -81,6 +109,12 @@ namespace skittle_sorter
 
                     string colour = colorSensor.ClassifySkittleColor(red, green, blue, clear);
                     Console.WriteLine($"Detected: {colour}");
+
+                    // Send telemetry to IoT Hub
+                    if (iotConfig.SendTelemetry && deviceClient != null)
+                    {
+                        messageId = SendSkittleColorTelemetry(deviceClient, messageId, colour, iotConfig.DeviceId).Result;
+                    }
 
                     // ------------------------------
                     // 4. HANDLE "NONE" CASE
@@ -135,6 +169,7 @@ namespace skittle_sorter
                 servo2.Stop();
                 pwm1?.Dispose();
                 pwm2?.Dispose();
+                deviceClient?.Dispose();
             }
         }
 
@@ -201,5 +236,97 @@ namespace skittle_sorter
                 return new MockColorSensorConfig();
             }
         }
+
+        static IoTHubConfig LoadIoTConfiguration()
+        {
+            try
+            {
+                string configPath = "appsettings.json";
+                
+                if (!File.Exists(configPath))
+                {
+                    return new IoTHubConfig();
+                }
+
+                string json = File.ReadAllText(configPath);
+                using var doc = JsonDocument.Parse(json);
+                var root = doc.RootElement;
+
+                if (!root.TryGetProperty("IoTHub", out var iotHubElement))
+                {
+                    return new IoTHubConfig();
+                }
+
+                var config = new IoTHubConfig();
+
+                if (iotHubElement.TryGetProperty("DeviceConnectionString", out var connString))
+                {
+                    var value = connString.GetString();
+                    if (value != null && !value.StartsWith("<"))
+                    {
+                        config.DeviceConnectionString = value;
+                    }
+                }
+
+                if (iotHubElement.TryGetProperty("DeviceId", out var deviceId))
+                {
+                    var value = deviceId.GetString();
+                    if (value != null && !value.StartsWith("<"))
+                    {
+                        config.DeviceId = value;
+                    }
+                }
+
+                if (iotHubElement.TryGetProperty("SendTelemetry", out var sendTelemetry))
+                {
+                    config.SendTelemetry = sendTelemetry.GetBoolean();
+                }
+
+                return config;
+            }
+            catch (Exception ex)
+            {
+                Console.WriteLine($"Error loading IoT configuration: {ex.Message}");
+                return new IoTHubConfig();
+            }
+        }
+
+        static async Task<int> SendSkittleColorTelemetry(DeviceClient deviceClient, int messageId, string color, string deviceId)
+        {
+            try
+            {
+                var telemetryData = new
+                {
+                    messageId = messageId,
+                    deviceId = deviceId,
+                    color = color,
+                    timestamp = DateTime.UtcNow,
+                    detectionTime = DateTime.Now.ToString("yyyy-MM-dd HH:mm:ss.fff")
+                };
+
+                string messageString = JsonConvert.SerializeObject(telemetryData);
+                var message = new Message(Encoding.ASCII.GetBytes(messageString));
+                message.Properties.Add("colorAlert", (color == "None") ? "undetected" : "detected");
+                message.ContentType = "application/json";
+                message.ContentEncoding = "utf-8";
+
+                await deviceClient.SendEventAsync(message);
+                Console.WriteLine($"[IoT Hub] Sent: Color={color}, Time={telemetryData.detectionTime}");
+                
+                return messageId + 1;
+            }
+            catch (Exception ex)
+            {
+                Console.WriteLine($"Error sending telemetry: {ex.Message}");
+                return messageId;
+            }
+        }
+    }
+
+    public class IoTHubConfig
+    {
+        public string DeviceConnectionString { get; set; } = "";
+        public string DeviceId { get; set; } = "";
+        public bool SendTelemetry { get; set; } = false;
     }
 }
