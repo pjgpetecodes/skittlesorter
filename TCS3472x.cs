@@ -53,13 +53,13 @@ namespace skittle_sorter
 
         private void WriteRegister(byte register, byte value)
         {
-            _i2c.Write(new byte[] { (byte)(0x80 | register), value });
+            _i2c?.Write(new byte[] { (byte)(0x80 | register), value });
         }
 
         private ushort ReadWord(byte lowRegister)
         {
             Span<byte> data = stackalloc byte[2];
-            _i2c.WriteRead(new byte[] { (byte)(0x80 | lowRegister) }, data);
+            _i2c?.WriteRead(new byte[] { (byte)(0x80 | lowRegister) }, data);
             return (ushort)(data[1] << 8 | data[0]);
         }
 
