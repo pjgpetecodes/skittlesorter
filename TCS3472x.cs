@@ -122,10 +122,11 @@ namespace skittle_sorter
                 return "None";
 
             // Mid-brightness background (chute colour)
-            if (clear > 28000 && clear < 35000 &&
+            if (clear > 28000 && clear < 36000 &&
                 red > 11000 && red < 14000 &&
                 green > 9000 && green < 12000 &&
-                blue > 6000 && blue < 8000)
+                blue > 6000 && blue < 8000 &&
+                gr < 0.85)  // Exclude actual green skittles (gr > 0.93)
             {
                 return "None";
             }
