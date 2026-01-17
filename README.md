@@ -11,6 +11,10 @@ The hardware design is based on the [PTC Education Candy Sorter](https://github.
 - **Mock Mode**: Test without physical hardware using mock sensors and servos
 - **IoT Hub Integration**: Sends detected Skittle colors with timestamps to Azure IoT Hub for real-time monitoring
 
+### Sorter in Action
+
+![Skittle Sorter Animation](resources/animation.gif)
+
 ## Prerequisites
 
 - .NET 10.0 SDK
@@ -20,6 +24,24 @@ The hardware design is based on the [PTC Education Candy Sorter](https://github.
   - TCS3472x color sensor
   - 2x Servo motors
   - 3D printed sorter components
+
+## Hardware Wiring
+
+### Circuit Diagram
+
+![Circuit Diagram](circuit/circuit.png)
+
+### Wiring Table
+
+| Pi Pin | Item          | Pin |
+|--------|---------------|-----|
+| 1      | TCS34725      | LED |
+| 2      | TCS34725      | VIN |
+| 3      | TCS34725      | SDA |
+| 5      | TCS34725      | SCL |
+| 14     | Servo 1+2     | GND |
+| 32     | Servo 1       | Pulse |
+| 33     | Servo 2       | Pulse |
 
 ## Azure IoT Hub Setup
 
