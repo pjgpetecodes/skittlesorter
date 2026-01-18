@@ -16,6 +16,7 @@ certs/
 *.p12
 appsettings.json
 appsettings.*.json
+!appsettings.template.json
 
 # User-specific files
 *.rsuser
