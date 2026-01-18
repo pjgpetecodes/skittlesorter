@@ -51,7 +51,8 @@ namespace skittle_sorter
                 // Create transport handler - matches Microsoft's ProvisioningTransportHandler pattern
                 using var transport = new ProvisioningTransportHandlerMqtt(
                     dpsCfg.ProvisioningHost,
-                    dpsCfg.MqttPort);
+                    dpsCfg.MqttPort,
+                    dpsCfg.EnableDebugLogging);
 
                 // Create provisioning client using factory pattern - matches Microsoft's ProvisioningDeviceClient.Create()
                 using var provisioningClient = ProvisioningDeviceClient.Create(

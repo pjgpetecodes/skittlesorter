@@ -16,6 +16,7 @@ namespace AzureDpsFramework.Transport
     {
         private readonly string _provisioningHost;
         private readonly int _port;
+        private readonly bool _enableDebugLogging;
         private bool _disposed;
 
         /// <summary>
@@ -23,12 +24,15 @@ namespace AzureDpsFramework.Transport
         /// </summary>
         /// <param name="provisioningHost">The DPS endpoint hostname (default: global.azure-devices-provisioning.net).</param>
         /// <param name="port">The MQTT port (default: 8883).</param>
+        /// <param name="enableDebugLogging">Enable verbose debug logging for MQTT operations.</param>
         public ProvisioningTransportHandlerMqtt(
             string provisioningHost = "global.azure-devices-provisioning.net",
-            int port = 8883)
+            int port = 8883,
+            bool enableDebugLogging = false)
         {
             _provisioningHost = provisioningHost;
             _port = port;
+            _enableDebugLogging = enableDebugLogging;
         }
 
         public async Task<DeviceRegistrationResult> RegisterAsync(
@@ -51,12 +55,15 @@ namespace AzureDpsFramework.Transport
             var apiVersion = !string.IsNullOrWhiteSpace(csrPem) ? "2025-07-01-preview" : "2019-03-31";
             var username = $"{idScope}/registrations/{registrationId}/api-version={apiVersion}&ClientVersion={userAgent}";
 
-            Console.WriteLine($"\n[MQTT] MQTT Connection Details:");
-            Console.WriteLine($"[MQTT] Host: {_provisioningHost}:{_port}");
-            Console.WriteLine($"[MQTT] Username: {username}");
-            Console.WriteLine($"[MQTT] Password (SAS Token) length: {sasToken.Length} chars");
-            Console.WriteLine($"[MQTT] ClientId: {registrationId}");
-            Console.WriteLine($"[MQTT] Attempting connection...");
+            if (_enableDebugLogging)
+            {
+                Console.WriteLine($"\n[MQTT] MQTT Connection Details:");
+                Console.WriteLine($"[MQTT] Host: {_provisioningHost}:{_port}");
+                Console.WriteLine($"[MQTT] Username: {username}");
+                Console.WriteLine($"[MQTT] Password (SAS Token) length: {sasToken.Length} chars");
+                Console.WriteLine($"[MQTT] ClientId: {registrationId}");
+                Console.WriteLine($"[MQTT] Attempting connection...");
+            }
 
             var opts = new MqttClientOptionsBuilder()
                 .WithTcpServer(_provisioningHost, _port)
@@ -76,19 +83,28 @@ namespace AzureDpsFramework.Transport
                     var topic = args.ApplicationMessage.Topic;
                     var payload = Encoding.UTF8.GetString(args.ApplicationMessage.PayloadSegment);
 
-                    Console.WriteLine($"[MQTT] Received message on topic: {topic}");
+                    if (_enableDebugLogging)
+                    {
+                        Console.WriteLine($"[MQTT] Received message on topic: {topic}");
+                    }
                     
                     // Extract status code from topic
                     if (topic.Contains("$dps/registrations/res/"))
                     {
                         var statusStr = topic.Split('/')[3].Split('?')[0];
-                        Console.WriteLine($"[MQTT] Status code from topic: {statusStr}");
-                        Console.WriteLine($"[MQTT] Response payload: {payload}");
+                        if (_enableDebugLogging)
+                        {
+                            Console.WriteLine($"[MQTT] Status code from topic: {statusStr}");
+                            Console.WriteLine($"[MQTT] Response payload: {payload}");
+                        }
 
                         var response = JsonConvert.DeserializeObject<DpsResponse>(payload);
                         if (response != null)
                         {
-                            Console.WriteLine($"[MQTT] Parsed response - status: {response.status}, operationId: {response.operationId}");
+                            if (_enableDebugLogging)
+                            {
+                                Console.WriteLine($"[MQTT] Parsed response - status: {response.status}, operationId: {response.operationId}");
+                            }
                             tcs.TrySetResult(response);
                         }
                     }
@@ -102,7 +118,10 @@ namespace AzureDpsFramework.Transport
 
             try
             {
-                Console.WriteLine("[MQTT] Attempting MQTT connection...");
+                if (_enableDebugLogging)
+                {
+                    Console.WriteLine("[MQTT] Attempting MQTT connection...");
+                }
                 await client.ConnectAsync(opts, cancellationToken);
                 Console.WriteLine("[MQTT] ✅ Connected successfully to DPS!\n");
             }
@@ -114,9 +133,15 @@ namespace AzureDpsFramework.Transport
             }
 
             // Subscribe to all DPS responses
-            Console.WriteLine("[MQTT] Subscribing to: $dps/registrations/res/#");
+            if (_enableDebugLogging)
+            {
+                Console.WriteLine("[MQTT] Subscribing to: $dps/registrations/res/#");
+            }
             await client.SubscribeAsync("$dps/registrations/res/#");
-            Console.WriteLine("[MQTT] Subscription complete\n");
+            if (_enableDebugLogging)
+            {
+                Console.WriteLine("[MQTT] Subscription complete\n");
+            }
 
             // Build registration payload
             object registrationPayload;
@@ -138,9 +163,12 @@ namespace AzureDpsFramework.Transport
             string payload = JsonConvert.SerializeObject(registrationPayload);
             string registerTopic = $"$dps/registrations/PUT/iotdps-register/?$rid={requestId}";
 
-            Console.WriteLine($"[MQTT] Publishing registration to: {registerTopic}");
-            Console.WriteLine($"[MQTT] Payload length: {payload.Length} bytes");
-            Console.WriteLine($"[MQTT] Payload (first 200 chars): {payload.Substring(0, Math.Min(200, payload.Length))}...");
+            if (_enableDebugLogging)
+            {
+                Console.WriteLine($"[MQTT] Publishing registration to: {registerTopic}");
+                Console.WriteLine($"[MQTT] Payload length: {payload.Length} bytes");
+                Console.WriteLine($"[MQTT] Payload (first 200 chars): {payload.Substring(0, Math.Min(200, payload.Length))}...");
+            }
 
             var appMsg = new MqttApplicationMessageBuilder()
                 .WithTopic(registerTopic)
@@ -149,7 +177,10 @@ namespace AzureDpsFramework.Transport
                 .Build();
 
             await client.PublishAsync(appMsg, cancellationToken);
-            Console.WriteLine("[MQTT] Registration request published. Waiting for response (30s timeout)...\n");
+            if (_enableDebugLogging)
+            {
+                Console.WriteLine("[MQTT] Registration request published. Waiting for response (30s timeout)...\n");
+            }
 
             using var cts = CancellationTokenSource.CreateLinkedTokenSource(cancellationToken);
             cts.CancelAfter(TimeSpan.FromSeconds(30));
@@ -157,17 +188,26 @@ namespace AzureDpsFramework.Transport
             try
             {
                 var initial = await tcs.Task.WaitAsync(cts.Token);
-                Console.WriteLine($"[MQTT] Received initial response - status: {initial.status}");
+                if (_enableDebugLogging)
+                {
+                    Console.WriteLine($"[MQTT] Received initial response - status: {initial.status}");
+                }
 
                 // If assigning, poll until assigned
                 if (string.Equals(initial.status, "assigning", StringComparison.OrdinalIgnoreCase) && 
                     !string.IsNullOrWhiteSpace(initial.operationId))
                 {
-                    Console.WriteLine($"[MQTT] Device is 'assigning'. Starting polling with operationId: {initial.operationId}");
+                    if (_enableDebugLogging)
+                    {
+                        Console.WriteLine($"[MQTT] Device is 'assigning'. Starting polling with operationId: {initial.operationId}");
+                    }
                     
                     for (int i = 0; i < 20; i++)
                     {
-                        Console.WriteLine($"[MQTT] Polling attempt {i + 1}/20...");
+                        if (_enableDebugLogging)
+                        {
+                            Console.WriteLine($"[MQTT] Polling attempt {i + 1}/20...");
+                        }
 
                         var tcsPoll = new TaskCompletionSource<DpsResponse>();
                         
@@ -182,13 +222,19 @@ namespace AzureDpsFramework.Transport
                                 if (topic.Contains("$dps/registrations/res/"))
                                 {
                                     var statusStr = topic.Split('/')[3].Split('?')[0];
-                                    Console.WriteLine($"[MQTT] Status code from topic: {statusStr}");
-                                    Console.WriteLine($"[MQTT] Response payload: {pollPayload}");
+                                    if (_enableDebugLogging)
+                                    {
+                                        Console.WriteLine($"[MQTT] Status code from topic: {statusStr}");
+                                        Console.WriteLine($"[MQTT] Response payload: {pollPayload}");
+                                    }
 
                                     var response = JsonConvert.DeserializeObject<DpsResponse>(pollPayload);
                                     if (response != null)
                                     {
-                                        Console.WriteLine($"[MQTT] Parsed response - status: {response.status}, operationId: {response.operationId}");
+                                        if (_enableDebugLogging)
+                                        {
+                                            Console.WriteLine($"[MQTT] Parsed response - status: {response.status}, operationId: {response.operationId}");
+                                        }
                                         tcsPoll.TrySetResult(response);
                                     }
                                 }

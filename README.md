@@ -259,6 +259,16 @@ Configure servo angle for each color chute:
 - `SasExpirySeconds`: SAS token TTL in seconds (default: 3600)
 - `AutoGenerateCsr`: Auto-generate CSR and private key if files don't exist (default: true)
 - `MqttPort`: MQTT port for DPS connection (default: 8883)
+- `EnableDebugLogging`: Enable verbose MQTT protocol logging for troubleshooting (default: false)
+
+**Debugging DPS Connection Issues:**
+Set `EnableDebugLogging: true` to see detailed MQTT protocol messages including:
+- Connection parameters and credentials (lengths only, not actual keys)
+- Message topics and payload sizes
+- Response parsing and polling attempts
+- Status updates during provisioning
+
+Leave it `false` for cleaner production output.
 
 ## Running the Application
 

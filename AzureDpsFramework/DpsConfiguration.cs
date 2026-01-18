@@ -18,6 +18,7 @@ namespace AzureDpsFramework
         public string CsrFilePath { get; set; } = "certs/device.csr";
         public string CsrKeyFilePath { get; set; } = "certs/device.key";
         public string IssuedCertFilePath { get; set; } = "certs/issued.pem";
+        public bool EnableDebugLogging { get; set; } = false;
 
         public static DpsConfiguration Load(string appSettingsPath = "appsettings.json")
         {
