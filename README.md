@@ -52,46 +52,97 @@ The hardware design is based on the [PTC Education Candy Sorter](https://github.
 
 ## Azure Setup
 
-### 1. Create IoT Hub and Device Provisioning Service
+**Prerequisites**: Install [Azure CLI](https://learn.microsoft.com/cli/azure/install-azure-cli) and login:
+```powershell
+az login
+az account set --subscription "Your-Subscription-Name"
+```
 
-1. **Create an IoT Hub** in the Azure Portal (standard tier or higher)
-2. **Create a Device Provisioning Service** instance
-3. **Link IoT Hub to DPS**:
-   - In DPS, go to Linked IoT hubs
-   - Add your IoT Hub
+### 1. Create Resource Group, IoT Hub, and Device Provisioning Service
+
+```powershell
+# Set variables
+$resourceGroup = "skittlesorter-rg"
+$location = "eastus"
+$iotHubName = "skittlesorter-hub"
+$dpsName = "skittlesorter-dps"
+
+# Create resource group
+az group create --name $resourceGroup --location $location
+
+# Create IoT Hub (Standard tier required for DPS)
+az iot hub create `
+  --name $iotHubName `
+  --resource-group $resourceGroup `
+  --sku S1 `
+  --location $location
+
+# Create Device Provisioning Service
+az iot dps create `
+  --name $dpsName `
+  --resource-group $resourceGroup `
+  --location $location
+
+# Link IoT Hub to DPS
+$iotHubConnectionString = az iot hub connection-string show `
+  --hub-name $iotHubName `
+  --query connectionString -o tsv
+
+az iot dps linked-hub create `
+  --dps-name $dpsName `
+  --resource-group $resourceGroup `
+  --connection-string $iotHubConnectionString `
+  --location $location
+
+# Get DPS ID Scope (save this for appsettings.json)
+az iot dps show --name $dpsName --resource-group $resourceGroup --query properties.idScope -o tsv
+```
 
 ### 2. Create Azure Device Registry with Credential Policy
 
 The certificate issuance feature requires Azure Device Registry (ADR) with a credential policy:
 
-```bash
+```powershell
+$adrNamespace = "skittlesorter-adr"
+$credentialPolicyName = "cert-policy"
+
 # Create ADR namespace
-az iot device-registry namespace create \
-  --name my-adr-namespace \
-  --resource-group my-rg
+az iot device-registry namespace create `
+  --name $adrNamespace `
+  --resource-group $resourceGroup
 
 # Create credential policy for certificate issuance
-az iot device-registry credential-policy create \
-  --namespace-name my-adr-namespace \
-  --credential-policy-name my-cert-policy \
-  --resource-group my-rg \
-  --certificate-type ECC \
+az iot device-registry credential-policy create `
+  --namespace-name $adrNamespace `
+  --credential-policy-name $credentialPolicyName `
+  --resource-group $resourceGroup `
+  --certificate-type ECC `
   --validity-period-days 30
 ```
 
-**Note**: You can also use RSA instead of ECC. Adjust validity period as needed.
+**Note**: You can use `RSA` instead of `ECC`. Adjust validity period as needed.
 
 ### 3. Create Enrollment Group with ADR Policy
 
-4. **Create an Enrollment Group** in DPS:
-   - In DPS, go to Manage enrollments → Enrollment groups
-   - Click **Add enrollment group**:
-     - **Group name**: Choose a descriptive name (e.g., `skittlesorter-group`)
-     - **Attestation Type**: **Symmetric Key**
-     - **Auto-generate keys**: Yes (or provide your own)
-     - **Credential Policy**: Select your ADR policy created above
-   - Save and **copy the Primary Key** (enrollment group key)
-   - Note your **ID Scope** from DPS Overview page
+```powershell
+$enrollmentGroupName = "skittlesorter-group"
+
+# Create enrollment group with symmetric key attestation
+az iot dps enrollment-group create `
+  --dps-name $dpsName `
+  --resource-group $resourceGroup `
+  --enrollment-id $enrollmentGroupName `
+  --attestation-type symmetrickey `
+  --credential-policy-name $credentialPolicyName `
+  --credential-policy-namespace $adrNamespace
+
+# Get the primary key (save this for appsettings.json)
+az iot dps enrollment-group show `
+  --dps-name $dpsName `
+  --resource-group $resourceGroup `
+  --enrollment-id $enrollmentGroupName `
+  --query attestation.symmetricKey.primaryKey -o tsv
+```
 
 ### 4. Configure Device Credentials
 
