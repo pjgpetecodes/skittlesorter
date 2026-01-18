@@ -48,10 +48,30 @@ namespace AzureDpsFramework
 
         public static X509Certificate2 LoadX509WithPrivateKey(string certPemPath, string keyPemPath)
         {
-            // Combine cert + key from PEM files
-            var cert = X509Certificate2.CreateFromPemFile(certPemPath, keyPemPath);
-            // Ensure private key is persisted (optional):
-            return cert;
+            // Read the certificate chain and private key
+            var chainText = File.ReadAllText(certPemPath);
+            var keyText = File.ReadAllText(keyPemPath);
+            
+            // Extract only the FIRST certificate (device cert)
+            var firstCertStart = chainText.IndexOf("-----BEGIN CERTIFICATE-----");
+            var firstCertEnd = chainText.IndexOf("-----END CERTIFICATE-----");
+            if (firstCertStart < 0 || firstCertEnd < 0)
+                throw new InvalidOperationException("No valid certificate found in chain file");
+            
+            var deviceCertPem = chainText.Substring(firstCertStart, firstCertEnd - firstCertStart + "-----END CERTIFICATE-----".Length);
+            
+            // Combine the device cert and private key into a single PEM
+            var combinedPem = deviceCertPem + "\n" + keyText;
+            
+            // Load the certificate with private key (ephemeral)
+            var certEphemeral = X509Certificate2.CreateFromPem(combinedPem, combinedPem);
+            
+            // Export to PFX/PKCS12 format and re-import to make the private key persistent
+            // This is required for TLS authentication with Azure IoT Hub
+            var exportedPfx = certEphemeral.Export(X509ContentType.Pfx);
+            var certPersistent = new X509Certificate2(exportedPfx);
+            
+            return certPersistent;
         }
 
         private static HashAlgorithmName MapHash(string hash)

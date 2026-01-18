@@ -59,15 +59,48 @@ The hardware design is based on the [PTC Education Candy Sorter](https://github.
 3. **Link IoT Hub to DPS**:
    - In DPS, go to Linked IoT hubs
    - Add your IoT Hub
-4. **Create an Enrollment Group**:
+
+### 2. Create Azure Device Registry with Credential Policy
+
+The certificate issuance feature requires Azure Device Registry (ADR) with a credential policy:
+
+```bash
+# Create ADR namespace
+az iot device-registry namespace create \
+  --name my-adr-namespace \
+  --resource-group my-rg
+
+# Create credential policy for certificate issuance
+az iot device-registry credential-policy create \
+  --namespace-name my-adr-namespace \
+  --credential-policy-name my-cert-policy \
+  --resource-group my-rg \
+  --certificate-type ECC \
+  --validity-period-days 30
+```
+
+**Note**: You can also use RSA instead of ECC. Adjust validity period as needed.
+
+### 3. Create Enrollment Group with ADR Policy
+
+4. **Create an Enrollment Group** in DPS:
    - In DPS, go to Manage enrollments → Enrollment groups
-   - Create a group with **Attestation Type: Symmetric Key**
-   - Save the **Primary Key** (enrollment group key)
-   - Note your **ID Scope**
+   - Click **Add enrollment group**:
+     - **Group name**: Choose a descriptive name (e.g., `skittlesorter-group`)
+     - **Attestation Type**: **Symmetric Key**
+     - **Auto-generate keys**: Yes (or provide your own)
+     - **Credential Policy**: Select your ADR policy created above
+   - Save and **copy the Primary Key** (enrollment group key)
+   - Note your **ID Scope** from DPS Overview page
 
-### 2. Configure Device Credentials
+### 4. Configure Device Credentials
 
-Update `appsettings.json` with your DPS credentials (see Configuration section below).
+Update `appsettings.json` with your DPS credentials:
+- `IdScope`: From DPS Overview
+- `EnrollmentGroupKeyBase64`: The enrollment group primary key (base64-encoded)
+- `RegistrationId`: Your device identifier (e.g., `skittlesorter`)
+
+See Configuration section below for complete settings.
 
 ## Configuration
 
@@ -195,16 +228,25 @@ The solution is organized into two projects:
 
 ### AzureDpsFramework
 
-A reusable class library implementing Azure Device Provisioning Service with X.509 certificate support.
+A reusable class library implementing Azure Device Provisioning Service with X.509 certificate support. **[📖 Full Documentation](AzureDpsFramework/README.md)**
 
 **Why a Custom MQTT Implementation?**
 
 The official `Microsoft.Azure.Devices.Provisioning.Client` NuGet package does not yet support:
 - The `2025-07-01-preview` DPS API version
 - CSR-based X.509 provisioning (only supports pre-generated certificates or symmetric keys)
-- The new certificate issuance workflow
+- The new Azure Device Registry (ADR) certificate issuance workflow
 
 **Solution**: This library provides a **direct MQTT protocol implementation** (using MQTTnet) that communicates directly with the DPS MQTT endpoint, bypassing the SDK limitations. All DPS MQTT protocol specifications are implemented manually, enabling full support for preview features.
+
+**Key Features**:
+- ✅ Symmetric key authentication with device key derivation
+- ✅ Automatic CSR generation (RSA or ECC)
+- ✅ MQTT protocol implementation for DPS (port 8883 TLS)
+- ✅ Certificate issuance via Azure Device Registry credential policies
+- ✅ SAS token generation with proper URL encoding
+- ✅ Polling support for async device assignment
+- ✅ X.509 certificate loading with private key persistence
 
 **Components**:
 
@@ -214,6 +256,8 @@ The official `Microsoft.Azure.Devices.Provisioning.Client` NuGet package does no
 - **DpsProvisioningClient**: Orchestrates MQTT-based device registration flow
 
 > **Implementation Note**: Since the official Microsoft.Azure.Devices.Provisioning.Client SDK does not yet support the preview DPS features (CSR-based X.509 provisioning via `2025-07-01-preview` API), this library provides a direct MQTT protocol implementation using MQTTnet. All communication follows the DPS MQTT protocol specification.
+> 
+> For detailed information about the authentication flow, MQTT protocol details, troubleshooting, and API reference, see **[AzureDpsFramework/README.md](AzureDpsFramework/README.md)**.
 
 ### skittlesorter (Application)
 
@@ -231,14 +275,24 @@ Main application implementing the sorting logic:
 When the application starts with DPS enabled:
 
 1. **Load DPS Configuration**: Read from `appsettings.json`
-2. **Generate CSR (if needed)**: Auto-create device certificate signing request and private key
-3. **Derive Device Key**: Use HMACSHA256(base64Decode(enrollmentGroupKey), lowercase(registrationId))
-4. **Generate SAS Token**: Create signed MQTT credentials with DPS endpoint
-5. **MQTT Registration**: Connect to DPS, publish CSR, and request provisioning
-6. **Poll for Status**: Wait for DPS to assign device to IoT Hub and issue certificate
-7. **Load Certificate**: Parse PEM certificate and private key into X509Certificate2
-8. **Connect to IoT Hub**: Authenticate using certificate-based connection
-9. **Begin Sorting**: Start main application loop
+2. **Generate CSR (if needed)**: Auto-create device certificate signing request and private key (RSA 2048 by default)
+3. **Derive Device Key**: Compute device-specific key using `HMACSHA256(base64Decode(enrollmentGroupKey), lowercase(registrationId))`
+4. **Generate SAS Token**: Create signed MQTT credentials with DPS endpoint and URL-encoded resource URI
+5. **MQTT Connection**: Connect to `global.azure-devices-provisioning.net:8883` with TLS
+6. **MQTT Registration**: Publish registration request with base64-encoded DER CSR to `$dps/registrations/PUT/iotdps-register/`
+7. **Poll for Status**: Wait for DPS to process (status: "assigning") and poll every 2 seconds via `$dps/registrations/GET/iotdps-get-operationstatus/`
+8. **Receive Certificate**: Get assigned IoT Hub, device ID, and issued X.509 certificate chain (3 certificates: device + intermediate + root)
+9. **Parse Certificate**: Convert base64 certificates to PEM format, combine device cert with private key, export to PFX and reload (fixes ephemeral key issue)
+10. **Connect to IoT Hub**: Authenticate using X.509 certificate-based connection (not symmetric key)
+11. **Begin Sorting**: Start main application loop with certificate authentication
+
+**Authentication Summary**:
+- **Phase 1 (DPS)**: Symmetric key authentication (derived from enrollment group key)
+- **Phase 2 (IoT Hub)**: X.509 certificate authentication (issued by DPS via Azure Device Registry)
+
+**Key Insight**: The symmetric key is ONLY used to authenticate with DPS. Once the certificate is issued, all subsequent IoT Hub communication uses X.509 certificate authentication.
+
+For detailed protocol specifications, see **[AzureDpsFramework/README.md](AzureDpsFramework/README.md)#how-it-works**.
 
 ## Telemetry Format
 
@@ -278,6 +332,31 @@ When running on a Raspberry Pi with the physical sorter assembled:
 4. The application will use real hardware for color detection and sorting
 5. Device provisioning and certificate authentication will work seamlessly with DPS
 
+### Troubleshooting DPS Issues
+
+Common issues with DPS provisioning:
+
+**401 Unauthorized**:
+- Wrong enrollment group key → Verify key matches DPS portal
+- Registration ID mismatch → Check exact spelling (case-sensitive)
+- Check diagnostic logs: `[KEY DERIVATION]` and `[SAS]`
+
+**400 Bad Request**:
+- CSR format incorrect → Must be base64 DER (not PEM with headers)
+- API version mismatch → Ensure using `2025-07-01-preview`
+- Enrollment group not linked to ADR policy
+
+**Certificate Not Issued**:
+- Credential policy not configured
+- ADR namespace issues
+- Check Azure Portal DPS logs
+
+**TLS Authentication Error**:
+- Certificate not properly persisted
+- Library handles this automatically with PFX export/reload
+
+For detailed troubleshooting steps, see **[AzureDpsFramework/README.md](AzureDpsFramework/README.md)#troubleshooting**.
+
 ### Customizing Servo and Chute Angles
 
 All servo angles are externalized in `appsettings.json`. No recompilation needed to adjust positions:
@@ -298,9 +377,18 @@ Then transfer the published output to your Raspberry Pi and run.
 ## Security Considerations
 
 - **DPS Credentials**: Store your enrollment group key securely. Never commit `appsettings.json` with real credentials to version control.
+  - ✅ Use Azure Key Vault for production
+  - ✅ Use environment variables or secure configuration
+  - ❌ Never hardcode or commit to Git
 - **Certificates**: Device certificates are auto-generated and stored locally. Protect the `certs/` directory.
+  - ✅ Use restrictive file permissions (chmod 600 on Linux)
+  - ✅ Consider hardware security modules (HSM) for production
+  - ✅ Rotate certificates before expiry (check validity period)
 - **Connection Strings**: If using direct IoT Hub connection (without DPS), keep connection strings in environment variables or Azure Key Vault, never in code.
 - **MQTT Port 8883**: Requires TLS/SSL. DPS endpoint is `global.azure-devices-provisioning.net:8883`.
+- **Private Keys**: The private key (`certs/device.key`) must be protected. It is used to prove certificate ownership.
+
+For detailed security guidance, see **[AzureDpsFramework/README.md](AzureDpsFramework/README.md)#security-considerations**.
 
 ## License
 

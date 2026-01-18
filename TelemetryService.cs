@@ -49,6 +49,11 @@ namespace skittle_sorter
             catch (Exception ex)
             {
                 Console.WriteLine($"[Telemetry] Error sending message: {ex.Message}");
+                Console.WriteLine($"[Telemetry] Exception Type: {ex.GetType().Name}");
+                if (ex.InnerException != null)
+                {
+                    Console.WriteLine($"[Telemetry] Inner Exception: {ex.InnerException.Message}");
+                }
             }
         }
 
