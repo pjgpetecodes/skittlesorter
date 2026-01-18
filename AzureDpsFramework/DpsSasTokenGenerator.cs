@@ -9,11 +9,16 @@ namespace AzureDpsFramework
     {
         public static string DeriveDeviceKey(string registrationId, string enrollmentGroupKeyBase64)
         {
+            if (string.IsNullOrWhiteSpace(registrationId))
+                throw new ArgumentException("RegistrationId is required", nameof(registrationId));
+            if (string.IsNullOrWhiteSpace(enrollmentGroupKeyBase64))
+                throw new ArgumentNullException(nameof(enrollmentGroupKeyBase64), "Enrollment group key is required");
+
             var regIdLower = registrationId.ToLowerInvariant();
             Console.WriteLine($"[KEY DERIVATION] RegistrationId (normalized): {regIdLower}");
             Console.WriteLine($"[KEY DERIVATION] EnrollmentGroupKey (first 20): {enrollmentGroupKeyBase64?.Substring(0, Math.Min(20, enrollmentGroupKeyBase64.Length))}...");
             
-            byte[] groupKey = Convert.FromBase64String(enrollmentGroupKeyBase64);
+            byte[] groupKey = Convert.FromBase64String(enrollmentGroupKeyBase64!);
             Console.WriteLine($"[KEY DERIVATION] Decoded group key length: {groupKey.Length} bytes");
             
             using var hmac = new HMACSHA256(groupKey);
@@ -27,6 +32,13 @@ namespace AzureDpsFramework
 
         public static string GenerateDpsSas(string idScope, string registrationId, string keyBase64, int expirySeconds)
         {
+            if (string.IsNullOrWhiteSpace(idScope))
+                throw new ArgumentException("IdScope is required", nameof(idScope));
+            if (string.IsNullOrWhiteSpace(registrationId))
+                throw new ArgumentException("RegistrationId is required", nameof(registrationId));
+            if (string.IsNullOrWhiteSpace(keyBase64))
+                throw new ArgumentNullException(nameof(keyBase64), "Base64 key is required");
+
             Console.WriteLine($"\n[SAS] Generating SAS token for DPS registration");
             Console.WriteLine($"[SAS] IdScope: {idScope}");
             Console.WriteLine($"[SAS] RegistrationId: {registrationId}");
@@ -34,7 +46,7 @@ namespace AzureDpsFramework
             Console.WriteLine($"[SAS] ExpirySeconds: {expirySeconds}");
             
             // Step 1: Base64-decode the key
-            byte[] keyBytes = Convert.FromBase64String(keyBase64);
+            byte[] keyBytes = Convert.FromBase64String(keyBase64!);
             Console.WriteLine($"[SAS] Decoded key length: {keyBytes.Length} bytes");
             
             // Step 2: Build resource URI (lowercase for Azure compatibility)

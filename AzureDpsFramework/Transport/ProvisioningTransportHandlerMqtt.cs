@@ -67,7 +67,7 @@ namespace AzureDpsFramework.Transport
 
             var opts = new MqttClientOptionsBuilder()
                 .WithTcpServer(_provisioningHost, _port)
-                .WithTls()
+                .WithTlsOptions(o => o.UseTls())
                 .WithCredentials(username, sasToken)
                 .WithClientId(registrationId)
                 .WithCleanSession()

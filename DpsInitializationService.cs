@@ -39,6 +39,11 @@ namespace skittle_sorter
                 Console.WriteLine($"SasExpirySeconds: {dpsCfg.SasExpirySeconds}");
                 Console.WriteLine($"AutoGenerateCsr: {dpsCfg.AutoGenerateCsr}");
                 Console.WriteLine("\n=== Starting DPS Registration ===\n");
+
+                if (string.IsNullOrWhiteSpace(dpsCfg.EnrollmentGroupKeyBase64))
+                {
+                    throw new InvalidOperationException("EnrollmentGroupKeyBase64 is required for symmetric DPS auth.");
+                }
                 
                 // Create security provider with CSR and enrollment group key
                 // This matches Microsoft's SecurityProvider pattern

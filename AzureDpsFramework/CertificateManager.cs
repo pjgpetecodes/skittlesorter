@@ -69,8 +69,11 @@ namespace AzureDpsFramework
             // Export to PFX/PKCS12 format and re-import to make the private key persistent
             // This is required for TLS authentication with Azure IoT Hub
             var exportedPfx = certEphemeral.Export(X509ContentType.Pfx);
-            var certPersistent = new X509Certificate2(exportedPfx);
-            
+            var certPersistent = X509CertificateLoader.LoadPkcs12(
+                exportedPfx,
+                password: null,
+                keyStorageFlags: X509KeyStorageFlags.Exportable);
+
             return certPersistent;
         }
 
