@@ -4,6 +4,8 @@ using System.Text;
 using System.Threading;
 using Microsoft.Azure.Devices.Client;
 using AzureDpsFramework;
+using AzureDpsFramework.Security;
+using AzureDpsFramework.Transport;
 
 namespace skittle_sorter
 {
@@ -25,6 +27,7 @@ namespace skittle_sorter
                 }
 
                 var csrPemText = File.ReadAllText(dpsCfg.CsrFilePath);
+                var privateKeyPem = File.ReadAllText(dpsCfg.CsrKeyFilePath);
                 
                 Console.WriteLine("\n=== DPS Configuration ===\n");
                 Console.WriteLine($"IdScope: {dpsCfg.IdScope}");
@@ -37,53 +40,71 @@ namespace skittle_sorter
                 Console.WriteLine($"AutoGenerateCsr: {dpsCfg.AutoGenerateCsr}");
                 Console.WriteLine("\n=== Starting DPS Registration ===\n");
                 
-                var dpsClient = new DpsProvisioningClient(dpsCfg);
+                // Create security provider with CSR and enrollment group key
+                // This matches Microsoft's SecurityProvider pattern
+                using var security = SecurityProviderX509Csr.CreateFromEnrollmentGroup(
+                    dpsCfg.RegistrationId,
+                    csrPemText,
+                    privateKeyPem,
+                    dpsCfg.EnrollmentGroupKeyBase64);
+
+                // Create transport handler - matches Microsoft's ProvisioningTransportHandler pattern
+                using var transport = new ProvisioningTransportHandlerMqtt(
+                    dpsCfg.ProvisioningHost,
+                    dpsCfg.MqttPort);
+
+                // Create provisioning client using factory pattern - matches Microsoft's ProvisioningDeviceClient.Create()
+                using var provisioningClient = ProvisioningDeviceClient.Create(
+                    dpsCfg.ProvisioningHost,
+                    dpsCfg.IdScope,
+                    security,
+                    transport);
+
                 Console.WriteLine("Using symmetric-key authentication (DPS)");
                 Console.WriteLine($"Connecting to {dpsCfg.ProvisioningHost}:{dpsCfg.MqttPort}...");
 
-                var resp = dpsClient.RegisterWithCsrAsync(csrPemText, CancellationToken.None).GetAwaiter().GetResult();
-                Console.WriteLine($"\nDPS Response Status: {resp.status}");
-                if (resp.registrationState != null)
+                // Register the device - matches Microsoft's RegisterAsync() pattern
+                var result = provisioningClient.RegisterAsync(CancellationToken.None).GetAwaiter().GetResult();
+                
+                Console.WriteLine($"\nDPS Response Status: {result.Status}");
+                Console.WriteLine($"Device ID: {result.DeviceId}");
+                Console.WriteLine($"Assigned Hub: {result.AssignedHub}");
+                Console.WriteLine($"Certificate Chain Present: {(result.IssuedCertificateChain != null && result.IssuedCertificateChain.Length > 0)}");
+                if (result.IssuedCertificateChain != null && result.IssuedCertificateChain.Length > 0)
                 {
-                    Console.WriteLine($"Device ID: {resp.registrationState.deviceId}");
-                    Console.WriteLine($"Assigned Hub: {resp.registrationState.assignedHub}");
-                    Console.WriteLine($"Certificate Chain Present: {(resp.registrationState.issuedCertificateChain != null && resp.registrationState.issuedCertificateChain.Length > 0)}");
-                    if (resp.registrationState.issuedCertificateChain != null && resp.registrationState.issuedCertificateChain.Length > 0)
-                    {
-                        Console.WriteLine($"Certificate Chain Length: {resp.registrationState.issuedCertificateChain.Length} certificates");
-                    }
+                    Console.WriteLine($"Certificate Chain Length: {result.IssuedCertificateChain.Length} certificates");
                 }
 
-                if (resp.status == "assigned" && resp.registrationState != null &&
-                    !string.IsNullOrWhiteSpace(resp.registrationState.deviceId) && !string.IsNullOrWhiteSpace(resp.registrationState.assignedHub))
+                if (result.Status == ProvisioningRegistrationStatusType.Assigned &&
+                    !string.IsNullOrWhiteSpace(result.DeviceId) && !string.IsNullOrWhiteSpace(result.AssignedHub))
                 {
                     // If certificate chain is issued, use X.509 authentication
-                    if (resp.registrationState.issuedCertificateChain != null && resp.registrationState.issuedCertificateChain.Length > 0)
+                    if (result.IssuedCertificateChain != null && result.IssuedCertificateChain.Length > 0)
                     {
                         // Convert base64-encoded certs to PEM format
-                        var certChainPem = ConvertCertChainToPem(resp.registrationState.issuedCertificateChain);
+                        var certChainPem = ConvertCertChainToPem(result.IssuedCertificateChain);
                         CertificateManager.SaveIssuedCertificatePem(dpsCfg.IssuedCertFilePath, certChainPem);
                         Console.WriteLine($"Saved issued certificate chain to: {dpsCfg.IssuedCertFilePath}");
                         
                         var x509 = CertificateManager.LoadX509WithPrivateKey(dpsCfg.IssuedCertFilePath, dpsCfg.CsrKeyFilePath);
                         var deviceClient = DeviceClient.Create(
-                            resp.registrationState.assignedHub,
-                            new DeviceAuthenticationWithX509Certificate(resp.registrationState.deviceId, x509),
+                            result.AssignedHub,
+                            new DeviceAuthenticationWithX509Certificate(result.DeviceId, x509),
                             TransportType.Mqtt);
-                        Console.WriteLine($"✅ Connected to IoT Hub via X.509. Hub={resp.registrationState.assignedHub}, DeviceId={resp.registrationState.deviceId}\n");
+                        Console.WriteLine($"✅ Connected to IoT Hub via X.509. Hub={result.AssignedHub}, DeviceId={result.DeviceId}\n");
                         return deviceClient;
                     }
                     else
                     {
                         // No certificate issued - use symmetric key authentication for IoT Hub
                         // The symmetric key is the derived device key from DPS provisioning
-                        var derivedDeviceKey = DpsSasTokenGenerator.DeriveDeviceKey(resp.registrationState.deviceId, dpsCfg.EnrollmentGroupKeyBase64);
+                        var derivedDeviceKey = DpsSasTokenGenerator.DeriveDeviceKey(result.DeviceId, dpsCfg.EnrollmentGroupKeyBase64);
                         
                         var deviceClient = DeviceClient.Create(
-                            resp.registrationState.assignedHub,
-                            new DeviceAuthenticationWithRegistrySymmetricKey(resp.registrationState.deviceId, derivedDeviceKey),
+                            result.AssignedHub,
+                            new DeviceAuthenticationWithRegistrySymmetricKey(result.DeviceId, derivedDeviceKey),
                             TransportType.Mqtt);
-                        Console.WriteLine($"✅ Connected to IoT Hub via Symmetric Key. Hub={resp.registrationState.assignedHub}, DeviceId={resp.registrationState.deviceId}\n");
+                        Console.WriteLine($"✅ Connected to IoT Hub via Symmetric Key. Hub={result.AssignedHub}, DeviceId={result.DeviceId}\n");
                         return deviceClient;
                     }
                 }

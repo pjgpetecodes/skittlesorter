@@ -6,6 +6,17 @@
 # dotenv files
 .env
 
+# Security: Certificates, private keys, and secrets
+certs/
+*.pem
+*.key
+*.pfx
+*.crt
+*.cer
+*.p12
+appsettings.json
+appsettings.*.json
+
 # User-specific files
 *.rsuser
 *.suo

@@ -95,9 +95,17 @@ az iot device-registry credential-policy create \
 
 ### 4. Configure Device Credentials
 
-Update `appsettings.json` with your DPS credentials:
-- `IdScope`: From DPS Overview
-- `EnrollmentGroupKeyBase64`: The enrollment group primary key (base64-encoded)
+**⚠️ SECURITY**: Never commit `appsettings.json` to source control as it contains secrets!
+
+1. **Copy the template**:
+   ```bash
+   cp appsettings.template.json appsettings.json
+   ```
+
+2. **Update `appsettings.json`** with your DPS credentials:
+   - `IdScope`: From DPS Overview
+   - `EnrollmentGroupKeyBase64`: The enrollment group primary key (base64-encoded)
+   - `RegistrationId`: Your device's unique identifier
 - `RegistrationId`: Your device identifier (e.g., `skittlesorter`)
 
 See Configuration section below for complete settings.
@@ -356,6 +364,25 @@ Common issues with DPS provisioning:
 - Library handles this automatically with PFX export/reload
 
 For detailed troubleshooting steps, see **[AzureDpsFramework/README.md](AzureDpsFramework/README.md)#troubleshooting**.
+
+## Security Best Practices
+
+**⚠️ Important**: This repository excludes sensitive files via `.gitignore`:
+
+**Never commit these files:**
+- `appsettings.json` - Contains DPS enrollment keys and secrets
+- `certs/` directory - Contains private keys and certificates
+- `*.pem`, `*.key`, `*.pfx` files - Certificate and private key files
+
+**Safe to commit:**
+- `appsettings.template.json` - Template configuration (no secrets)
+- Source code files
+- Documentation
+
+**Setup for new developers:**
+1. Copy `appsettings.template.json` to `appsettings.json`
+2. Fill in actual values from Azure Portal
+3. Run the application - certificates are auto-generated on first run
 
 ### Customizing Servo and Chute Angles
 
