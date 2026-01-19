@@ -43,9 +43,13 @@ namespace AzureDpsFramework.Transport
                 throw new ArgumentException("SAS token is required for MQTT transport", nameof(message));
 
             var idScope = message.IdScope;
-            var registrationId = message.RegistrationId;
             var csrPem = message.CsrPem;
             var sasToken = message.SasToken;
+
+            // ARCHITECTURAL NOTE: Official SDK passes SecurityProvider in the message and extracts
+            // registrationId directly from it. This implementation receives pre-computed SAS token
+            // and CSR, so we extract registrationId from the SAS token's resource URI.
+            var registrationId = ExtractRegistrationIdFromSasToken(sasToken);
 
             var factory = new MqttFactory();
             using var client = factory.CreateMqttClient();
@@ -53,7 +57,8 @@ namespace AzureDpsFramework.Transport
             // URL-encode the ClientVersion user agent
             var userAgent = Uri.EscapeDataString("AzureDpsFramework/1.0.0");
             
-            // Use preview API version when CSR is provided
+            // PREVIEW: Use 2025-07-01-preview API when CSR is provided for certificate issuance
+            // Standard DPS operations use the 2019-03-31 API version
             var apiVersion = !string.IsNullOrWhiteSpace(csrPem) ? "2025-07-01-preview" : "2019-03-31";
             var username = $"{idScope}/registrations/{registrationId}/api-version={apiVersion}&ClientVersion={userAgent}";
 
@@ -149,16 +154,19 @@ namespace AzureDpsFramework.Transport
             object registrationPayload;
             if (!string.IsNullOrWhiteSpace(csrPem))
             {
-                // Convert CSR PEM to base64 DER format (extract base64 content without headers)
+                // PREVIEW: Include CSR in registration payload for certificate issuance
+                // The 2025-07-01-preview API accepts a "csr" field containing base64-encoded DER
+                // DPS will issue a certificate chain and return it in the registration response
                 var csrBase64 = GenerateCsrBase64(csrPem);
                 registrationPayload = new
                 {
                     registrationId = registrationId,
-                    csr = csrBase64
+                    csr = csrBase64  // NEW: CSR for certificate issuance via ADR
                 };
             }
             else
             {
+                // Standard registration payload (no CSR)
                 registrationPayload = new { registrationId = registrationId };
             }
 
@@ -324,23 +332,41 @@ namespace AzureDpsFramework.Transport
             );
         }
 
-        public void Dispose()
-        {
-            Dispose(true);
-            GC.SuppressFinalize(this);
-        }
-
-        protected virtual void Dispose(bool disposing)
+        protected override void Dispose(bool disposing)
         {
             if (_disposed)
                 return;
 
             if (disposing)
             {
-                // Cleanup resources
+                // Cleanup MQTT resources if needed
             }
 
             _disposed = true;
+        }
+
+        private string ExtractRegistrationIdFromSasToken(string sasToken)
+        {
+            // SAS token format: SharedAccessSignature sr={url-encoded-resource-uri}&sig={signature}&se={expiry}&skn=registration
+            // Resource URI format: {idScope}/registrations/{registrationId}
+            // Extract registrationId from sr parameter
+            var srStart = sasToken.IndexOf("sr=", StringComparison.Ordinal);
+            if (srStart < 0)
+                throw new ArgumentException("Invalid SAS token format: missing 'sr' parameter");
+
+            var srValueStart = srStart + 3;
+            var srValueEnd = sasToken.IndexOf('&', srValueStart);
+            var srValue = srValueEnd < 0 
+                ? sasToken.Substring(srValueStart) 
+                : sasToken.Substring(srValueStart, srValueEnd - srValueStart);
+
+            // Decode and extract last segment
+            var decoded = Uri.UnescapeDataString(srValue);
+            var lastSlash = decoded.LastIndexOf('/');
+            if (lastSlash < 0)
+                throw new ArgumentException("Invalid SAS token format: cannot extract registrationId from resource URI");
+
+            return decoded.Substring(lastSlash + 1);
         }
 
         // Internal response types for MQTT parsing

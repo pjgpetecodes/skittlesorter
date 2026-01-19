@@ -7,21 +7,21 @@ namespace AzureDpsFramework.Transport
     public sealed class ProvisioningTransportRegisterMessage
     {
         public ProvisioningTransportRegisterMessage(
+            string globalDeviceEndpoint,
             string idScope,
-            string registrationId,
             string? csrPem,
             string? sasToken,
             string? productInfo = null)
         {
+            GlobalDeviceEndpoint = globalDeviceEndpoint;
             IdScope = idScope;
-            RegistrationId = registrationId;
             CsrPem = csrPem;
             SasToken = sasToken;
             ProductInfo = productInfo;
         }
 
+        public string GlobalDeviceEndpoint { get; }
         public string IdScope { get; }
-        public string RegistrationId { get; }
         public string? CsrPem { get; }
         public string? SasToken { get; }
         public string? ProductInfo { get; }

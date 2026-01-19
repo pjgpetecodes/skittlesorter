@@ -4,8 +4,15 @@ using System.IO;
 namespace AzureDpsFramework.Security
 {
     /// <summary>
-    /// Security provider for X.509 Certificate Signing Request (CSR) based provisioning.
-    /// This provider is used when requesting DPS to issue a certificate via Azure Device Registry.
+    /// PREVIEW: Security provider for X.509 Certificate Signing Request (CSR) based provisioning.
+    /// 
+    /// This provider enables zero-touch certificate provisioning via Azure Device Registry (ADR).
+    /// Unlike standard X.509 auth (where devices have pre-provisioned certs), this provider:
+    /// 1. Generates a CSR on the device
+    /// 2. Authenticates to DPS using a derived symmetric key
+    /// 3. Receives an issued certificate chain from DPS during provisioning
+    /// 
+    /// This is PREVIEW functionality using the 2025-07-01-preview DPS API version.
     /// </summary>
     public class SecurityProviderX509Csr : SecurityProvider
     {
