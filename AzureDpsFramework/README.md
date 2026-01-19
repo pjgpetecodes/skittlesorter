@@ -15,15 +15,70 @@ This library works around these limitations by implementing the **DPS MQTT proto
 ## Features
 
 ✅ **Symmetric Key Authentication for DPS** - Derive device-specific keys from enrollment group keys  
+✅ **X.509 Certificate Authentication for DPS** - Use existing X.509 certificates for DPS attestation  
 ✅ **CSR Generation** - Auto-generate RSA or ECC certificate signing requests  
 ✅ **MQTT Protocol Implementation** - Direct communication with DPS MQTT broker (port 8883)  
 ✅ **Certificate Issuance** - Submit CSR and receive signed X.509 certificates from DPS  
+✅ **Dual Attestation Support** - Both symmetric key and X.509 authentication with CSR  
 ✅ **SAS Token Generation** - Create DPS-compatible Shared Access Signatures  
 ✅ **Polling Support** - Handle async device assignment with status polling  
 ✅ **X.509 Certificate Loading** - Parse and load issued certificates with private keys  
 ✅ **Preview API Support** - Access to `2025-07-01-preview` API features
 
 ## How It Works
+
+### Authentication Methods
+
+The library supports **two attestation methods** for DPS provisioning:
+
+#### Method 1: Symmetric Key Attestation + CSR (Default)
+
+Uses enrollment group symmetric key for DPS authentication, then requests certificate via CSR.
+
+**Phase 1: DPS Provisioning (Symmetric Key Authentication)**
+
+```
+1. Derive device key: HMACSHA256(enrollmentGroupKey, registrationId)
+2. Generate SAS token using derived key
+3. Connect to DPS via MQTT (port 8883 TLS)
+4. Submit registration request with CSR
+5. Poll for device assignment status
+6. Receive assigned IoT Hub + issued certificate
+```
+
+**Phase 2: IoT Hub Connection (X.509 Authentication)**
+
+```
+1. Parse issued certificate chain (device cert + intermediates)
+2. Combine device certificate with private key
+3. Export to PFX and reload (fixes ephemeral key issue)
+4. Connect to IoT Hub using X.509 certificate
+5. Send telemetry with certificate-based auth
+```
+
+#### Method 2: X.509 Attestation + CSR (New)
+
+Uses existing X.509 certificate for DPS authentication, then requests NEW certificate via CSR.
+
+**Phase 1: DPS Provisioning (X.509 Authentication)**
+
+```
+1. Load existing X.509 certificate + private key (bootstrap cert)
+2. Connect to DPS via MQTT with TLS client certificate authentication
+3. Submit registration request with CSR for NEW certificate
+4. Poll for device assignment status
+5. Receive assigned IoT Hub + issued certificate
+```
+
+**Phase 2: IoT Hub Connection (X.509 Authentication)**
+
+```
+1. Parse newly issued certificate chain
+2. Combine new device certificate with CSR private key
+3. Export to PFX and reload
+4. Connect to IoT Hub using newly issued X.509 certificate
+5. Send telemetry with certificate-based auth
+```
 
 ### Authentication Flow
 
@@ -138,8 +193,12 @@ Loads and validates DPS settings from configuration file.
 **Properties**:
 - `IdScope`: DPS instance identifier
 - `RegistrationId`: Device registration ID
+- `AttestationMethod`: Authentication method - "SymmetricKey" or "X509"
 - `ProvisioningHost`: DPS endpoint hostname
-- `EnrollmentGroupKeyBase64`: Base64-encoded enrollment group primary key
+- `EnrollmentGroupKeyBase64`: Base64-encoded enrollment group primary key (for SymmetricKey)
+- `AttestationCertPath`: Path to existing X.509 certificate (for X509)
+- `AttestationKeyPath`: Path to private key for X.509 cert (for X509)
+- `AttestationCertChainPath`: Optional certificate chain/bundle (for X509)
 - `MqttPort`: MQTT broker port (default: 8883)
 - `ApiVersion`: DPS API version (use `2025-07-01-preview`)
 - `CsrFilePath`: Path to certificate signing request
@@ -178,10 +237,11 @@ var token = $"SharedAccessSignature sr={urlEncodedUri}&sig={Uri.EscapeDataString
 ```
 
 #### CertificateManager
-Handles CSR generation, PEM file operations, and X.509 certificate loading.
+Handles CSR generation, self-signed certificate generation, PEM file operations, and X.509 certificate loading.
 
 **Key Methods**:
 - `GenerateCsr(commonName, algorithm, keySize, hashAlg)` - Generate RSA or ECC CSR
+- `GenerateSelfSignedCertificate(commonName, validityDays, algorithm, keySize)` - Create self-signed X.509 cert for testing
 - `SaveText(path, content)` - Save PEM to file
 - `LoadX509WithPrivateKey(certPath, keyPath)` - Load certificate with private key
 
@@ -254,21 +314,55 @@ dotnet add package AzureDpsFramework
 
 Create `appsettings.json`:
 
+#### Option 1: Symmetric Key Attestation (Default)
+
 ```json
 {
   "IoTHub": {
     "DpsProvisioning": {
       "IdScope": "0ne01104302",
       "RegistrationId": "my-device",
+      "AttestationMethod": "SymmetricKey",
       "ProvisioningHost": "global.azure-devices-provisioning.net",
       "EnrollmentGroupKeyBase64": "vI1R80rNFKEVFuwEvO2RKeYMwqCwWwQPdEAmtNrrHrWpz4Iq...",
-      "CertificatePath": "certs/device.csr",
-      "PrivateKeyPath": "certs/device.key",
-      "IssuedCertificatePath": "certs/issued.pem",
+      "AttestationCertPath": "",
+      "AttestationKeyPath": "",
+      "AttestationCertChainPath": "",
+      "CsrFilePath": "certs/device.csr",
+      "CsrKeyFilePath": "certs/device.key",
+      "IssuedCertFilePath": "certs/issued.pem",
       "ApiVersion": "2025-07-01-preview",
       "AutoGenerateCsr": true,
       "MqttPort": 8883,
-      "SasExpirySeconds": 3600
+      "SasExpirySeconds": 3600,
+      "EnableDebugLogging": false
+    }
+  }
+}
+```
+
+#### Option 2: X.509 Attestation
+
+```json
+{
+  "IoTHub": {
+    "DpsProvisioning": {
+      "IdScope": "0ne01104302",
+      "RegistrationId": "my-device",
+      "AttestationMethod": "X509",
+      "ProvisioningHost": "global.azure-devices-provisioning.net",
+      "EnrollmentGroupKeyBase64": "",
+      "AttestationCertPath": "certs/bootstrap-cert.pem",
+      "AttestationKeyPath": "certs/bootstrap-key.pem",
+      "AttestationCertChainPath": "certs/bootstrap-chain.pem",
+      "CsrFilePath": "certs/device.csr",
+      "CsrKeyFilePath": "certs/device.key",
+      "IssuedCertFilePath": "certs/issued.pem",
+      "ApiVersion": "2025-07-01-preview",
+      "AutoGenerateCsr": true,
+      "MqttPort": 8883,
+      "SasExpirySeconds": 3600,
+      "EnableDebugLogging": false
     }
   }
 }

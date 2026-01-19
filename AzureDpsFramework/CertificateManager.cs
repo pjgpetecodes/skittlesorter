@@ -34,6 +34,77 @@ namespace AzureDpsFramework
             }
         }
 
+        /// <summary>
+        /// Generates a self-signed X.509 certificate for testing/development purposes.
+        /// Useful for X.509 attestation scenarios where you need a bootstrap certificate.
+        /// </summary>
+        /// <param name="commonName">The Common Name (CN) for the certificate subject.</param>
+        /// <param name="validityDays">Number of days the certificate is valid (default: 365).</param>
+        /// <param name="algorithm">Algorithm to use: "RSA" or "ECDSA" (default: RSA).</param>
+        /// <param name="rsaKeySize">RSA key size in bits (default: 2048).</param>
+        /// <returns>Tuple of (certificatePem, privateKeyPem) as PEM strings.</returns>
+        public static (string certificatePem, string privateKeyPem) GenerateSelfSignedCertificate(
+            string commonName, 
+            int validityDays = 365, 
+            string algorithm = "RSA", 
+            int rsaKeySize = 2048)
+        {
+            if (algorithm.Equals("RSA", StringComparison.OrdinalIgnoreCase))
+            {
+                using var rsa = RSA.Create(rsaKeySize);
+                var dn = new X500DistinguishedName($"CN={commonName}");
+                var req = new CertificateRequest(dn, rsa, HashAlgorithmName.SHA256, RSASignaturePadding.Pkcs1);
+                
+                // Add extensions
+                req.CertificateExtensions.Add(new X509BasicConstraintsExtension(false, false, 0, true));
+                req.CertificateExtensions.Add(new X509KeyUsageExtension(
+                    X509KeyUsageFlags.DigitalSignature | X509KeyUsageFlags.KeyEncipherment, true));
+                req.CertificateExtensions.Add(new X509EnhancedKeyUsageExtension(
+                    new OidCollection { new Oid("1.3.6.1.5.5.7.3.2") }, // Client Authentication
+                    true));
+                
+                // Create self-signed certificate
+                var cert = req.CreateSelfSigned(DateTimeOffset.UtcNow, DateTimeOffset.UtcNow.AddDays(validityDays));
+                
+                // Export certificate to PEM
+                byte[] certDer = cert.Export(X509ContentType.Cert);
+                string certPem = WritePem("CERTIFICATE", certDer);
+                
+                // Export private key to PEM (PKCS#8)
+                byte[] keyPkcs8 = rsa.ExportPkcs8PrivateKey();
+                string keyPem = WritePem("PRIVATE KEY", keyPkcs8);
+                
+                return (certPem, keyPem);
+            }
+            else
+            {
+                using var ecdsa = ECDsa.Create(ECCurve.NamedCurves.nistP256);
+                var dn = new X500DistinguishedName($"CN={commonName}");
+                var req = new CertificateRequest(dn, ecdsa, HashAlgorithmName.SHA256);
+                
+                // Add extensions
+                req.CertificateExtensions.Add(new X509BasicConstraintsExtension(false, false, 0, true));
+                req.CertificateExtensions.Add(new X509KeyUsageExtension(
+                    X509KeyUsageFlags.DigitalSignature, true));
+                req.CertificateExtensions.Add(new X509EnhancedKeyUsageExtension(
+                    new OidCollection { new Oid("1.3.6.1.5.5.7.3.2") }, // Client Authentication
+                    true));
+                
+                // Create self-signed certificate
+                var cert = req.CreateSelfSigned(DateTimeOffset.UtcNow, DateTimeOffset.UtcNow.AddDays(validityDays));
+                
+                // Export certificate to PEM
+                byte[] certDer = cert.Export(X509ContentType.Cert);
+                string certPem = WritePem("CERTIFICATE", certDer);
+                
+                // Export private key to PEM (PKCS#8)
+                byte[] keyPkcs8 = ecdsa.ExportPkcs8PrivateKey();
+                string keyPem = WritePem("PRIVATE KEY", keyPkcs8);
+                
+                return (certPem, keyPem);
+            }
+        }
+
         public static void SaveText(string path, string content)
         {
             Directory.CreateDirectory(Path.GetDirectoryName(path) ?? ".");

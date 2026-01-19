@@ -17,59 +17,131 @@ namespace skittle_sorter
             {
                 var dpsCfg = DpsConfiguration.Load();
 
-                // Auto-generate CSR + key if enabled and files missing
-                if (dpsCfg.AutoGenerateCsr && (!File.Exists(dpsCfg.CsrFilePath) || !File.Exists(dpsCfg.CsrKeyFilePath)))
-                {
-                    Console.WriteLine("Generating CSR and private key…");
-                    var (csrPem, keyPem) = CertificateManager.GenerateCsr(dpsCfg.RegistrationId);
-                    CertificateManager.SaveText(dpsCfg.CsrFilePath, csrPem);
-                    CertificateManager.SaveText(dpsCfg.CsrKeyFilePath, keyPem);
-                }
-
-                var csrPemText = File.ReadAllText(dpsCfg.CsrFilePath);
-                var privateKeyPem = File.ReadAllText(dpsCfg.CsrKeyFilePath);
-                
                 Console.WriteLine("\n=== DPS Configuration ===\n");
                 Console.WriteLine($"IdScope: {dpsCfg.IdScope}");
                 Console.WriteLine($"RegistrationId: {dpsCfg.RegistrationId}");
                 Console.WriteLine($"ProvisioningHost: {dpsCfg.ProvisioningHost}");
+                Console.WriteLine($"AttestationMethod: {dpsCfg.AttestationMethod}");
                 Console.WriteLine($"MqttPort: {dpsCfg.MqttPort}");
-                Console.WriteLine($"EnrollmentGroupKeyBase64 (first 30 chars): {dpsCfg.EnrollmentGroupKeyBase64?.Substring(0, Math.Min(30, dpsCfg.EnrollmentGroupKeyBase64.Length))}...");
                 Console.WriteLine($"ApiVersion: {dpsCfg.ApiVersion}");
-                Console.WriteLine($"SasExpirySeconds: {dpsCfg.SasExpirySeconds}");
                 Console.WriteLine($"AutoGenerateCsr: {dpsCfg.AutoGenerateCsr}");
-                Console.WriteLine("\n=== Starting DPS Registration ===\n");
 
-                if (string.IsNullOrWhiteSpace(dpsCfg.EnrollmentGroupKeyBase64))
+                SecurityProvider security;
+
+                // ==============================
+                // SYMMETRIC KEY ATTESTATION
+                // ==============================
+                if (dpsCfg.AttestationMethod == "SymmetricKey")
                 {
-                    throw new InvalidOperationException("EnrollmentGroupKeyBase64 is required for symmetric DPS auth.");
-                }
-                
-                // Create security provider with CSR and enrollment group key
-                // This matches Microsoft's SecurityProvider pattern
-                using var security = SecurityProviderX509Csr.CreateFromEnrollmentGroup(
-                    dpsCfg.RegistrationId,
-                    csrPemText,
-                    privateKeyPem,
-                    dpsCfg.EnrollmentGroupKeyBase64);
+                    Console.WriteLine($"EnrollmentGroupKeyBase64 (first 30 chars): {dpsCfg.EnrollmentGroupKeyBase64?.Substring(0, Math.Min(30, dpsCfg.EnrollmentGroupKeyBase64.Length))}...");
+                    Console.WriteLine("\n=== Starting DPS Registration (Symmetric Key) ===\n");
 
-                // Create transport handler - matches Microsoft's ProvisioningTransportHandler pattern
+                    if (string.IsNullOrWhiteSpace(dpsCfg.EnrollmentGroupKeyBase64))
+                    {
+                        throw new InvalidOperationException("EnrollmentGroupKeyBase64 is required for symmetric key attestation.");
+                    }
+
+                    // Auto-generate CSR + key if enabled and files missing
+                    if (dpsCfg.AutoGenerateCsr && (!File.Exists(dpsCfg.CsrFilePath) || !File.Exists(dpsCfg.CsrKeyFilePath)))
+                    {
+                        Console.WriteLine("Generating CSR and private key…");
+                        var (csrPem, keyPem) = CertificateManager.GenerateCsr(dpsCfg.RegistrationId);
+                        CertificateManager.SaveText(dpsCfg.CsrFilePath, csrPem);
+                        CertificateManager.SaveText(dpsCfg.CsrKeyFilePath, keyPem);
+                    }
+
+                    var csrPemText = File.ReadAllText(dpsCfg.CsrFilePath);
+                    var privateKeyPem = File.ReadAllText(dpsCfg.CsrKeyFilePath);
+                    
+                    // Create security provider with CSR and enrollment group key
+                    security = SecurityProviderX509Csr.CreateFromEnrollmentGroup(
+                        dpsCfg.RegistrationId,
+                        csrPemText,
+                        privateKeyPem,
+                        dpsCfg.EnrollmentGroupKeyBase64);
+
+                    Console.WriteLine("Using symmetric-key authentication (DPS)");
+                }
+                // ==============================
+                // X.509 ATTESTATION
+                // ==============================
+                else if (dpsCfg.AttestationMethod == "X509")
+                {
+                    Console.WriteLine($"AttestationCertPath: {dpsCfg.AttestationCertPath}");
+                    Console.WriteLine($"AttestationKeyPath: {dpsCfg.AttestationKeyPath}");
+                    Console.WriteLine("\n=== Starting DPS Registration (X.509) ===\n");
+
+                    if (string.IsNullOrWhiteSpace(dpsCfg.AttestationCertPath) || !File.Exists(dpsCfg.AttestationCertPath))
+                    {
+                        throw new InvalidOperationException($"AttestationCertPath is required for X.509 attestation and must exist: {dpsCfg.AttestationCertPath}");
+                    }
+
+                    if (string.IsNullOrWhiteSpace(dpsCfg.AttestationKeyPath) || !File.Exists(dpsCfg.AttestationKeyPath))
+                    {
+                        throw new InvalidOperationException($"AttestationKeyPath is required for X.509 attestation and must exist: {dpsCfg.AttestationKeyPath}");
+                    }
+
+                    // Load existing X.509 certificate for DPS authentication
+                    var authCert = CertificateManager.LoadX509WithPrivateKey(dpsCfg.AttestationCertPath, dpsCfg.AttestationKeyPath);
+                    
+                    // Load optional cert chain
+                    System.Security.Cryptography.X509Certificates.X509Certificate2Collection? certChain = null;
+                    if (!string.IsNullOrWhiteSpace(dpsCfg.AttestationCertChainPath) && File.Exists(dpsCfg.AttestationCertChainPath))
+                    {
+                        certChain = new System.Security.Cryptography.X509Certificates.X509Certificate2Collection();
+                        using (var fs = File.OpenRead(dpsCfg.AttestationCertChainPath))
+                        {
+                            certChain.ImportFromPemFile(dpsCfg.AttestationCertChainPath);
+                        }
+                    }
+
+                    // Auto-generate CSR + key if enabled and files missing
+                    if (dpsCfg.AutoGenerateCsr && (!File.Exists(dpsCfg.CsrFilePath) || !File.Exists(dpsCfg.CsrKeyFilePath)))
+                    {
+                        Console.WriteLine("Generating CSR and private key for new certificate request…");
+                        var (csrPem, keyPem) = CertificateManager.GenerateCsr(dpsCfg.RegistrationId);
+                        CertificateManager.SaveText(dpsCfg.CsrFilePath, csrPem);
+                        CertificateManager.SaveText(dpsCfg.CsrKeyFilePath, keyPem);
+                    }
+
+                    var csrPemText = File.ReadAllText(dpsCfg.CsrFilePath);
+                    var privateKeyPem = File.ReadAllText(dpsCfg.CsrKeyFilePath);
+
+                    // Create security provider with existing X.509 cert for auth + CSR for new cert
+                    security = new SecurityProviderX509CsrWithCert(
+                        authCert,
+                        dpsCfg.RegistrationId,
+                        csrPemText,
+                        privateKeyPem,
+                        certChain);
+
+                    Console.WriteLine("Using X.509 certificate authentication (DPS)");
+                }
+                else
+                {
+                    throw new InvalidOperationException($"Unsupported AttestationMethod: {dpsCfg.AttestationMethod}. Use 'SymmetricKey' or 'X509'.");
+                }
+
+                // ==============================
+                // COMMON PROVISIONING FLOW
+                // ==============================
+
+                // Create transport handler
                 using var transport = new ProvisioningTransportHandlerMqtt(
                     dpsCfg.ProvisioningHost,
                     dpsCfg.MqttPort,
                     dpsCfg.EnableDebugLogging);
 
-                // Create provisioning client using factory pattern - matches Microsoft's ProvisioningDeviceClient.Create()
+                // Create provisioning client
                 using var provisioningClient = ProvisioningDeviceClient.Create(
                     dpsCfg.ProvisioningHost,
                     dpsCfg.IdScope,
                     security,
                     transport);
 
-                Console.WriteLine("Using symmetric-key authentication (DPS)");
                 Console.WriteLine($"Connecting to {dpsCfg.ProvisioningHost}:{dpsCfg.MqttPort}...");
 
-                // Register the device - matches Microsoft's RegisterAsync() pattern
+                // Register the device
                 var result = provisioningClient.RegisterAsync(CancellationToken.None).GetAwaiter().GetResult();
                 
                 Console.WriteLine($"\nDPS Response Status: {result.Status}");
@@ -104,6 +176,11 @@ namespace skittle_sorter
                     {
                         // No certificate issued - use symmetric key authentication for IoT Hub
                         // The symmetric key is the derived device key from DPS provisioning
+                        if (string.IsNullOrWhiteSpace(dpsCfg.EnrollmentGroupKeyBase64))
+                        {
+                            throw new InvalidOperationException("EnrollmentGroupKeyBase64 is required for symmetric key authentication");
+                        }
+                        
                         var derivedDeviceKey = DpsSasTokenGenerator.DeriveDeviceKey(result.DeviceId, dpsCfg.EnrollmentGroupKeyBase64);
                         
                         var deviceClient = DeviceClient.Create(

@@ -130,9 +130,10 @@ namespace AzureDpsFramework
             // The official SDK delegates authentication to the transport layer by passing
             // the SecurityProvider in ProvisioningTransportRegisterMessage.
             // 
-            // This preview implementation explicitly handles two authentication flows:
+            // This preview implementation supports three authentication flows:
             // 1. Standard symmetric key authentication
-            // 2. CSR-based provisioning (PREVIEW): Uses symmetric key for DPS auth + CSR for cert issuance
+            // 2. X.509 certificate authentication (standard DPS)
+            // 3. CSR-based provisioning (PREVIEW): Uses symmetric key OR X.509 for DPS auth + CSR for cert issuance
             // 
             // The CSR flow is unique to Azure Device Registry (ADR) and not yet in the official SDK.
             // ================================================================
@@ -142,13 +143,13 @@ namespace AzureDpsFramework
                 // Standard symmetric key authentication (same as official SDK)
                 sasToken = DpsSasTokenGenerator.GenerateDpsSas(
                     _idScope,
-                        _security.GetRegistrationID(),
+                    _security.GetRegistrationID(),
                     symmetricKey.GetPrimaryKey(),
                     3600);
             }
             else if (_security is SecurityProviderX509Csr x509Csr)
             {
-                // ========== PREVIEW: CSR-based certificate issuance via ADR ==========
+                // ========== PREVIEW: CSR-based certificate issuance via ADR (symmetric key auth) ==========
                 // This is NEW functionality not present in the official SDK.
                 // 
                 // Flow:
@@ -158,7 +159,7 @@ namespace AzureDpsFramework
                 // 4. DPS provisions the device AND issues a certificate chain
                 // 
                 // This enables zero-touch certificate provisioning for IoT devices.
-                // =======================================================================
+                // ===========================================================================================
                 var enrollmentGroupKey = x509Csr.GetEnrollmentGroupKey();
                 if (string.IsNullOrWhiteSpace(enrollmentGroupKey))
                 {
@@ -180,6 +181,27 @@ namespace AzureDpsFramework
                 // Provide CSR for certificate issuance
                 csrPem = x509Csr.GetCsrPem();
             }
+            else if (_security is Security.SecurityProviderX509CsrWithCert x509CsrWithCert)
+            {
+                // ========== PREVIEW: CSR-based certificate issuance via ADR (X.509 auth) ==========
+                // Uses an existing X.509 certificate for DPS authentication while requesting a new
+                // certificate via CSR from Azure Device Registry.
+                // 
+                // Flow:
+                // 1. Authenticate to DPS using existing X.509 certificate (client cert in TLS)
+                // 2. Include CSR in the registration payload (requests cert issuance from ADR)
+                // 3. DPS provisions the device AND issues a NEW certificate chain
+                // 
+                // This enables certificate rotation and bootstrap scenarios.
+                // ===================================================================================
+                csrPem = x509CsrWithCert.CsrPem;
+                // No SAS token needed - X.509 client certificate provides authentication
+            }
+            else if (_security is Security.SecurityProviderX509)
+            {
+                // Standard X.509 authentication (no CSR, no SAS token)
+                // Certificate authentication handled by transport layer via TLS client cert
+            }
             else
             {
                 throw new NotSupportedException($"Security provider type {_security.GetType().Name} is not supported.");
@@ -187,9 +209,10 @@ namespace AzureDpsFramework
 
             // ========== ARCHITECTURAL NOTE ==========
             // Official SDK: Passes SecurityProvider in the message; transport extracts credentials.
-            // This implementation: Pre-computes SAS token and CSR; passes primitives to transport.
+            // This implementation: Passes SecurityProvider AND pre-computed SAS token/CSR.
             // 
             // Rationale: Makes the CSR preview flow explicit and easier to understand.
+            // The transport can now handle both SAS and X.509 auth by inspecting the SecurityProvider.
             // When Microsoft adds official CSR support, we can align with their approach.
             // =========================================
             var message = new ProvisioningTransportRegisterMessage(
@@ -197,7 +220,8 @@ namespace AzureDpsFramework
                 _idScope,
                 csrPem,
                 sasToken,
-                ProductInfo);
+                ProductInfo,
+                _security);
 
             return await _transport.RegisterAsync(message, cancellationToken);
         }

@@ -11,7 +11,8 @@ namespace AzureDpsFramework
     {
         internal static void Associate(object source, object target)
         {
-            // No-op for now; official SDK uses this for diagnostic correlation
+            // No-op stub: Official SDK uses this for diagnostic correlation
+            // In production, would log association between components
         }
 
         internal static void RegisterAsync(
@@ -21,7 +22,8 @@ namespace AzureDpsFramework
             ProvisioningTransportHandler transport,
             SecurityProvider security)
         {
-            // No-op for now; official SDK logs registration initiation
+            // No-op stub: Official SDK logs registration initiation
+            // In production, would log DPS registration attempt with details
         }
     }
 }

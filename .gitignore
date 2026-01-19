@@ -17,6 +17,8 @@ certs/
 appsettings.json
 appsettings.*.json
 !appsettings.template.json
+!appsettings.sas.template.json
+!appsettings.x509.template.json
 
 # User-specific files
 *.rsuser

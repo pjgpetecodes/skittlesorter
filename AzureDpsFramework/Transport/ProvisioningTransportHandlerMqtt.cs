@@ -39,17 +39,19 @@ namespace AzureDpsFramework.Transport
             ProvisioningTransportRegisterMessage message,
             CancellationToken cancellationToken)
         {
-            if (string.IsNullOrWhiteSpace(message.SasToken))
-                throw new ArgumentException("SAS token is required for MQTT transport", nameof(message));
-
             var idScope = message.IdScope;
             var csrPem = message.CsrPem;
             var sasToken = message.SasToken;
+            var securityProvider = message.Security;
 
-            // ARCHITECTURAL NOTE: Official SDK passes SecurityProvider in the message and extracts
-            // registrationId directly from it. This implementation receives pre-computed SAS token
-            // and CSR, so we extract registrationId from the SAS token's resource URI.
-            var registrationId = ExtractRegistrationIdFromSasToken(sasToken);
+            if (securityProvider == null)
+                throw new ArgumentException("Security provider is required", nameof(message));
+
+            var registrationId = securityProvider.GetRegistrationID();
+
+            // Determine authentication method based on security provider type
+            bool useX509Auth = securityProvider is Security.SecurityProviderX509;
+            Security.SecurityProviderX509? x509Provider = useX509Auth ? (Security.SecurityProviderX509)securityProvider : null;
 
             var factory = new MqttFactory();
             using var client = factory.CreateMqttClient();
@@ -67,18 +69,54 @@ namespace AzureDpsFramework.Transport
                 Console.WriteLine($"\n[MQTT] MQTT Connection Details:");
                 Console.WriteLine($"[MQTT] Host: {_provisioningHost}:{_port}");
                 Console.WriteLine($"[MQTT] Username: {username}");
-                Console.WriteLine($"[MQTT] Password (SAS Token) length: {sasToken.Length} chars");
+                Console.WriteLine($"[MQTT] Authentication: {(useX509Auth ? "X.509 Client Certificate" : "SAS Token")}");
+                if (!useX509Auth)
+                    Console.WriteLine($"[MQTT] Password (SAS Token) length: {sasToken?.Length ?? 0} chars");
                 Console.WriteLine($"[MQTT] ClientId: {registrationId}");
                 Console.WriteLine($"[MQTT] Attempting connection...");
             }
 
-            var opts = new MqttClientOptionsBuilder()
+            var optionsBuilder = new MqttClientOptionsBuilder()
                 .WithTcpServer(_provisioningHost, _port)
-                .WithTlsOptions(o => o.UseTls())
-                .WithCredentials(username, sasToken)
                 .WithClientId(registrationId)
-                .WithCleanSession()
-                .Build();
+                .WithCleanSession();
+
+            // Configure authentication based on provider type
+            if (useX509Auth)
+            {
+                // X.509 client certificate authentication
+                var authCert = x509Provider!.GetAuthenticationCertificate();
+                var certChain = x509Provider.GetAuthenticationCertificateChain();
+                
+                var clientCerts = new System.Collections.Generic.List<System.Security.Cryptography.X509Certificates.X509Certificate2> { authCert };
+                if (certChain != null)
+                {
+                    foreach (var cert in certChain)
+                    {
+                        clientCerts.Add(cert);
+                    }
+                }
+
+                optionsBuilder
+                    .WithTlsOptions(o =>
+                    {
+                        o.UseTls();
+                        o.WithClientCertificates(clientCerts);
+                    })
+                    .WithCredentials(username, string.Empty); // No password for X.509 auth
+            }
+            else
+            {
+                // SAS token authentication
+                if (string.IsNullOrWhiteSpace(sasToken))
+                    throw new ArgumentException("SAS token is required for symmetric key authentication", nameof(message));
+
+                optionsBuilder
+                    .WithTlsOptions(o => o.UseTls())
+                    .WithCredentials(username, sasToken);
+            }
+
+            var opts = optionsBuilder.Build();
 
             var requestId = Guid.NewGuid().ToString();
             var tcs = new TaskCompletionSource<DpsResponse>();

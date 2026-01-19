@@ -11,13 +11,15 @@ namespace AzureDpsFramework.Transport
             string idScope,
             string? csrPem,
             string? sasToken,
-            string? productInfo = null)
+            string? productInfo,
+            Security.SecurityProvider security)
         {
             GlobalDeviceEndpoint = globalDeviceEndpoint;
             IdScope = idScope;
             CsrPem = csrPem;
             SasToken = sasToken;
             ProductInfo = productInfo;
+            Security = security;
         }
 
         public string GlobalDeviceEndpoint { get; }
@@ -25,5 +27,6 @@ namespace AzureDpsFramework.Transport
         public string? CsrPem { get; }
         public string? SasToken { get; }
         public string? ProductInfo { get; }
+        public Security.SecurityProvider Security { get; }
     }
 }
