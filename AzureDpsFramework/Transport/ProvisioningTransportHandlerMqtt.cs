@@ -12,7 +12,7 @@ namespace AzureDpsFramework.Transport
     /// MQTT transport handler for device provisioning.
     /// Matches the Microsoft.Azure.Devices.Provisioning.Client.Transport.ProvisioningTransportHandlerMqtt pattern.
     /// </summary>
-    public class ProvisioningTransportHandlerMqtt : ITransportHandler
+    public class ProvisioningTransportHandlerMqtt : ProvisioningTransportHandler
     {
         private readonly string _provisioningHost;
         private readonly int _port;
@@ -35,15 +35,17 @@ namespace AzureDpsFramework.Transport
             _enableDebugLogging = enableDebugLogging;
         }
 
-        public async Task<DeviceRegistrationResult> RegisterAsync(
-            string idScope,
-            string registrationId,
-            string? csrPem,
-            string? sasToken,
+        public override async Task<DeviceRegistrationResult> RegisterAsync(
+            ProvisioningTransportRegisterMessage message,
             CancellationToken cancellationToken)
         {
-            if (string.IsNullOrWhiteSpace(sasToken))
-                throw new ArgumentException("SAS token is required for MQTT transport", nameof(sasToken));
+            if (string.IsNullOrWhiteSpace(message.SasToken))
+                throw new ArgumentException("SAS token is required for MQTT transport", nameof(message));
+
+            var idScope = message.IdScope;
+            var registrationId = message.RegistrationId;
+            var csrPem = message.CsrPem;
+            var sasToken = message.SasToken;
 
             var factory = new MqttFactory();
             using var client = factory.CreateMqttClient();

@@ -6,7 +6,7 @@ namespace AzureDpsFramework.Security
     /// Security provider for symmetric key based provisioning.
     /// Matches the Microsoft.Azure.Devices.Provisioning.Client.SecurityProviderSymmetricKey pattern.
     /// </summary>
-    public class SecurityProviderSymmetricKey : ISecurityProvider
+    public class SecurityProviderSymmetricKey : SecurityProvider
     {
         private readonly string _registrationId;
         private readonly string _primaryKey;
@@ -41,7 +41,7 @@ namespace AzureDpsFramework.Security
         /// <summary>
         /// Gets the registration ID for this device.
         /// </summary>
-        public string GetRegistrationId() => _registrationId;
+        public override string GetRegistrationID() => _registrationId;
 
         /// <summary>
         /// Gets the primary symmetric key.
@@ -53,13 +53,7 @@ namespace AzureDpsFramework.Security
         /// </summary>
         public string? GetSecondaryKey() => _secondaryKey;
 
-        public void Dispose()
-        {
-            Dispose(true);
-            GC.SuppressFinalize(this);
-        }
-
-        protected virtual void Dispose(bool disposing)
+        protected override void Dispose(bool disposing)
         {
             if (_disposed)
                 return;

@@ -7,7 +7,7 @@ namespace AzureDpsFramework.Security
     /// Security provider for X.509 Certificate Signing Request (CSR) based provisioning.
     /// This provider is used when requesting DPS to issue a certificate via Azure Device Registry.
     /// </summary>
-    public class SecurityProviderX509Csr : ISecurityProvider
+    public class SecurityProviderX509Csr : SecurityProvider
     {
         private readonly string _registrationId;
         private readonly string _csrPem;
@@ -59,7 +59,7 @@ namespace AzureDpsFramework.Security
         /// <summary>
         /// Gets the registration ID for this device.
         /// </summary>
-        public string GetRegistrationId() => _registrationId;
+        public override string GetRegistrationID() => _registrationId;
 
         /// <summary>
         /// Gets the certificate signing request in PEM format.
@@ -76,13 +76,7 @@ namespace AzureDpsFramework.Security
         /// </summary>
         public string? GetEnrollmentGroupKey() => _enrollmentGroupKey;
 
-        public void Dispose()
-        {
-            Dispose(true);
-            GC.SuppressFinalize(this);
-        }
-
-        protected virtual void Dispose(bool disposing)
+        protected override void Dispose(bool disposing)
         {
             if (_disposed)
                 return;

@@ -14,15 +14,15 @@ namespace AzureDpsFramework
     {
         private readonly string _globalDeviceEndpoint;
         private readonly string _idScope;
-        private readonly ISecurityProvider _security;
-        private readonly ITransportHandler _transport;
+        private readonly SecurityProvider _security;
+        private readonly ProvisioningTransportHandler _transport;
         private bool _disposed;
 
         private ProvisioningDeviceClient(
             string globalDeviceEndpoint,
             string idScope,
-            ISecurityProvider security,
-            ITransportHandler transport)
+            SecurityProvider security,
+            ProvisioningTransportHandler transport)
         {
             _globalDeviceEndpoint = globalDeviceEndpoint ?? throw new ArgumentNullException(nameof(globalDeviceEndpoint));
             _idScope = idScope ?? throw new ArgumentNullException(nameof(idScope));
@@ -41,8 +41,8 @@ namespace AzureDpsFramework
         public static ProvisioningDeviceClient Create(
             string globalDeviceEndpoint,
             string idScope,
-            ISecurityProvider securityProvider,
-            ITransportHandler transport)
+            SecurityProvider securityProvider,
+            ProvisioningTransportHandler transport)
         {
             return new ProvisioningDeviceClient(globalDeviceEndpoint, idScope, securityProvider, transport);
         }
@@ -63,7 +63,7 @@ namespace AzureDpsFramework
                 // Generate SAS token for symmetric key authentication
                 sasToken = DpsSasTokenGenerator.GenerateDpsSas(
                     _idScope,
-                    _security.GetRegistrationId(),
+                        _security.GetRegistrationID(),
                     symmetricKey.GetPrimaryKey(),
                     3600);
             }
@@ -80,12 +80,12 @@ namespace AzureDpsFramework
                 }
 
                 // Derive device key from enrollment group key
-                var deviceKey = DpsSasTokenGenerator.DeriveDeviceKey(_security.GetRegistrationId(), enrollmentGroupKey);
+                var deviceKey = DpsSasTokenGenerator.DeriveDeviceKey(_security.GetRegistrationID(), enrollmentGroupKey);
 
                 // Generate SAS token for DPS authentication
                 sasToken = DpsSasTokenGenerator.GenerateDpsSas(
                     _idScope,
-                    _security.GetRegistrationId(),
+                    _security.GetRegistrationID(),
                     deviceKey,
                     3600);
 
@@ -98,12 +98,14 @@ namespace AzureDpsFramework
             }
 
             // Call transport to register
-            return await _transport.RegisterAsync(
+            var message = new ProvisioningTransportRegisterMessage(
                 _idScope,
-                _security.GetRegistrationId(),
+                _security.GetRegistrationID(),
                 csrPem,
                 sasToken,
-                cancellationToken);
+                productInfo: null);
+
+            return await _transport.RegisterAsync(message, cancellationToken);
         }
 
         public void Dispose()
