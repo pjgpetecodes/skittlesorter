@@ -13,6 +13,7 @@
     <PackageReference Include="Microsoft.Azure.Devices.Client" Version="1.42.3" />
     <PackageReference Include="MQTTnet" Version="4.3.3.952" />
     <PackageReference Include="Newtonsoft.Json" Version="13.0.4" />
+    <PackageReference Include="Azure.Identity" Version="1.17.1" />
   </ItemGroup>
 
 </Project>

@@ -2,10 +2,12 @@ using System;
 using System.IO;
 using System.Text;
 using System.Threading;
+using System.Linq;
 using Microsoft.Azure.Devices.Client;
 using AzureDpsFramework;
 using AzureDpsFramework.Security;
 using AzureDpsFramework.Transport;
+using AzureDpsFramework.Adr;
 
 namespace skittle_sorter
 {
@@ -165,6 +167,9 @@ namespace skittle_sorter
                         Console.WriteLine($"Saved issued certificate chain to: {dpsCfg.IssuedCertFilePath}");
                         
                         var x509 = CertificateManager.LoadX509WithPrivateKey(dpsCfg.IssuedCertFilePath, dpsCfg.CsrKeyFilePath);
+                        // Optional: list ADR devices after successful provisioning
+                        TryListAdrDevices();
+
                         var deviceClient = DeviceClient.Create(
                             result.AssignedHub,
                             new DeviceAuthenticationWithX509Certificate(result.DeviceId, x509),
@@ -183,6 +188,9 @@ namespace skittle_sorter
                         
                         var derivedDeviceKey = DpsSasTokenGenerator.DeriveDeviceKey(result.DeviceId, dpsCfg.EnrollmentGroupKeyBase64);
                         
+                        // Optional: list ADR devices after successful provisioning
+                        TryListAdrDevices();
+
                         var deviceClient = DeviceClient.Create(
                             result.AssignedHub,
                             new DeviceAuthenticationWithRegistrySymmetricKey(result.DeviceId, derivedDeviceKey),
@@ -243,6 +251,39 @@ namespace skittle_sorter
                 }
             }
             return sb.ToString();
+        }
+
+        private static void TryListAdrDevices()
+        {
+            try
+            {
+                var adrCfg = AdrConfiguration.Load();
+                if (!adrCfg.IsConfigured())
+                {
+                    return; // disabled or not configured
+                }
+
+                using var client = new AdrDeviceRegistryClient();
+                var devices = client.ListDevicesAsync(
+                    adrCfg.SubscriptionId!,
+                    adrCfg.ResourceGroupName!,
+                    adrCfg.NamespaceName!
+                ).GetAwaiter().GetResult();
+
+                Console.WriteLine($"[ADR] Devices in namespace '{adrCfg.NamespaceName}': {devices.Count}");
+                foreach (var d in devices.Take(5))
+                {
+                    Console.WriteLine($"[ADR] - {d.Name} ({d.Id})");
+                }
+                if (devices.Count > 5)
+                {
+                    Console.WriteLine($"[ADR] ...and {devices.Count - 5} more");
+                }
+            }
+            catch (Exception ex)
+            {
+                Console.WriteLine($"[ADR] Listing failed: {ex.Message}");
+            }
         }
     }
 }
