@@ -343,6 +343,16 @@ Create `appsettings.json`:
 
 #### Option 2: X.509 Attestation
 
+For X.509 attestation, use a proper certificate hierarchy:
+
+```
+Root CA (verified in DPS)
+  └─ Intermediate CA (verified in DPS, used in enrollment)
+      └─ Device Certificate (signed by intermediate)
+```
+
+**⚠️ CRITICAL**: Both root AND intermediate MUST be verified in DPS via proof-of-possession (PoP). If the intermediate is not verified, provisioning will fail with `401 - CA certificate not found`.
+
 ```json
 {
   "IoTHub": {
@@ -352,12 +362,12 @@ Create `appsettings.json`:
       "AttestationMethod": "X509",
       "ProvisioningHost": "global.azure-devices-provisioning.net",
       "EnrollmentGroupKeyBase64": "",
-      "AttestationCertPath": "certs/bootstrap-cert.pem",
-      "AttestationKeyPath": "certs/bootstrap-key.pem",
-      "AttestationCertChainPath": "certs/bootstrap-chain.pem",
+      "AttestationCertPath": "certs/device/device.pem",
+      "AttestationKeyPath": "certs/device/device.key",
+      "AttestationCertChainPath": "certs/ca/chain.pem",
       "CsrFilePath": "certs/device.csr",
       "CsrKeyFilePath": "certs/device.key",
-      "IssuedCertFilePath": "certs/issued.pem",
+      "IssuedCertFilePath": "certs/issued/issued.pem",
       "ApiVersion": "2025-07-01-preview",
       "AutoGenerateCsr": true,
       "MqttPort": 8883,
@@ -367,6 +377,22 @@ Create `appsettings.json`:
   }
 }
 ```
+
+**Certificate Files**:
+- `AttestationCertPath`: Device leaf certificate (CN=device-id)
+- `AttestationKeyPath`: Device private key
+- `AttestationCertChainPath`: Chain file containing intermediate + root (for TLS presentation)
+
+**Setup Instructions**:
+
+See the main project README for the automated setup script (`setup-x509-attestation.ps1`) that:
+1. Generates root CA (self-signed, 4096-bit RSA, 10-year validity)
+2. Generates intermediate CA (signed by root, 4096-bit RSA, 5-year validity)
+3. Generates device certificate (signed by intermediate, 2048-bit RSA, 1-year validity)
+4. Uploads and verifies root CA in DPS (proof-of-possession)
+5. Uploads and verifies intermediate CA in DPS (proof-of-possession)
+6. Creates enrollment group with CA reference to intermediate
+7. Updates appsettings.json automatically
 
 ### Code Example
 
@@ -444,14 +470,38 @@ az iot device-registry credential-policy create \
 
 ### 3. Enrollment Group with ADR Policy
 
-Create an enrollment group in DPS with symmetric key attestation and link it to your ADR credential policy:
+Create an enrollment group in DPS:
 
+**Option A: Symmetric Key Attestation**
 1. Go to DPS → Manage enrollments → Enrollment groups
 2. Create new group:
    - **Attestation Type**: Symmetric Key
    - **Primary Key**: Auto-generated (copy this for config)
    - **Credential Policy**: Select your ADR policy
 3. Note your **ID Scope** from DPS Overview
+
+**Option B: X.509 Attestation (Recommended)**
+1. Upload and verify root CA in DPS:
+   - Go to DPS → Certificates → Add
+   - Upload root CA certificate
+   - Generate verification code
+   - Create verification cert signed by root with CN=\<code\>
+   - Upload verification cert to prove ownership
+2. Upload and verify intermediate CA in DPS:
+   - Go to DPS → Certificates → Add
+   - Upload intermediate CA certificate
+   - Generate verification code
+   - Create verification cert signed by intermediate with CN=\<code\>
+   - Upload verification cert to prove ownership
+   - **⚠️ CRITICAL**: Verify `isVerified: true` for both root AND intermediate
+3. Go to DPS → Manage enrollments → Enrollment groups
+4. Create new group:
+   - **Attestation Type**: X.509 certificates uploaded to this Device Provisioning Service
+   - **Primary CA**: Select your intermediate certificate (by name)
+   - **Credential Policy**: Select your ADR policy
+5. Note your **ID Scope** from DPS Overview
+
+**Automated Setup**: Use the provided `setup-x509-attestation.ps1` script to automate steps 1-4.
 
 ### 4. Link IoT Hub to DPS
 
@@ -463,7 +513,42 @@ Create an enrollment group in DPS with symmetric key attestation and link it to 
 
 ### Common Issues
 
-#### 401 Unauthorized
+#### 401 Unauthorized - CA certificate not found (X.509 Attestation)
+
+**Symptoms**: `{"errorCode":401002,"message":"CA certificate not found."}`
+
+**This is the #1 issue with X.509 attestation!**
+
+**Root Cause**: The intermediate CA is **not verified** in DPS via proof-of-possession.
+
+**Why This Happens**:
+- DPS requires ALL CA certificates in the chain to be verified (root AND intermediate)
+- Even if thumbprints match and the certificate chain is correct, DPS will reject if `isVerified: false`
+- MQTT TLS handshake succeeds (proves certs are valid X.509), but DPS application-level validation fails
+
+**Solution**:
+1. Check intermediate verification status:
+   ```powershell
+   az iot dps certificate show --dps-name <dps-name> --resource-group <rg> --certificate-name <intermediate-name> --query "properties.isVerified" -o tsv
+   ```
+2. If `false`, verify the intermediate:
+   ```powershell
+   # Get verification code
+   $code = az iot dps certificate generate-verification-code --certificate-name <intermediate-name> --dps-name <dps-name> --resource-group <rg> --etag <etag> --query "properties.verificationCode" -o tsv
+   
+   # Create verification cert signed by intermediate
+   openssl req -new -key ca.key -out verify.csr -subj "/CN=$code"
+   openssl x509 -req -in verify.csr -CA ca.pem -CAkey ca.key -CAcreateserial -out verify.pem -days 1 -sha256
+   
+   # Verify ownership
+   az iot dps certificate verify --certificate-name <intermediate-name> --dps-name <dps-name> --resource-group <rg> --path verify.pem --etag <etag>
+   ```
+3. Confirm both root and intermediate show `isVerified: true`
+4. Retry provisioning - 401 error should be resolved
+
+**Automated Solution**: Run the `setup-x509-attestation.ps1` script which handles verification automatically.
+
+#### 401 Unauthorized - Other Causes (Symmetric Key Attestation)
 
 **Symptoms**: `[MQTT ERROR] Connection failed` with 401 status
 
@@ -476,6 +561,38 @@ Create an enrollment group in DPS with symmetric key attestation and link it to 
 1. Verify `EnrollmentGroupKeyBase64` matches DPS enrollment group primary key
 2. Ensure `RegistrationId` is lowercase for key derivation
 3. Check diagnostic logs: `[KEY DERIVATION]` and `[SAS]`
+
+#### Certificate Chain Validation Failed (X.509 Attestation)
+
+**Symptoms**: TLS handshake fails or certificate rejected
+
+**Causes**:
+- Device cert not signed by intermediate
+- Intermediate not chaining to root
+- Chain file incomplete or incorrect order
+
+**Solution**:
+1. Verify chain structure:
+   ```powershell
+   # Check device cert issuer
+   openssl x509 -in device.pem -noout -issuer
+   # Should match intermediate subject:
+   openssl x509 -in ca.pem -noout -subject
+   
+   # Check intermediate issuer
+   openssl x509 -in ca.pem -noout -issuer
+   # Should match root subject:
+   openssl x509 -in root.pem -noout -subject
+   ```
+2. Verify chain file contents (should be intermediate + root, in that order):
+   ```powershell
+   openssl crl2pkcs7 -nocrl -certfile chain.pem | openssl pkcs7 -print_certs -noout
+   ```
+3. Verify complete chain:
+   ```powershell
+   openssl verify -CAfile chain.pem device.pem
+   ```
+4. If chain is broken, regenerate using `setup-x509-attestation.ps1`
 
 #### 400 Bad Request - Deserialization Error
 

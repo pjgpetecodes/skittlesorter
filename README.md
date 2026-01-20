@@ -122,7 +122,11 @@ az iot device-registry credential-policy create `
 
 **Note**: You can use `RSA` instead of `ECC`. Adjust validity period as needed.
 
-### 3. Create Enrollment Group with ADR Policy
+### 3. Create Enrollment Group
+
+Choose one of the following attestation methods:
+
+#### Option A: Symmetric Key Attestation (Simpler)
 
 ```powershell
 $enrollmentGroupName = "skittlesorter-group"
@@ -134,7 +138,8 @@ az iot dps enrollment-group create `
   --enrollment-id $enrollmentGroupName `
   --attestation-type symmetrickey `
   --credential-policy-name $credentialPolicyName `
-  --credential-policy-namespace $adrNamespace
+  --credential-policy-namespace $adrNamespace `
+  --provisioning-status enabled
 
 # Get the primary key (save this for appsettings.json)
 az iot dps enrollment-group show `
@@ -143,6 +148,119 @@ az iot dps enrollment-group show `
   --enrollment-id $enrollmentGroupName `
   --query attestation.symmetricKey.primaryKey -o tsv
 ```
+
+**Skip to Section 4 (Configure Device Credentials)** if using symmetric key attestation.
+
+#### Option B: X.509 Certificate Attestation (More Secure)
+
+This project also supports **X.509 intermediate attestation** with a proper certificate hierarchy:
+
+```
+Root CA (verified in DPS)
+  └─ Intermediate CA (verified in DPS, used in enrollment)
+      └─ Device Certificate (signed by intermediate)
+```
+
+**Why This Hierarchy?**
+
+- **Root CA**: Trust anchor, verified via proof-of-possession (PoP), can be kept offline
+- **Intermediate CA**: Operational signer, signs device certificates, can be rotated/revoked
+- **Device Cert**: Device identity, authenticates to DPS, signed by intermediate
+
+**⚠️ Important: Both Root AND Intermediate Must Be Verified**
+
+DPS requires **proof-of-possession verification** for **BOTH** the root and intermediate certificates. If the intermediate is not verified, provisioning will fail with:
+
+```
+401 - CA certificate not found
+```
+
+We discovered this the hard way! Even if thumbprints match and the chain is correct, DPS will reject the device if the intermediate CA is not verified.
+
+#### Clean Up Old Resources (If Any)
+
+Before running the setup script for the first time (or re-running after changes), clean up any existing certificates and enrollments:
+
+```powershell
+# Delete existing enrollment group (if any)
+az iot dps enrollment-group delete `
+  --dps-name $dpsName `
+  --resource-group $resourceGroup `
+  --enrollment-id skittlesorter-group
+
+# Delete old certificates from DPS (if any)
+az iot dps certificate delete `
+  --dps-name $dpsName `
+  --resource-group $resourceGroup `
+  --certificate-name skittlesorter-root `
+  --etag "*"
+
+az iot dps certificate delete `
+  --dps-name $dpsName `
+  --resource-group $resourceGroup `
+  --certificate-name skittlesorter-intermediate `
+  --etag "*"
+
+# Delete local certificate files
+Remove-Item -Recurse -Force certs/
+```
+
+#### Automated Certificate Setup
+
+Run the provided PowerShell script to automatically generate certificates and configure DPS:
+
+```powershell
+pwsh ./setup-x509-attestation.ps1 `
+  -RegistrationId skittlesorter `
+  -EnrollmentGroupId skittlesorter-group `
+  -DpsName $dpsName `
+  -ResourceGroup $resourceGroup `
+  -CredentialPolicy $credentialPolicyName
+```
+
+**What This Script Does:**
+
+1. **[1/8]** Creates certificate directory structure (`certs/root`, `certs/ca`, `certs/device`, `certs/issued`)
+2. **[2/8]** Generates a complete certificate hierarchy:
+   - **Root CA**: Self-signed, 4096-bit RSA, 10-year validity, `pathlen:1`
+   - **Intermediate CA**: Signed by root, 4096-bit RSA, 5-year validity, `pathlen:0`
+   - **Device Certificate**: Signed by intermediate, 2048-bit RSA, 1-year validity, `extendedKeyUsage=clientAuth`
+3. **[3/8]** Extracts thumbprints for all certificates
+4. **[4/8]** Uploads root CA to DPS and verifies ownership via proof-of-possession:
+   - Generates verification code
+   - Creates verification certificate with CN=\<code\>, signed by root
+   - Verifies ownership (proves you control the root private key)
+5. **[5/8]** Uploads intermediate CA to DPS and verifies ownership via proof-of-possession:
+   - Generates verification code
+   - Creates verification certificate with CN=\<code\>, signed by intermediate
+   - Verifies ownership (proves you control the intermediate private key)
+6. **[6/8]** Creates enrollment group with CA reference:
+   - Uses `--ca-name` (references uploaded intermediate by name)
+   - Links to credential policy for CSR-based certificate issuance
+   - Sets intermediate as primary CA (it's the direct signer of device certificates)
+7. **[7/8]** Updates `appsettings.json` with certificate paths
+8. **[8/8]** Displays summary and verification status
+
+**Key Files Generated:**
+
+- `certs/root/root.pem`: Root CA certificate (upload & verify in DPS)
+- `certs/root/root.key`: Root CA private key
+- `certs/ca/ca.pem`: Intermediate CA certificate (upload & verify in DPS)
+- `certs/ca/ca.key`: Intermediate CA private key
+- `certs/ca/chain.pem`: Full chain (intermediate + root) for TLS presentation
+- `certs/device/device.pem`: Device certificate (signed by intermediate)
+- `certs/device/device.key`: Device private key
+- `certs/device/device-full-chain.pem`: Full chain (device + intermediate + root)
+
+**Verification Status Check:**
+
+After the script completes, it will show:
+```
+Root CA isVerified: true
+Intermediate CA isVerified: true
+```
+
+Both **must** be `true` for provisioning to work. If either is `false`, provisioning will fail with `401 - CA certificate not found`.
 
 ### 4. Configure Device Credentials
 
@@ -153,13 +271,25 @@ az iot dps enrollment-group show `
    cp appsettings.template.json appsettings.json
    ```
 
-2. **Update `appsettings.json`** with your DPS credentials:
+2. **Update `appsettings.json`** based on your chosen attestation method:
+
+**For Symmetric Key Attestation:**
    - `IdScope`: From DPS Overview
-   - `EnrollmentGroupKeyBase64`: The enrollment group primary key (base64-encoded)
-   - `RegistrationId`: Your device's unique identifier
-- `RegistrationId`: Your device identifier (e.g., `skittlesorter`)
+   - `AttestationMethod`: Set to `"SymmetricKey"` (default)
+   - `EnrollmentGroupKeyBase64`: The enrollment group primary key (from step 3)
+   - `RegistrationId`: Your device identifier (e.g., `skittlesorter`)
+
+**For X.509 Certificate Attestation:**
+   - `IdScope`: From DPS Overview
+   - `AttestationMethod`: Set to `"X509"`
+   - `AttestationCertPath`: Path to device certificate (auto-set by setup script)
+   - `AttestationKeyPath`: Path to device private key (auto-set by setup script)
+   - `AttestationCertChainPath`: Path to chain file (auto-set by setup script)
+   - `RegistrationId`: Your device identifier (e.g., `skittlesorter`)
 
 See Configuration section below for complete settings.
+
+**Note**: For X.509, the setup script automatically updates `appsettings.json` with the correct certificate paths.
 
 ## Configuration
 
@@ -198,16 +328,21 @@ Create an `appsettings.json` file in the project root with the following structu
     "DpsProvisioning": {
       "IdScope": "0ne01104302",
       "RegistrationId": "skittlesorter",
+      "AttestationMethod": "SymmetricKey",
       "ProvisioningHost": "global.azure-devices-provisioning.net",
       "EnrollmentGroupKeyBase64": "your-enrollment-group-primary-key-base64-encoded",
       "DeviceKeyBase64": null,
+      "AttestationCertPath": "",
+      "AttestationKeyPath": "",
+      "AttestationCertChainPath": "",
       "CertificatePath": "certs/device.csr",
       "PrivateKeyPath": "certs/device.key",
-      "IssuedCertificatePath": "certs/issued.pem",
+      "IssuedCertificatePath": "certs/issued/issued.pem",
       "ApiVersion": "2025-07-01-preview",
       "SasExpirySeconds": 3600,
       "AutoGenerateCsr": true,
-      "MqttPort": 8883
+      "MqttPort": 8883,
+      "EnableDebugLogging": true
     }
   }
 }
@@ -249,17 +384,26 @@ Configure servo angle for each color chute:
 **DPS Provisioning Configuration:**
 - `IdScope`: Your DPS ID Scope
 - `RegistrationId`: Device registration ID (e.g., `skittlesorter`)
+- `AttestationMethod`: `"SymmetricKey"` (default) or `"X509"` for certificate-based authentication
 - `ProvisioningHost`: DPS endpoint (usually `global.azure-devices-provisioning.net`)
-- `EnrollmentGroupKeyBase64`: Base64-encoded enrollment group primary key
-- `DeviceKeyBase64`: Pre-computed device key (optional; auto-derived if null)
-- `CertificatePath`: Path to CSR file
-- `PrivateKeyPath`: Path to private key file
-- `IssuedCertificatePath`: Path to store the issued X.509 certificate
-- `ApiVersion`: DPS API version (use `2025-07-01-preview` for CSR-based provisioning)
-- `SasExpirySeconds`: SAS token TTL in seconds (default: 3600)
-- `AutoGenerateCsr`: Auto-generate CSR and private key if files don't exist (default: true)
-- `MqttPort`: MQTT port for DPS connection (default: 8883)
-- `EnableDebugLogging`: Enable verbose MQTT protocol logging for troubleshooting (default: false)
+- **For Symmetric Key Attestation:**
+  - `EnrollmentGroupKeyBase64`: Base64-encoded enrollment group primary key
+  - `DeviceKeyBase64`: Pre-computed device key (optional; auto-derived if null)
+  - Leave `AttestationCertPath`, `AttestationKeyPath`, `AttestationCertChainPath` empty
+- **For X.509 Certificate Attestation:**
+  - `AttestationCertPath`: Path to device certificate (e.g., `certs/device/device.pem`)
+  - `AttestationKeyPath`: Path to device private key (e.g., `certs/device/device.key`)
+  - `AttestationCertChainPath`: Path to certificate chain file (e.g., `certs/ca/chain.pem` containing intermediate + root)
+  - Leave `EnrollmentGroupKeyBase64` empty
+- **Common Settings:**
+  - `CertificatePath`: Path to CSR file for new certificate issuance
+  - `PrivateKeyPath`: Path to private key for CSR
+  - `IssuedCertificatePath`: Path to store the issued X.509 certificate
+  - `ApiVersion`: DPS API version (use `2025-07-01-preview` for CSR-based provisioning)
+  - `SasExpirySeconds`: SAS token TTL in seconds (default: 3600) - only used for symmetric key attestation
+  - `AutoGenerateCsr`: Auto-generate CSR and private key if files don't exist (default: true)
+  - `MqttPort`: MQTT port for DPS connection (default: 8883)
+  - `EnableDebugLogging`: Enable verbose MQTT protocol logging for troubleshooting (default: false)
 
 **Debugging DPS Connection Issues:**
 Set `EnableDebugLogging: true` to see detailed MQTT protocol messages including:
@@ -281,9 +425,13 @@ dotnet run
 The application will:
 1. Load configuration from `appsettings.json`
 2. Initialize hardware (or mock mode)
-3. Provision device with Azure DPS (auto-generates and issues X.509 certificate)
-4. Connect to Azure IoT Hub using certificate authentication
-5. Begin the sorting loop:
+3. Provision device with Azure DPS:
+   - **Symmetric Key**: Derives device key, generates SAS token, authenticates with DPS
+   - **X.509**: Loads bootstrap certificate, authenticates with DPS using client certificate
+4. DPS validates authentication and processes CSR
+5. DPS issues new certificate via credential policy
+6. Connect to Azure IoT Hub using newly issued certificate
+7. Begin the sorting loop:
    - Pick up a Skittle
    - Read its color
    - Send telemetry to IoT Hub (detected colors only)
@@ -343,23 +491,46 @@ Main application implementing the sorting logic:
 
 When the application starts with DPS enabled:
 
+### Symmetric Key Attestation Flow
+
 1. **Load DPS Configuration**: Read from `appsettings.json`
 2. **Generate CSR (if needed)**: Auto-create device certificate signing request and private key (RSA 2048 by default)
 3. **Derive Device Key**: Compute device-specific key using `HMACSHA256(base64Decode(enrollmentGroupKey), lowercase(registrationId))`
 4. **Generate SAS Token**: Create signed MQTT credentials with DPS endpoint and URL-encoded resource URI
 5. **MQTT Connection**: Connect to `global.azure-devices-provisioning.net:8883` with TLS
 6. **MQTT Registration**: Publish registration request with base64-encoded DER CSR to `$dps/registrations/PUT/iotdps-register/`
-7. **Poll for Status**: Wait for DPS to process (status: "assigning") and poll every 2 seconds via `$dps/registrations/GET/iotdps-get-operationstatus/`
-8. **Receive Certificate**: Get assigned IoT Hub, device ID, and issued X.509 certificate chain (3 certificates: device + intermediate + root)
-9. **Parse Certificate**: Convert base64 certificates to PEM format, combine device cert with private key, export to PFX and reload (fixes ephemeral key issue)
-10. **Connect to IoT Hub**: Authenticate using X.509 certificate-based connection (not symmetric key)
-11. **Begin Sorting**: Start main application loop with certificate authentication
+7. **Poll for Status**: Wait for DPS to process (status: "assigning") and poll every 2 seconds
+8. **Receive New Certificate**: Get assigned IoT Hub, device ID, and newly issued X.509 certificate chain via credential policy
+9. **Parse Certificate**: Convert base64 certificates to PEM format, combine device cert with CSR private key
+10. **Connect to IoT Hub**: Authenticate using newly issued X.509 certificate
+11. **Begin Sorting**: Start main application loop
 
 **Authentication Summary**:
 - **Phase 1 (DPS)**: Symmetric key authentication (derived from enrollment group key)
-- **Phase 2 (IoT Hub)**: X.509 certificate authentication (issued by DPS via Azure Device Registry)
+- **Phase 2 (IoT Hub)**: X.509 certificate authentication (newly issued cert from credential policy)
 
-**Key Insight**: The symmetric key is ONLY used to authenticate with DPS. Once the certificate is issued, all subsequent IoT Hub communication uses X.509 certificate authentication.
+### X.509 Certificate Attestation Flow
+
+1. **Load DPS Configuration**: Read from `appsettings.json`
+2. **Load Bootstrap Certificate**: Load device.pem, device.key, and chain.pem (intermediate + root)
+3. **MQTT Connection**: Connect to `global.azure-devices-provisioning.net:8883` with TLS using X.509 client certificate authentication
+4. **MQTT Registration**: Publish registration request with base64-encoded DER CSR to `$dps/registrations/PUT/iotdps-register/`
+5. **DPS Validation**: DPS validates the certificate chain:
+   - Device cert is signed by intermediate CA
+   - Intermediate CA is verified in DPS (proof-of-possession)
+   - Intermediate CA chains to verified root CA
+   - If any certificate is not verified: **401 - CA certificate not found**
+6. **Poll for Status**: Wait for DPS to process (status: "assigning") and poll every 2 seconds
+7. **Receive New Certificate**: Get assigned IoT Hub, device ID, and newly issued X.509 certificate chain via credential policy
+8. **Parse Certificate**: Convert base64 certificates to PEM format, combine device cert with CSR private key
+9. **Connect to IoT Hub**: Authenticate using newly issued X.509 certificate
+10. **Begin Sorting**: Start main application loop
+
+**Authentication Summary**:
+- **Phase 1 (DPS)**: X.509 certificate authentication (bootstrap cert signed by verified intermediate)
+- **Phase 2 (IoT Hub)**: X.509 certificate authentication (newly issued cert from credential policy)
+
+**Key Insight**: The bootstrap certificate (for X.509) or symmetric key is ONLY used to authenticate with DPS. Once the new certificate is issued via CSR, all subsequent IoT Hub communication uses the newly issued X.509 certificate.
 
 For detailed protocol specifications, see **[AzureDpsFramework/README.md](AzureDpsFramework/README.md)#how-it-works**.
 
@@ -405,15 +576,30 @@ When running on a Raspberry Pi with the physical sorter assembled:
 
 Common issues with DPS provisioning:
 
-**401 Unauthorized**:
+**401 Unauthorized - CA certificate not found (X.509 Attestation)**:
+- **Root Cause**: Intermediate CA is not verified in DPS
+- **Solution**: Run `az iot dps certificate show --certificate-name skittlesorter-intermediate` and check `isVerified: true`
+- If false, the setup script should have verified it automatically - try rerunning the setup script
+- Both root AND intermediate must be verified via proof-of-possession
+- Check DPS certificates in Azure Portal → verify both show green checkmark
+
+**401 Unauthorized (Symmetric Key Attestation)**:
 - Wrong enrollment group key → Verify key matches DPS portal
 - Registration ID mismatch → Check exact spelling (case-sensitive)
 - Check diagnostic logs: `[KEY DERIVATION]` and `[SAS]`
 
+**Certificate chain validation failed**:
+- Device cert not signed by intermediate → Regenerate certificates using setup script
+- Intermediate not chaining to verified root → Check issuer/subject match
+- Run OpenSSL verification:
+  ```powershell
+  openssl verify -CAfile certs/ca/chain.pem certs/device/device.pem
+  ```
+
 **400 Bad Request**:
 - CSR format incorrect → Must be base64 DER (not PEM with headers)
 - API version mismatch → Ensure using `2025-07-01-preview`
-- Enrollment group not linked to ADR policy
+- Enrollment group not linked to credential policy
 
 **Certificate Not Issued**:
 - Credential policy not configured

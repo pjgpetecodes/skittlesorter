@@ -11,11 +11,8 @@ namespace AzureDpsFramework
     {
         internal static void EnsureChainIsInstalled(SecurityProviderX509 securityProvider)
         {
-            // Not implemented: Would install certificate chain to system store
-            // Not needed for symmetric key + CSR flow in this preview
-            throw new NotImplementedException(
-                "X.509 certificate chain installation is not implemented. " +
-                "This preview implementation focuses on symmetric key authentication with CSR-based certificate issuance.");
+            // No-op: For this sample we assume the bootstrap cert chain is trusted on the host.
+            // In production, install the intermediate/root chain (from AttestationCertChainPath) into the OS trust store.
         }
     }
 }
