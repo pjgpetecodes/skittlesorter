@@ -3,6 +3,7 @@ using System.IO;
 using System.Text;
 using System.Threading;
 using System.Linq;
+using System.Collections.Generic;
 using Microsoft.Azure.Devices.Client;
 using AzureDpsFramework;
 using AzureDpsFramework.Security;
@@ -169,7 +170,7 @@ namespace skittle_sorter
                         
                         var x509 = CertificateManager.LoadX509WithPrivateKey(dpsCfg.IssuedCertFilePath, dpsCfg.CsrKeyFilePath);
                         // Optional: list ADR devices after successful provisioning
-                        TryListAdrDevices();
+                        TryListAdrDevices(result.DeviceId);
 
                         WriteSection("IoT Hub Connection (X.509)");
                         var deviceClient = DeviceClient.Create(
@@ -191,7 +192,7 @@ namespace skittle_sorter
                         var derivedDeviceKey = DpsSasTokenGenerator.DeriveDeviceKey(result.DeviceId, dpsCfg.EnrollmentGroupKeyBase64);
                         
                         // Optional: list ADR devices after successful provisioning
-                        TryListAdrDevices();
+                        TryListAdrDevices(result.DeviceId);
 
                         WriteSection("IoT Hub Connection (Symmetric Key)");
                         var deviceClient = DeviceClient.Create(
@@ -261,7 +262,7 @@ namespace skittle_sorter
             Console.WriteLine($"\n=== {title} ===\n");
         }
 
-        private static void TryListAdrDevices()
+        private static void TryListAdrDevices(string? deviceName = null)
         {
             try
             {
@@ -288,10 +289,143 @@ namespace skittle_sorter
                 {
                     Console.WriteLine($"[ADR] ...and {devices.Count - 5} more");
                 }
+
+                if (!string.IsNullOrWhiteSpace(deviceName))
+                {
+                    // Optional config-driven update before fetching details so changes are visible
+                    var updCfg = AdrDeviceUpdateConfiguration.Load();
+                    if (updCfg.Enabled)
+                    {
+                        Console.WriteLine("[ADR] Updating device attributes from configuration before fetching details...");
+                        TryUpdateAdrDeviceAttributes(
+                            deviceName,
+                            updCfg.Attributes ?? new Dictionary<string, object>(),
+                            updCfg.Tags,
+                            updCfg.DeviceEnabled,
+                            updCfg.OperatingSystemVersion
+                        );
+                    }
+
+                    var device = client.GetDeviceAsync(
+                        adrCfg.SubscriptionId!,
+                        adrCfg.ResourceGroupName!,
+                        adrCfg.NamespaceName!,
+                        deviceName
+                    ).GetAwaiter().GetResult();
+
+                    WriteSection("ADR Device Details");
+                    if (device == null)
+                    {
+                        Console.WriteLine($"[ADR] Device '{deviceName}' not found in namespace '{adrCfg.NamespaceName}'.");
+                    }
+                    else
+                    {
+                        Console.WriteLine($"[ADR] Name: {device.Name}");
+                        Console.WriteLine($"[ADR] Id: {device.Id}");
+                        if (!string.IsNullOrWhiteSpace(device.Location)) Console.WriteLine($"[ADR] location: {device.Location}");
+                        if (!string.IsNullOrWhiteSpace(device.Etag)) Console.WriteLine($"[ADR] etag: {device.Etag}");
+
+                        // Extract common properties when present
+                        if (device.Properties.ValueKind == System.Text.Json.JsonValueKind.Object)
+                        {
+                            var props = device.Properties;
+                            string? extId = props.TryGetProperty("externalDeviceId", out var pExtId) && pExtId.ValueKind == System.Text.Json.JsonValueKind.String ? pExtId.GetString() : null;
+                            bool? enabled = props.TryGetProperty("enabled", out var pEnabled) && (pEnabled.ValueKind == System.Text.Json.JsonValueKind.True || pEnabled.ValueKind == System.Text.Json.JsonValueKind.False) ? pEnabled.GetBoolean() : null;
+                            string? prov = props.TryGetProperty("provisioningState", out var pProv) && pProv.ValueKind == System.Text.Json.JsonValueKind.String ? pProv.GetString() : null;
+
+                            if (!string.IsNullOrWhiteSpace(extId)) Console.WriteLine($"[ADR] externalDeviceId: {extId}");
+                            if (enabled.HasValue) Console.WriteLine($"[ADR] enabled: {enabled}");
+                            if (!string.IsNullOrWhiteSpace(prov)) Console.WriteLine($"[ADR] provisioningState: {prov}");
+
+                            if (props.TryGetProperty("attributes", out var pAttrs) && pAttrs.ValueKind == System.Text.Json.JsonValueKind.Object)
+                            {
+                                Console.WriteLine("[ADR] attributes:");
+                                foreach (var attr in pAttrs.EnumerateObject())
+                                {
+                                    Console.WriteLine($"  - {attr.Name}: {attr.Value}");
+                                }
+                            }
+                        }
+
+                        if (device.Tags.ValueKind == System.Text.Json.JsonValueKind.Object)
+                        {
+                            Console.WriteLine("[ADR] tags:");
+                            foreach (var tag in device.Tags.EnumerateObject())
+                            {
+                                Console.WriteLine($"  - {tag.Name}: {tag.Value}");
+                            }
+                        }
+
+                        if (device.SystemData.ValueKind == System.Text.Json.JsonValueKind.Object)
+                        {
+                            var sd = device.SystemData;
+                            string? createdBy = sd.TryGetProperty("createdBy", out var pCreatedBy) && pCreatedBy.ValueKind == System.Text.Json.JsonValueKind.String ? pCreatedBy.GetString() : null;
+                            string? createdByType = sd.TryGetProperty("createdByType", out var pCreatedByType) && pCreatedByType.ValueKind == System.Text.Json.JsonValueKind.String ? pCreatedByType.GetString() : null;
+                            string? createdAt = sd.TryGetProperty("createdAt", out var pCreatedAt) && pCreatedAt.ValueKind == System.Text.Json.JsonValueKind.String ? pCreatedAt.GetString() : null;
+                            string? lastModifiedBy = sd.TryGetProperty("lastModifiedBy", out var pLastBy) && pLastBy.ValueKind == System.Text.Json.JsonValueKind.String ? pLastBy.GetString() : null;
+                            string? lastModifiedByType = sd.TryGetProperty("lastModifiedByType", out var pLastByType) && pLastByType.ValueKind == System.Text.Json.JsonValueKind.String ? pLastByType.GetString() : null;
+                            string? lastModifiedAt = sd.TryGetProperty("lastModifiedAt", out var pLastAt) && pLastAt.ValueKind == System.Text.Json.JsonValueKind.String ? pLastAt.GetString() : null;
+
+                            Console.WriteLine("[ADR] systemData:");
+                            if (!string.IsNullOrWhiteSpace(createdBy)) Console.WriteLine($"  - createdBy: {createdBy}");
+                            if (!string.IsNullOrWhiteSpace(createdByType)) Console.WriteLine($"  - createdByType: {createdByType}");
+                            if (!string.IsNullOrWhiteSpace(createdAt)) Console.WriteLine($"  - createdAt: {createdAt}");
+                            if (!string.IsNullOrWhiteSpace(lastModifiedBy)) Console.WriteLine($"  - lastModifiedBy: {lastModifiedBy}");
+                            if (!string.IsNullOrWhiteSpace(lastModifiedByType)) Console.WriteLine($"  - lastModifiedByType: {lastModifiedByType}");
+                            if (!string.IsNullOrWhiteSpace(lastModifiedAt)) Console.WriteLine($"  - lastModifiedAt: {lastModifiedAt}");
+                        }
+                    }
+                }
             }
             catch (Exception ex)
             {
                 Console.WriteLine($"[ADR] Listing failed: {ex.Message}");
+            }
+        }
+
+        // Convenience helper for demos: update ADR device attributes/tags/enabled
+        public static bool TryUpdateAdrDeviceAttributes(
+            string deviceName,
+            IDictionary<string, object> attributes,
+            IDictionary<string, string>? tags = null,
+            bool? enabled = null,
+            string? operatingSystemVersion = null)
+        {
+            try
+            {
+                var adrCfg = AdrConfiguration.Load();
+                if (!adrCfg.IsConfigured())
+                {
+                    Console.WriteLine("[ADR] Update skipped: ADR configuration is not set.");
+                    return false;
+                }
+
+                using var client = new AdrDeviceRegistryClient();
+                var updated = client.UpdateDeviceAsync(
+                    adrCfg.SubscriptionId!,
+                    adrCfg.ResourceGroupName!,
+                    adrCfg.NamespaceName!,
+                    deviceName,
+                    attributes,
+                    enabled,
+                    tags,
+                    operatingSystemVersion
+                ).GetAwaiter().GetResult();
+
+                WriteSection("ADR Device Update");
+                if (updated == null)
+                {
+                    Console.WriteLine($"[ADR] Update returned no content for device '{deviceName}'.");
+                    return false;
+                }
+
+                Console.WriteLine($"[ADR] Updated device '{updated.Name}' ({updated.Id})");
+                return true;
+            }
+            catch (Exception ex)
+            {
+                Console.WriteLine($"[ADR] Update failed: {ex.Message}");
+                return false;
             }
         }
     }
