@@ -15,9 +15,7 @@ namespace skittle_sorter
         {
             Console.WriteLine("Skittle sorter starting…\n");
 
-            // ==============================
-            // LOAD CONFIGURATION
-            // ==============================
+            PrintSection("Configuration");
             var mockConfig = ConfigurationLoader.LoadMockConfiguration();
             var iotConfig = ConfigurationLoader.LoadIoTHubConfiguration();
             var chutePositions = ConfigurationLoader.LoadChutePositions();
@@ -26,9 +24,7 @@ namespace skittle_sorter
             Console.WriteLine($"Mock Mode - Color Sensor: {mockConfig.EnableMockColorSensor}, Servos: {mockConfig.EnableMockServos}");
             Console.WriteLine($"IoT Hub Telemetry Enabled: {iotConfig.SendTelemetry}\n");
 
-            // ==============================
-            // INITIALIZE HARDWARE & SERVICES
-            // ==============================
+            PrintSection("Hardware Initialization");
             using var colorSensor = mockConfig.EnableMockColorSensor
                 ? new TCS3472x(true, mockConfig.MockColorSequence)
                 : new TCS3472x();
@@ -37,9 +33,7 @@ namespace skittle_sorter
             var servo = new ServoController(mockConfig.EnableMockServos, chutePositions);
             servo.Home();
 
-            // ==============================
-            // INITIALIZE IOT HUB (DPS + X509)
-            // ==============================
+            PrintSection("IoT Hub / DPS Initialization");
             DeviceClient? deviceClient = null;
             TelemetryService? telemetryService = null;
 
@@ -52,9 +46,7 @@ namespace skittle_sorter
                 }
             }
 
-            // ==============================
-            // RUN SORTING LOOP
-            // ==============================
+            PrintSection("Sorting Loop");
             int currentChuteAngle = chutePositions.TryGetValue("red", out int defaultAngle) ? defaultAngle : 22;
 
             try
@@ -123,6 +115,10 @@ namespace skittle_sorter
             {
                 servo.Stop();
                 deviceClient?.Dispose();
+            }
+            static void PrintSection(string title)
+            {
+                Console.WriteLine($"\n=== {title} ===\n");
             }
         }
     }

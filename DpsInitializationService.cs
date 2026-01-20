@@ -19,7 +19,7 @@ namespace skittle_sorter
             {
                 var dpsCfg = DpsConfiguration.Load();
 
-                Console.WriteLine("\n=== DPS Configuration ===\n");
+                WriteSection("DPS Configuration");
                 Console.WriteLine($"IdScope: {dpsCfg.IdScope}");
                 Console.WriteLine($"RegistrationId: {dpsCfg.RegistrationId}");
                 Console.WriteLine($"ProvisioningHost: {dpsCfg.ProvisioningHost}");
@@ -35,8 +35,8 @@ namespace skittle_sorter
                 // ==============================
                 if (dpsCfg.AttestationMethod == "SymmetricKey")
                 {
+                    WriteSection("DPS Registration (Symmetric Key)");
                     Console.WriteLine($"EnrollmentGroupKeyBase64 (first 30 chars): {dpsCfg.EnrollmentGroupKeyBase64?.Substring(0, Math.Min(30, dpsCfg.EnrollmentGroupKeyBase64.Length))}...");
-                    Console.WriteLine("\n=== Starting DPS Registration (Symmetric Key) ===\n");
 
                     if (string.IsNullOrWhiteSpace(dpsCfg.EnrollmentGroupKeyBase64))
                     {
@@ -69,9 +69,9 @@ namespace skittle_sorter
                 // ==============================
                 else if (dpsCfg.AttestationMethod == "X509")
                 {
+                    WriteSection("DPS Registration (X.509)");
                     Console.WriteLine($"AttestationCertPath: {dpsCfg.AttestationCertPath}");
                     Console.WriteLine($"AttestationKeyPath: {dpsCfg.AttestationKeyPath}");
-                    Console.WriteLine("\n=== Starting DPS Registration (X.509) ===\n");
 
                     if (string.IsNullOrWhiteSpace(dpsCfg.AttestationCertPath) || !File.Exists(dpsCfg.AttestationCertPath))
                     {
@@ -146,7 +146,8 @@ namespace skittle_sorter
                 // Register the device
                 var result = provisioningClient.RegisterAsync(CancellationToken.None).GetAwaiter().GetResult();
                 
-                Console.WriteLine($"\nDPS Response Status: {result.Status}");
+                WriteSection("DPS Registration Result");
+                Console.WriteLine($"DPS Response Status: {result.Status}");
                 Console.WriteLine($"Device ID: {result.DeviceId}");
                 Console.WriteLine($"Assigned Hub: {result.AssignedHub}");
                 Console.WriteLine($"Certificate Chain Present: {(result.IssuedCertificateChain != null && result.IssuedCertificateChain.Length > 0)}");
@@ -170,6 +171,7 @@ namespace skittle_sorter
                         // Optional: list ADR devices after successful provisioning
                         TryListAdrDevices();
 
+                        WriteSection("IoT Hub Connection (X.509)");
                         var deviceClient = DeviceClient.Create(
                             result.AssignedHub,
                             new DeviceAuthenticationWithX509Certificate(result.DeviceId, x509),
@@ -191,6 +193,7 @@ namespace skittle_sorter
                         // Optional: list ADR devices after successful provisioning
                         TryListAdrDevices();
 
+                        WriteSection("IoT Hub Connection (Symmetric Key)");
                         var deviceClient = DeviceClient.Create(
                             result.AssignedHub,
                             new DeviceAuthenticationWithRegistrySymmetricKey(result.DeviceId, derivedDeviceKey),
@@ -253,6 +256,11 @@ namespace skittle_sorter
             return sb.ToString();
         }
 
+        private static void WriteSection(string title)
+        {
+            Console.WriteLine($"\n=== {title} ===\n");
+        }
+
         private static void TryListAdrDevices()
         {
             try
@@ -270,6 +278,7 @@ namespace skittle_sorter
                     adrCfg.NamespaceName!
                 ).GetAwaiter().GetResult();
 
+                WriteSection("ADR Device Listing");
                 Console.WriteLine($"[ADR] Devices in namespace '{adrCfg.NamespaceName}': {devices.Count}");
                 foreach (var d in devices.Take(5))
                 {
