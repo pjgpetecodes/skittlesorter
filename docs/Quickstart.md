@@ -53,6 +53,7 @@ dotnet run --project skittlesorter.csproj
 
 ## Next Steps
 - **Hardware:** See [Hardware](./Hardware.md) for wiring and calibration
+- **Testing again?** See [Clean Test Start](./Clean-Test-Start.md) to reset enrollment groups and devices for a fresh test
 - **Troubleshooting:** See [Troubleshooting](./Troubleshooting.md) for common DPS and certificate issues
 - **Telemetry:** See [Telemetry](./Telemetry.md) for monitoring IoT Hub messages
 - **Security:** See [Security](./Security.md) for credential management best practices
@@ -63,3 +64,4 @@ dotnet run --project skittlesorter.csproj
 - [Azure Setup](./Azure-Setup.md)
 - [DPS Provisioning](./DPS-Provisioning.md)
 - [Configuration](./Configuration.md)
+- [Clean Test Start](./Clean-Test-Start.md)

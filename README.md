@@ -8,6 +8,7 @@
 - ADR Integration: [docs/ADR-Integration.md](docs/ADR-Integration.md)
 - Configuration: [docs/Configuration.md](docs/Configuration.md)
 - Architecture: [docs/Architecture.md](docs/Architecture.md)
+- **[Clean Test Start](docs/Clean-Test-Start.md)** - Reset for fresh provisioning tests (script: scripts/clean-test-start.ps1)
 - Troubleshooting: [docs/Troubleshooting.md](docs/Troubleshooting.md)
 - Security: [docs/Security.md](docs/Security.md)
 - Telemetry: [docs/Telemetry.md](docs/Telemetry.md)
