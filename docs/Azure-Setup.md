@@ -393,7 +393,7 @@ Remove-Item -Recurse -Force certs/
 Run the provided PowerShell script to automatically generate certificates and configure DPS:
 
 ```powershell
-pwsh ./setup-x509-attestation.ps1 `
+pwsh ./scripts/setup-x509-attestation.ps1 `
   -RegistrationId skittlesorter `
   -EnrollmentGroupId skittlesorter-group `
   -DpsName $dpsName `
@@ -486,7 +486,7 @@ Write-Host ""
 
 1. **Copy the template**:
    ```bash
-   cp appsettings.template.json appsettings.json
+   cp src/configuration/appsettings.template.json appsettings.json
    ```
 
 2. **Update `appsettings.json`** based on your chosen attestation method:

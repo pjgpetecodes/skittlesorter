@@ -76,6 +76,43 @@ Create an `appsettings.json` file in the project root. Configuration includes:
 - **IoTHub**: DPS provisioning (symmetric key or X.509) and telemetry settings
 - **Adr**: Azure Device Registry integration for device queries and updates
 
+## Project Structure
+
+```
+skittlesorter/
+├── src/                               # Application source code
+│   ├── Program.cs                     # Entry point
+│   ├── configuration/                 # Configuration management
+│   │   ├── ConfigurationLoader.cs     # Loads appsettings.json
+│   │   ├── appsettings.template.json  # Configuration template (no secrets)
+│   │   ├── appsettings.sas.template.json
+│   │   └── appsettings.x509.template.json
+│   ├── drivers/                       # Hardware drivers
+│   │   ├── TCS3472x.cs                # Color sensor driver
+│   │   ├── SkittleSorterService.cs    # Main sorting logic
+│   │   ├── ServoController.cs         # Servo motor control
+│   │   ├── MockColorSensorConfig.cs   # Mock sensor for testing
+│   │   └── MockServoMotor.cs          # Mock servo for testing
+│   └── comms/                         # Communication services
+│       ├── DpsInitializationService.cs # DPS provisioning
+│       └── TelemetryService.cs        # Telemetry to IoT Hub
+├── appsettings.json                   # Configuration (root level, gitignored)
+├── appsettings.sas.json
+├── appsettings.x509.json
+├── scripts/                           # Setup and automation scripts
+│   ├── setup-x509-attestation.ps1     # Certificate hierarchy setup
+│   └── X509_ATTESTATION_GUIDE.md      # X.509 guide
+├── docs/                              # Complete documentation
+├── AzureDpsFramework/                 # Reusable DPS library
+├── certs/                             # Certificate directory (gitignored)
+├── circuit/                           # Hardware circuit diagrams
+└── resources/                         # Images and assets
+```
+
+**Configuration Files:**
+- **Root level**: `appsettings.json`, `appsettings.sas.json`, `appsettings.x509.json` (actual configs, gitignored)
+- **Templates**: `src/configuration/appsettings.*.template.json` (safe to commit, no secrets)
+
 ## Running the Application
 
 ```powershell
@@ -131,14 +168,21 @@ The official `Microsoft.Azure.Devices.Provisioning.Client` NuGet package does no
 
 ### skittlesorter (Application)
 
-Main application implementing the sorting logic:
+Main application implementing the sorting logic, located in `src/`:
 
-- **ConfigurationLoader**: Loads all configuration from `appsettings.json` (mock mode, IoT Hub, DPS, servo positions, chute positions)
-- **ServoController**: Manages servo positioning with configuration-driven angle mappings
-- **TelemetryService**: Sends detected Skittle colors to IoT Hub
-- **DpsInitializationService**: Orchestrates DPS provisioning and returns authenticated `DeviceClient`
-- **SkittleSorterService**: Main sorting loop orchestration (color detection → servo movement → telemetry)
-- **Program.cs**: Entry point loading all configurations and running the application
+**Core files:**
+- **src/Program.cs**: Entry point loading all configurations and running the application
+- **src/configuration/ConfigurationLoader.cs**: Loads all settings from `appsettings.json` (mock mode, IoT Hub, DPS, servo positions, chute positions)
+
+**Hardware drivers (src/drivers/):**
+- **TCS3472x.cs**: Color sensor driver
+- **SkittleSorterService.cs**: Main sorting loop orchestration (color detection → servo movement → telemetry)
+- **ServoController.cs**: Manages servo positioning with configuration-driven angle mappings
+- **MockColorSensorConfig.cs**, **MockServoMotor.cs**: Mock implementations for testing without hardware
+
+**Communication services (src/comms/):**
+- **DpsInitializationService.cs**: Orchestrates DPS provisioning and returns authenticated `DeviceClient`
+- **TelemetryService.cs**: Sends detected Skittle colors to IoT Hub
 
 ## Device Provisioning Flow
 

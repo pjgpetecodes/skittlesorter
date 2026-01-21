@@ -20,7 +20,7 @@ Follow [Azure Setup](./Azure-Setup.md) to create:
 ### 2. X.509 Certificates (if using X.509 attestation)
 Run the automated setup script:
 ```powershell
-pwsh ./setup-x509-attestation.ps1 `
+pwsh ./scripts/setup-x509-attestation.ps1 `
   -RegistrationId skittlesorter `
   -EnrollmentGroupId skittlesorter-group `
   -DpsName your-dps-name `
@@ -35,7 +35,7 @@ This creates the full certificate hierarchy (root, intermediate, device) and con
 ### 3. Configuration
 Copy and configure [appsettings.json](../appsettings.json):
 ```powershell
-cp appsettings.template.json appsettings.json
+cp src/configuration/appsettings.template.json appsettings.json
 # Edit with your Azure values (IdScope, RegistrationId, etc.)
 ```
 

@@ -16,8 +16,8 @@ Wiring, components, and calibration for the skittle sorter.
 - Servo angle tuning for chute/feeder
 
 ## Software Hooks
-- Sensor: see [TCS3472x.cs](../TCS3472x.cs)
-- Mock devices: [MockColorSensorConfig.cs](../MockColorSensorConfig.cs), [MockServoMotor.cs](../MockServoMotor.cs)
+- Sensor: see [TCS3472x.cs](../src/drivers/TCS3472x.cs)
+- Mock devices: [MockColorSensorConfig.cs](../src/drivers/MockColorSensorConfig.cs), [MockServoMotor.cs](../src/drivers/MockServoMotor.cs)
 
 ## Related
 

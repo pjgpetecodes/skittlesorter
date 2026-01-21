@@ -4,13 +4,13 @@ Complete configuration guide for hardware, Azure IoT Hub, DPS, and ADR settings.
 
 ## Configuration File
 
-Create an `appsettings.json` file in the project root. You can start from the template:
+Create an `appsettings.json` file at the project root. You can start from the template:
 
 ```bash
-cp appsettings.template.json appsettings.json
+cp src/configuration/appsettings.template.json appsettings.json
 ```
 
-See [appsettings.template.json](../appsettings.template.json) for the complete template.
+See [appsettings.template.json](../src/configuration/appsettings.template.json) for the complete template.
 
 Basic structure:
 
