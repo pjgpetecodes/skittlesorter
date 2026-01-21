@@ -830,6 +830,157 @@ for (int i = 0; i < 20; i++)  // Adjust retry count
 }
 ```
 
+## Azure Device Registry (ADR) Integration
+
+After successful DPS provisioning, the library can query and update device information in Azure Device Registry:
+
+### ADR Device Listing
+
+**Endpoint**: `GET /subscriptions/{subscriptionId}/resourceGroups/{resourceGroupName}/providers/Microsoft.DeviceRegistry/namespaces/{namespaceName}/devices?api-version=2025-11-01-preview`
+
+Lists all devices in an ADR namespace with pagination support.
+
+**Usage**:
+```csharp
+using var client = new AdrDeviceRegistryClient();
+var devices = await client.ListDevicesAsync(subscriptionId, resourceGroupName, namespaceName);
+
+foreach (var device in devices)
+{
+    Console.WriteLine($"Device: {device.Name}");
+    Console.WriteLine($"  ID: {device.Id}");
+    Console.WriteLine($"  Location: {device.Location}");
+}
+```
+
+**Authentication**: Uses `DefaultAzureCredential` (Azure AD) scoped to `https://management.azure.com/.default`
+
+**Required Permissions**: Reader on the ADR namespace (or resource group/subscription)
+
+### ADR Device Details
+
+**Endpoint**: `GET /subscriptions/{subscriptionId}/resourceGroups/{resourceGroupName}/providers/Microsoft.DeviceRegistry/namespaces/{namespaceName}/devices/{deviceName}?api-version=2025-11-01-preview`
+
+Retrieves detailed information for a specific device, including attributes, tags, and systemData.
+
+**Usage**:
+```csharp
+using var client = new AdrDeviceRegistryClient();
+var device = await client.GetDeviceAsync(subscriptionId, resourceGroupName, namespaceName, deviceName);
+
+if (device != null)
+{
+    Console.WriteLine($"Name: {device.Name}");
+    Console.WriteLine($"Location: {device.Location}");
+    Console.WriteLine($"Etag: {device.Etag}");
+}
+```
+
+**Response Fields**:
+- `Name`: Device name
+- `Id`: Full Azure resource ID
+- `Location`: Azure region
+- `Etag`: Entity tag for optimistic concurrency
+- `Tags`: Resource tags (key-value pairs)
+- `SystemData`: Metadata (createdBy, createdAt, lastModifiedBy, lastModifiedAt)
+- `Properties`: Device properties (externalDeviceId, enabled, attributes, provisioningState)
+
+### ADR Device Update
+
+**Endpoint**: `PATCH /subscriptions/{subscriptionId}/resourceGroups/{resourceGroupName}/providers/Microsoft.DeviceRegistry/namespaces/{namespaceName}/devices/{deviceName}?api-version=2025-11-01-preview`
+
+Updates device attributes, tags, enabled state, and OS version.
+
+**Usage**:
+```csharp
+using var client = new AdrDeviceRegistryClient();
+
+var updated = await client.UpdateDeviceAsync(
+    subscriptionId,
+    resourceGroupName,
+    namespaceName,
+    deviceName,
+    attributes: new Dictionary<string, object> { { "deviceType", "machinery" } },
+    tags: new Dictionary<string, string> { { "environment", "demo" } },
+    enabled: true,
+    operatingSystemVersion: "1.0.0"
+);
+```
+
+**Configuration-Driven Updates**:
+
+The application automatically updates devices post-provisioning if configured in `appsettings.json`:
+
+```json
+"Adr": {
+  "DeviceUpdate": {
+    "Enabled": true,
+    "Attributes": { "deviceType": "machinery", "deviceOwner": "Operations" },
+    "Tags": { "environment": "demo" },
+    "DeviceEnabled": true,
+    "OperatingSystemVersion": "1.0.0"
+  }
+}
+```
+
+**Workflow**:
+1. Device provisions via DPS
+2. If `Adr.DeviceUpdate.Enabled` is true, PATCH updates the device
+3. Device details are fetched and logged
+4. All ADR operations logged under titled "ADR" sections
+
+## Limitations
+
+- **MQTT Only**: No HTTPS/AMQP support (DPS MQTT spec only)
+- **Symmetric Key Attestation**: TPM and X.509 CA attestation not supported
+- **Single IoT Hub**: Multi-hub allocation policies not tested
+- **Preview API**: Subject to breaking changes by Azure
+- **ADR Operations**: Requires Azure AD authentication (DefaultAzureCredential)
+
+## Future Enhancements
+
+- [ ] Support for TPM attestation
+- [ ] HTTPS/REST API fallback
+- [ ] Certificate renewal workflow
+- [ ] Custom allocation policies
+- [ ] Retry with exponential backoff
+- [ ] Async/await throughout (remove GetAwaiter().GetResult())
+- [ ] NuGet package publication
+- [ ] ADR retry logic with backoff
+- [ ] Rich diagnostics for ADR operations
+
+## Contributing
+
+Contributions welcome! Please ensure:
+
+1. All new features have XML documentation
+2. Diagnostic logging for troubleshooting
+3. Error handling with meaningful messages
+4. Unit tests for critical paths
+
+## License
+
+MIT License - See LICENSE file for details
+
+## Resources
+
+- [Azure DPS Documentation](https://learn.microsoft.com/azure/iot-dps/)
+- [DPS MQTT Protocol](https://learn.microsoft.com/azure/iot-dps/iot-dps-mqtt-support)
+- [Azure Device Registry](https://learn.microsoft.com/azure/iot/iot-device-registry-overview)
+- [X.509 Certificate Authentication](https://learn.microsoft.com/azure/iot-hub/iot-hub-x509ca-overview)
+- [ADR Device REST API](https://learn.microsoft.com/rest/api/device-registry/)
+
+## Support
+
+For issues specific to this library, please open a GitHub issue with:
+- DPS configuration (redact keys)
+- Complete diagnostic logs
+- Error messages and stack traces
+- .NET version and OS
+- ADR configuration and API version used
+
+For Azure DPS or Device Registry service issues, contact Azure Support.
+
 ## Limitations
 
 - **MQTT Only**: No HTTPS/AMQP support (DPS MQTT spec only)

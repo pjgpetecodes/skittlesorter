@@ -344,6 +344,25 @@ Create an `appsettings.json` file in the project root with the following structu
       "MqttPort": 8883,
       "EnableDebugLogging": true
     }
+  },
+  "Adr": {
+    "Enabled": false,
+    "SubscriptionId": "your-subscription-id",
+    "ResourceGroupName": "your-resource-group",
+    "NamespaceName": "your-adr-namespace",
+    "DeviceUpdate": {
+      "Enabled": false,
+      "Attributes": {
+        "deviceType": "machinery",
+        "deviceOwner": "Operations",
+        "deviceCategory": 16
+      },
+      "Tags": {
+        "demo": "true"
+      },
+      "DeviceEnabled": true,
+      "OperatingSystemVersion": "1.0.0"
+    }
   }
 }
 ```
@@ -413,6 +432,58 @@ Set `EnableDebugLogging: true` to see detailed MQTT protocol messages including:
 - Status updates during provisioning
 
 Leave it `false` for cleaner production output.
+
+#### Adr (Azure Device Registry)
+
+Configuration for querying and updating device information in Azure Device Registry post-provisioning.
+
+**Prerequisites**:
+- Azure Device Registry namespace created in same resource group/subscription
+- Your app's identity has `Reader` role on the ADR namespace (for list/get operations)
+- Microsoft.DeviceRegistry provider registered for your subscription
+
+**Options**:
+- `Enabled`: Enable/disable ADR device listing and updates (default: false)
+- `SubscriptionId`: Azure subscription ID containing the ADR namespace
+- `ResourceGroupName`: Azure resource group containing the ADR namespace
+- `NamespaceName`: ADR namespace name
+- **DeviceUpdate**: Post-provisioning device attribute/tag updates
+  - `Enabled`: Automatically update device after provisioning (default: false)
+  - `Attributes`: Device attributes object (e.g., deviceType, deviceOwner, deviceCategory)
+  - `Tags`: Device tags (key-value pairs for resource tagging)
+  - `DeviceEnabled`: Enable/disable the device (default: true)
+  - `OperatingSystemVersion`: Device OS version string (optional)
+
+**Example ADR Configuration**:
+```json
+"Adr": {
+  "Enabled": true,
+  "SubscriptionId": "xxxxxxxx-xxxx-xxxx-xxxx-xxxxxxxxxxxx",
+  "ResourceGroupName": "your-rg",
+  "NamespaceName": "your-adr-namespace",
+  "DeviceUpdate": {
+    "Enabled": true,
+    "Attributes": {
+      "deviceType": "machinery",
+      "deviceOwner": "Operations",
+      "deviceCategory": 16
+    },
+    "Tags": {
+      "environment": "demo",
+      "line": "A1"
+    },
+    "DeviceEnabled": true,
+    "OperatingSystemVersion": "1.0.0"
+  }
+}
+```
+
+**ADR Workflow**:
+When enabled, after DPS provisioning completes:
+1. **List Devices**: Query ADR namespace to list all devices (max 5 shown in logs)
+2. **Update Device**: Optionally apply configured attributes, tags, enabled state, and OS version via REST PATCH
+3. **Fetch Device**: Retrieve updated device details including location, etag, tags, and systemData
+4. **Log Results**: Print device details to console with color-coded ADR section headers
 
 ## Running the Application
 
