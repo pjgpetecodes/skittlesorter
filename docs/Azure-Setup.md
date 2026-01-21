@@ -500,10 +500,10 @@ Write-Host ""
 **For X.509 Certificate Attestation:**
    - `IdScope`: From DPS Overview
    - `AttestationMethod`: Set to `"X509"`
-   - `AttestationCertPath`: Path to device certificate (auto-set by setup script)
+  - `RegistrationId`: Your device identifier (must match the `-RegistrationId` you used when generating certs)
+  - `AttestationCertPath`: Path to device certificate (default: `scripts/certs/device/device.pem` from the setup script)
+  - `AttestationCertChainPath`: Path to chain file (default: `scripts/certs/device/device-full-chain.pem`)
 **For complete setup instructions, always refer to the [official Microsoft guide](https://learn.microsoft.com/en-us/azure/iot-hub/iot-hub-device-registry-setup?pivots=azure-cli).**
-   - `AttestationCertChainPath`: Path to chain file (auto-set by setup script)
-   - `RegistrationId`: Your device identifier (e.g., `skittlesorter`)
 
 See [Configuration](./Configuration.md) for complete settings.
 

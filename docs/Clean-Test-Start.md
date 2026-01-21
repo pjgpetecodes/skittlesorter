@@ -41,6 +41,8 @@ pwsh ./scripts/clean-test-start.ps1 `
   -EnrollmentGroupName "your-eg" `
   -DeviceId "skittlesorter" `
   -AdrNamespace "your-adr-namespace" `       # optional; omit if not using ADR
+  -RootCertName "skittlesorter-root" `       # optional; defaults to root-ca
+  -IntermediateCertName "skittlesorter-intermediate" ` # optional; defaults to intermediate-ca
   -RemoveCaCerts                              # optional; include to delete DPS root/intermediate CAs
 ```
 

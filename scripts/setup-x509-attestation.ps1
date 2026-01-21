@@ -3,7 +3,7 @@
 .SYNOPSIS
     Sets up X.509 attestation for Azure DPS testing
 .DESCRIPTION
-    Generates bootstrap certificate, creates DPS enrollment group, updates appsettings.json
+    Generates bootstrap certificate and creates DPS enrollment group
 .PARAMETER DpsName
     Name of your Azure DPS instance
 .PARAMETER ResourceGroup
@@ -19,7 +19,6 @@
 param(
     [Parameter(Mandatory=$true)]
     [string]$RegistrationId,
-    
     [string]$DpsName,
     [string]$ResourceGroup,
     [string]$CredentialPolicy = "default",
@@ -31,13 +30,12 @@ $ErrorActionPreference = "Stop"
 $scriptRoot = Split-Path -Parent $PSCommandPath
 
 if (-not $EnrollmentGroupId) { $EnrollmentGroupId = $RegistrationId }
-$scriptRoot = Split-Path -Parent $PSCommandPath
 
 Write-Host "`n=== X.509 Attestation Setup for Azure DPS ===" -ForegroundColor Cyan
 Write-Host "Registration ID: $RegistrationId`n"
 
 # Step 1: Create certs directory structure
-Write-Host "[1/8] Creating certs directory structure..." -ForegroundColor Yellow
+Write-Host "[1/7] Creating certs directory structure..." -ForegroundColor Yellow
 $rootDir = Join-Path $scriptRoot "certs/root"
 $caDir = Join-Path $scriptRoot "certs/ca"   # intermediate
 $deviceDir = Join-Path $scriptRoot "certs/device"
@@ -48,7 +46,7 @@ New-Item -ItemType Directory -Force -Path $deviceDir | Out-Null
 New-Item -ItemType Directory -Force -Path $issuedDir | Out-Null
 
 # Step 2: Generate root CA, intermediate CA, and device certificate using OpenSSL
-Write-Host "[2/8] Generating root CA + intermediate CA + device X.509 certificates..." -ForegroundColor Yellow
+Write-Host "[2/7] Generating root CA + intermediate CA + device X.509 certificates..." -ForegroundColor Yellow
 
 $rootCertPath = Join-Path $rootDir "root.pem"
 $rootKeyPath = Join-Path $rootDir "root.key"
@@ -125,7 +123,7 @@ Write-Host "Device Full Chain: $deviceFullChainPath" -ForegroundColor Green
 Write-Host "Device Key: $deviceKeyPath" -ForegroundColor Green
 
 # Step 3: Get certificate thumbprints
-Write-Host "[3/8] Extracting certificate thumbprints..." -ForegroundColor Yellow
+Write-Host "[3/7] Extracting certificate thumbprints..." -ForegroundColor Yellow
 
 $rootX509 = New-Object System.Security.Cryptography.X509Certificates.X509Certificate2($rootCertPath)
 $rootThumbprint = $rootX509.Thumbprint
@@ -148,7 +146,7 @@ Write-Host "  Valid: $($deviceX509.NotBefore) to $($deviceX509.NotAfter)" -Foreg
 # Step 4: Upload & verify root CA in DPS
 $rootVerified = $false
 if ($DpsName -and $ResourceGroup) {
-    Write-Host "[4/8] Uploading and verifying root CA in DPS..." -ForegroundColor Yellow
+    Write-Host "[4/7] Uploading and verifying root CA in DPS..." -ForegroundColor Yellow
     $rootCertName = "$RegistrationId-root"
     try {
         az iot dps certificate create `
@@ -205,13 +203,13 @@ if ($DpsName -and $ResourceGroup) {
         Write-Host "  ⚠ Root verification failed: $($_.Exception.Message)" -ForegroundColor Red
     }
 } else {
-    Write-Host "[4/8] Skipping root upload/verify (provide -DpsName and -ResourceGroup)" -ForegroundColor Yellow
+    Write-Host "[4/7] Skipping root upload/verify (provide -DpsName and -ResourceGroup)" -ForegroundColor Yellow
 }
 
 # Step 5: Upload & verify intermediate CA in DPS
 $intermediateVerified = $false
 if ($DpsName -and $ResourceGroup) {
-    Write-Host "[5/8] Uploading and verifying intermediate CA in DPS..." -ForegroundColor Yellow
+    Write-Host "[5/7] Uploading and verifying intermediate CA in DPS..." -ForegroundColor Yellow
     $intermediateCertName = "$RegistrationId-intermediate"
     try {
         az iot dps certificate create `
@@ -267,14 +265,13 @@ if ($DpsName -and $ResourceGroup) {
         Write-Host "  ⚠ Intermediate verification failed: $($_.Exception.Message)" -ForegroundColor Red
     }
 } else {
-    Write-Host "[5/8] Skipping intermediate upload/verify (provide -DpsName and -ResourceGroup)" -ForegroundColor Yellow
+    Write-Host "[5/7] Skipping intermediate upload/verify (provide -DpsName and -ResourceGroup)" -ForegroundColor Yellow
 }
 
 # Step 6: Create DPS enrollment (if Azure CLI available and params provided)
-# Step 6: Create DPS enrollment (if Azure CLI available and params provided)
 if (-not $SkipEnrollment) {
     if ($DpsName -and $ResourceGroup) {
-        Write-Host "[6/8] Creating DPS enrollment group (Intermediate attestation) with credential policy..." -ForegroundColor Yellow
+        Write-Host "[6/7] Creating DPS enrollment group (Intermediate attestation) with credential policy..." -ForegroundColor Yellow
         
         # Check if Azure CLI is available
         if (Get-Command az -ErrorAction SilentlyContinue) {
@@ -302,41 +299,16 @@ if (-not $SkipEnrollment) {
             $SkipEnrollment = $true
         }
     } else {
-        Write-Host "[6/8] Skipping DPS enrollment (no DPS details provided)" -ForegroundColor Yellow
+        Write-Host "[6/7] Skipping DPS enrollment (no DPS details provided)" -ForegroundColor Yellow
         Write-Host "  Provide -DpsName and -ResourceGroup to auto-create" -ForegroundColor Gray
         $SkipEnrollment = $true
     }
 } else {
-    Write-Host "[6/8] Skipping DPS enrollment (manual setup required)" -ForegroundColor Yellow
+    Write-Host "[6/7] Skipping DPS enrollment (manual setup required)" -ForegroundColor Yellow
 }
 
-# Step 7: Update appsettings.json
-Write-Host "[7/8] Updating appsettings.json..." -ForegroundColor Yellow
-
-$appsettingsPath = Join-Path $scriptRoot "appsettings.json"
-if (Test-Path $appsettingsPath) {
-    $appsettings = Get-Content $appsettingsPath -Raw | ConvertFrom-Json
-    
-    # Update DPS provisioning settings
-    $appsettings.IoTHub.DpsProvisioning.AttestationMethod = "X509"
-    $appsettings.IoTHub.DpsProvisioning.RegistrationId = $RegistrationId
-    # Device authenticates with its leaf cert; provide full chain (intermediate + root) for TLS
-    $appsettings.IoTHub.DpsProvisioning.AttestationCertPath = $deviceCertPath
-    $appsettings.IoTHub.DpsProvisioning.AttestationKeyPath = $deviceKeyPath
-    $appsettings.IoTHub.DpsProvisioning.AttestationCertChainPath = $chainPath
-    $appsettings.IoTHub.DpsProvisioning.EnrollmentGroupKeyBase64 = ""
-    $appsettings.IoTHub.DpsProvisioning.EnableDebugLogging = $true
-    
-    # Save updated settings
-    $appsettings | ConvertTo-Json -Depth 10 | Set-Content $appsettingsPath
-    
-    Write-Host "  ✓ appsettings.json updated for X.509 attestation" -ForegroundColor Green
-} else {
-    Write-Host "  ⚠ appsettings.json not found" -ForegroundColor Red
-}
-
-# Step 8: Summary and next steps
-Write-Host "`n[8/8] Setup Complete!" -ForegroundColor Green
+# Step 7: Summary and next steps
+Write-Host "`n[7/7] Setup Complete!" -ForegroundColor Green
 Write-Host "`n=== Summary ===" -ForegroundColor Cyan
 Write-Host "Root CA Certificate (upload & verify in DPS): $rootCertPath"
 Write-Host "Root Thumbprint: $rootThumbprint"
@@ -349,6 +321,10 @@ Write-Host "Device Key: $deviceKeyPath"
 Write-Host "Device Thumbprint: $thumbprint"
 Write-Host "Registration ID: $RegistrationId"
 Write-Host "`nAttestation Method: X509" -ForegroundColor Green
+Write-Host "Update appsettings.json with your RegistrationId and certificate paths:" -ForegroundColor Gray
+Write-Host "  IoTHub:DpsProvisioning:RegistrationId = $RegistrationId" -ForegroundColor Gray
+Write-Host "  IoTHub:DpsProvisioning:AttestationCertPath = $deviceCertPath" -ForegroundColor Gray
+Write-Host "  IoTHub:DpsProvisioning:AttestationCertChainPath = $deviceFullChainPath" -ForegroundColor Gray
 
 if ($SkipEnrollment) {
     Write-Host "`n=== Manual Steps Required ===" -ForegroundColor Yellow
