@@ -8,6 +8,8 @@
 
 ---
 
+Prefer to grab the code and try it yourself? The full project lives at https://github.com/pjgpetecodes/skittlesorter — clone it to follow along or run the samples as you read.
+
 ## What is Device Provisioning Service?
 
 Let's start with the basics. Before we write code or create Azure resources, you need to understand what DPS does and why it matters for your IoT deployment.
@@ -57,23 +59,78 @@ Starting with the `2025-07-01-preview` API, DPS introduces **certificate issuanc
 
 ### Traditional X.509 Workflow
 ```
-1. Set up your own Certificate Authority (CA)
-2. Generate root and intermediate certificates
-3. Configure DPS to trust your CA
-4. Pre-generate device certificates
-5. Install certificates on devices
-6. Manually handle certificate rotation
+┌─────────────────────────────┐
+│       Your CA (PKI)         │
+└──────────────┬──────────────┘
+               │ create
+               ▼
+┌─────────────────────────────┐
+│ Root & Intermediate Certs   │
+└──────────────┬──────────────┘
+               │ trust
+               ▼
+┌─────────────────────────────┐
+│            DPS              │
+└──────────────┬──────────────┘
+               │ pre-provision
+               ▼
+┌─────────────────────────────┐
+│  Device Certificates (per   │
+│  device, generated upfront) │
+└──────────────┬──────────────┘
+               │ install
+               ▼
+┌─────────────────────────────┐
+│           Devices           │
+└──────────────┬──────────────┘
+               │ connect using X.509
+               ▼
+┌─────────────────────────────┐
+│           IoT Hub           │
+└─────────────────────────────┘
+
+Notes:
+- Certs are created ahead of time and installed on devices.
+- Rotation is manual: generate, distribute, and update per device.
 ```
 
 ### 🆕 New CSR-Based Workflow
 ```
-1. Configure credential policy in Azure Device Registry (ADR)
-2. Create DPS enrollment group
-3. Device generates private key + CSR during provisioning
-4. DPS validates device identity
-5. Microsoft signs CSR and returns certificate
-6. Device uses certificate for IoT Hub connection
-7. Automatic certificate rotation via ADR policies
+┌─────────────────────────────┐          ┌─────────────────────────────┐
+│     Azure Device Registry   │          │            DPS              │
+│ (Credential Policy: x509CA) │◄─────────┤   Enrollment Group exists   │
+└──────────────┬──────────────┘  query   └──────────────┬──────────────┘
+               │                                        ▲ validate
+               │                                        │
+               │                    CSR + attestation   │
+┌──────────────▼──────────────┐    (symmetric/X.509)    │
+│           Device            │ ────────────────────────┘
+│ 1) Generate keypair + CSR   │
+└──────────────┬──────────────┘
+               │ submit CSR
+               ▼
+┌─────────────────────────────┐  use policy   ┌─────────────────────────────┐
+│            ADR              │──────────────►│  Microsoft-managed CA       │
+│ 2) Sign CSR per policy      │               │  3) Issue certificate chain │
+└──────────────┬──────────────┘               └──────────────┬──────────────┘
+               │ return cert chain                           │
+               └─────────────────────────────────────────────┘
+                               to DPS → to Device
+
+┌──────────────▼──────────────┐
+│           Device            │
+│ 4) Install cert chain       │
+│ 5) Connect to IoT Hub       │
+└──────────────┬──────────────┘
+               │
+               ▼
+┌─────────────────────────────┐
+│           IoT Hub           │
+└─────────────────────────────┘
+
+Notes:
+- Private key never leaves the device.
+- Certificates auto-renew based on ADR policy.
 ```
 
 **Key advantages:**
@@ -232,7 +289,7 @@ One powerful pattern enabled by the new API:
 - You want automated certificate management
 - 🆕 You want Microsoft-managed certificate issuance
 
-❌ **Skip DPS when:**
+🤔 **Consider if DPS is right for you if:**
 - Only a few devices (< 10)
 - Devices never move between hubs
 - Prototyping with connection strings is acceptable
