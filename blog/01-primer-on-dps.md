@@ -108,15 +108,15 @@ Notes:
 │ 1) Generate keypair + CSR   │
 └──────────────┬──────────────┘
                │ submit CSR
-               ▼
-┌─────────────────────────────┐  use policy   ┌─────────────────────────────┐
-│            ADR              │──────────────►│  Microsoft-managed CA       │
-│ 2) Sign CSR per policy      │               │  3) Issue certificate chain │
-└──────────────┬──────────────┘               └──────────────┬──────────────┘
-               │ return cert chain                           │
-               └─────────────────────────────────────────────┘
-                               to DPS → to Device
-
+               ▼                 use
+┌─────────────────────────────┐ policy   ┌─────────────────────────────┐
+│            ADR              │─────────►│  Microsoft-managed CA       │
+│ 2) Sign CSR per policy      │          │  3) Issue certificate chain │
+└──────────────┬──────────────┘          └──────────────┬──────────────┘
+               │ return cert chain                      │
+               └────────────────────────────────────────┘
+               │            to DPS → to Device
+               │
 ┌──────────────▼──────────────┐
 │           Device            │
 │ 4) Install cert chain       │
@@ -142,7 +142,9 @@ Notes:
 
 ## Azure Device Registry (ADR) Integration
 
-Azure Device Registry is a new service that works alongside DPS and IoT Hub:
+Azure Device Registry (ADR) is Microsoft's **centralized device management layer** — it provides a unified registry for managing device identities, metadata, attributes, and policies independent of any single IoT platform.
+
+What's new as of November 2025 is that **ADR now integrates directly with Azure IoT Hub**, allowing IoT Hub devices to be managed through ADR and DPS. This integration works alongside DPS to provide:
 
 ### What is ADR?
 
@@ -298,14 +300,14 @@ One powerful pattern enabled by the new API:
 
 ## Preview API Status
 
-The features covered in this series use the **`2025-07-01-preview` API**:
+The features covered in this series use preview APIs (announced November 2025):
 
 - ✅ CSR-based certificate issuance
-- ✅ ADR credential policies
+- ✅ ADR credential policies and integration with IoT Hub
 - ✅ DPS MQTT protocol support
 - ✅ Microsoft-managed CA
 
-As of January 2026, these features are in **preview**. The official Microsoft SDKs don't yet support them, which is why this project includes a **custom DPS framework** that implements the MQTT protocol directly.
+As of January 2026, these features are in **public preview**. The official Microsoft SDKs don't yet support them, which is why this project includes a **custom DPS framework** that implements the MQTT protocol directly.
 
 > **Note:** Always check [Microsoft's documentation](https://learn.microsoft.com/azure/iot-dps/) for the latest API status and general availability dates.
 
