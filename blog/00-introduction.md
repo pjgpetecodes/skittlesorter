@@ -69,12 +69,32 @@ If you're interested in learning the traditional DPS workflow with self-signed X
 - [Using Azure Device Provisioning Service with Self-Signed X.509 Certificates - Part 1](https://www.petecodes.co.uk/using-azure-device-provisioning-service-with-self-signed-x-509-certificates-part-1/)
 ## Two Ways to Use This Series
 
-### Option 1: Quick Start (Clone and Run)
+### Option 1: Quick Start (Clone and Run Automation Scripts)
 ```powershell
-git clone https://github.com/yourusername/skittlesorter.git
-cd skittlesorter
-# Follow README.md for one-command setup
+git clone https://github.com/pjgpetecodes/skittlesorter.git
+cd skittlesorter/scripts
+
+# Full ADR + X.509 setup (recommended)
+.\setup-x509-dps-adr.ps1 `
+  -ResourceGroup "my-iot-rg" `
+  -Location "eastus" `
+  -IoTHubName "my-hub-001" `
+  -DPSName "my-dps-001" `
+  -AdrNamespace "my-adr-001" `
+  -UserIdentity "my-uami"
+
+# OR X.509 only (traditional approach)
+.\setup-x509-attestation.ps1 `
+  -RegistrationId "my-device" `
+  -DpsName "my-dps-001" `
+  -ResourceGroup "my-iot-rg"
+
+# Then run the device app
+cd ..
+dotnet run --project src/skittlesorter.csproj
 ```
+
+See **[Creating Azure Resources](02-creating-azure-resources.md)** for detailed script examples.
 
 ### Option 2: Step-by-Step Tutorial (This Series)
 Follow along post-by-post to understand **why** and **how** everything works. You'll learn:

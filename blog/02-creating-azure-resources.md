@@ -8,29 +8,88 @@
 
 Now that you know what DPS does, let's stand up the Azure resources. We'll create a resource group, IoT Hub, and DPS, then link them. We'll also prep ADR so certificate policies are ready for issuance.
 
-### Quick Run: Script + Simulator
+### Quick Run: Automation Scripts
 
-Want a fast path? Run the setup, then the device app.
+We provide two helper scripts depending on your setup needs:
 
-1) Provision everything with the helper (creates RG, IoT Hub, DPS, ADR link, and enrollment):
-
-```powershell
-# From repo root
-pwsh ./scripts/clean-test-start.ps1
-```
-
-2) Update device settings from the script output:
-- Set `Dps.IdScope` to the printed scope
-- Confirm `Dps.RegistrationId` matches your device ID
-- Keep cert paths pointing to `scripts/certs/issued/`
-
-File: src/configuration/appsettings.template.json (or your generated appsettings.json)
-
-3) Run the device app:
+#### Option A: Full ADR + X.509 Setup (Recommended)
+This script automates everything: Azure resources, ADR integration, X.509 certificates, DPS enrollment, and certificate verification.
 
 ```powershell
-dotnet run --project src/skittlesorter.csproj
+# Navigate to scripts directory
+cd scripts
+
+# Run the full setup (creates RG, UAMI, ADR Namespace, IoT Hub, DPS, and enrollment)
+.\setup-x509-dps-adr.ps1 `
+  -ResourceGroup "my-iot-rg" `
+  -Location "eastus" `
+  -IoTHubName "my-iothub-001" `
+  -DPSName "my-dps-001" `
+  -AdrNamespace "my-adrnamespace-001" `
+  -UserIdentity "my-uami" `
+  -RegistrationId "my-device" `
+  -EnrollmentGroupId "my-device-group" `
+  -AttestationType "X509"
 ```
+
+The script will output:
+- DPS ID Scope (needed for device config)
+- Certificate paths (for device authentication)
+- Azure resource details
+- Enrollment group information
+
+#### Option B: X.509 Only Setup (No ADR)
+Use this for traditional X.509 workflows without Microsoft certificate management. Requires existing DPS/IoT Hub.
+
+```powershell
+# Navigate to scripts directory
+cd scripts
+
+# Run X.509 certificate setup (generates certs and creates enrollment)
+.\setup-x509-attestation.ps1 `
+  -RegistrationId "my-device" `
+  -DpsName "my-dps-001" `
+  -ResourceGroup "my-iot-rg" `
+  -EnrollmentGroupId "my-device-group"
+```
+
+Output includes:
+- Root CA, Intermediate CA, and Device certificate paths
+- Certificate thumbprints
+- Verification status in DPS
+
+### Update Device Configuration
+
+Once the script completes, update your device settings in `appsettings.json`:
+
+```json
+{
+  "IoTHub": {
+    "DpsProvisioning": {
+      "IdScope": "0ne001XXXXX",  // From script output
+      "RegistrationId": "my-device",
+      "AttestationMethod": "X509",
+      "AttestationCertPath": "C:\\path\\to\\scripts\\certs\\device\\device.pem",
+      "AttestationKeyPath": "C:\\path\\to\\scripts\\certs\\device\\device.key",
+      "AttestationCertChainPath": "C:\\path\\to\\scripts\\certs\\ca\\chain.pem"
+    }
+  },
+  "Adr": {
+    "Enabled": true,
+    "SubscriptionId": "xxxxxxxx-xxxx-xxxx-xxxx-xxxxxxxxxxxx",
+    "ResourceGroupName": "my-iot-rg",
+    "NamespaceName": "my-adrnamespace-001"
+  }
+}
+```
+
+### Run the Device Application
+
+```powershell
+dotnet run --project ../src/skittlesorter.csproj
+```
+
+---
 
 ### Prerequisites
 
@@ -209,27 +268,28 @@ az iot hub certificate list `
 
 You should see the Microsoft-managed CA in the list.
 
-## Step 8: Create Enrollment Group (Symmetric Key + CSR)
+## Step 8: Create Enrollment Group (X.509 + CSR)
 
-We keep it simple: symmetric key for attestation, CSR for certificate issuance.
+We'll use X.509 certificates for attestation and CSR for certificate issuance.
 
 ```powershell
 az iot dps enrollment-group create `
   --dps-name $dpsName `
   --resource-group $resourceGroup `
   --enrollment-id $enrollmentGroupName `
-  --attestation-type symmetricKey `
+  --attestation-type x509 `
+  --ca-name "$registrationId-intermediate" `
   --iot-hub-host-name "$iotHubName.azure-devices.net" `
   --provisioning-status enabled `
   --credential-policy $credentialPolicyName
 
-$enrollmentKey = az iot dps enrollment-group show `
+$enrollmentGroup = az iot dps enrollment-group show `
   --dps-name $dpsName `
   --resource-group $resourceGroup `
   --enrollment-id $enrollmentGroupName `
-  --query attestation.symmetricKey.primaryKey -o tsv
+  -o json | ConvertFrom-Json -AsHashTable
 
-Write-Host "Enrollment Group Key: $enrollmentKey" -ForegroundColor Cyan
+Write-Host "Enrollment Group created with X.509 attestation" -ForegroundColor Cyan
 ```
 
 ## Step 9: Capture What You Need for the Device
