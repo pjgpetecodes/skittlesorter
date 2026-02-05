@@ -149,6 +149,11 @@ The device will:
 5. Receive assigned IoT Hub + X.509 certificate
 6. Connect to IoT Hub using X.509 certificate
 
+**Configuration values you'll need:**
+- `IdScope`: From DPS overview page
+- `RegistrationId`: Your device name
+- `EnrollmentGroupKeyBase64`: The primary key retrieved in Step 2
+
 ## Option 2: X.509 Certificate Attestation with CSR
 
 This approach uses an **existing X.509 certificate** (bootstrap certificate) for DPS authentication, then receives a **new certificate** for IoT Hub communication.
@@ -159,111 +164,79 @@ This approach uses an **existing X.509 certificate** (bootstrap certificate) for
 - Devices with pre-installed factory certificates
 - Regulatory requirements for PKI
 
-### Step 1: Create or Obtain Bootstrap Certificates
+### Prerequisites
 
-You need a **Certificate Authority (CA)** that you control:
-
-```bash
-# Create CA private key
-openssl genrsa -out ca.key 4096
-
-# Create CA certificate
-openssl req -x509 -new -nodes \
-  -key ca.key \
-  -sha256 -days 3650 \
-  -out ca.pem \
-  -subj "/CN=Skittle Sorter CA"
-
-# Create device bootstrap certificate
-openssl genrsa -out bootstrap.key 2048
-
-openssl req -new \
-  -key bootstrap.key \
-  -out bootstrap.csr \
-  -subj "/CN=dev001-skittlesorter"
-
-openssl x509 -req \
-  -in bootstrap.csr \
-  -CA ca.pem \
-  -CAkey ca.key \
-  -CAcreateserial \
-  -out bootstrap.pem \
-  -days 365 -sha256
-
-# Combine into PFX for device use
-openssl pkcs12 -export \
-  -out bootstrap.pfx \
-  -inkey bootstrap.key \
-  -in bootstrap.pem \
-  -password pass:yourpassword
-```
-
-### Step 2: Upload CA Certificate to DPS
+You should have already created bootstrap certificates in the previous post. If not, follow the manual steps in [Post 03: X.509 and CSR Workflows](03-x509-and-csr-workflows.md) or use the automation script:
 
 ```powershell
+.\scripts\setup-x509-attestation.ps1 `
+  -RegistrationId "dev001-skittlesorter" `
+  -DpsName "dev001-skittlesorter-dps" `
+  -ResourceGroup "dev001-skittlesorter-rg" `
+  -EnrollmentGroupId "dev001-skittlesorter-group"
+```
+
+### Step 1: Upload CA Certificate to DPS
+
+If you used the automation script, this is already done. Otherwise:
+
+```powershell
+# Variables
+$dpsName = "dev001-skittlesorter-dps"
+$resourceGroup = "dev001-skittlesorter-rg"
+$caCertName = "SkittleSorterCA"
+
 # Upload CA certificate
 az iot dps certificate create `
   --dps-name $dpsName `
   --resource-group $resourceGroup `
-  --name "SkittleSorterCA" `
-  --path "./ca.pem"
+  --name $caCertName `
+  --path "./certs/ca/intermediate-ca.pem"
 ```
 
-### Step 3: Verify CA Certificate (Proof of Possession)
+### Step 2: Verify CA Certificate (Proof of Possession)
 
 DPS requires proof that you control the private key:
 
 ```powershell
-# Generate verification code
-$verificationCode = az iot dps certificate generate-verification-code `
+# Get etag
+$cert = az iot dps certificate show `
   --dps-name $dpsName `
   --resource-group $resourceGroup `
-  --certificate-name "SkittleSorterCA" `
-  --etag (az iot dps certificate show `
-    --dps-name $dpsName `
-    --resource-group $resourceGroup `
-    --certificate-name "SkittleSorterCA" `
-    --query etag -o tsv) `
-  --query properties.verificationCode -o tsv
+  --certificate-name $caCertName `
+  -o json | ConvertFrom-Json
 
-Write-Host "Verification Code: $verificationCode"
-```
+# Generate verification code
+$verResponse = az iot dps certificate generate-verification-code `
+  --dps-name $dpsName `
+  --resource-group $resourceGroup `
+  --certificate-name $caCertName `
+  --etag $cert.etag `
+  -o json | ConvertFrom-Json
 
-Create verification certificate:
+$verificationCode = $verResponse.properties.verificationCode
 
-```bash
-# Generate verification certificate
+# Create verification certificate
 openssl genrsa -out verification.key 2048
+openssl req -new -key verification.key -out verification.csr -subj "/CN=$verificationCode"
+openssl x509 -req -in verification.csr -CA ./certs/ca/intermediate-ca.pem -CAkey ./certs/ca/intermediate-ca.key -out verification.pem -days 30 -sha256
 
-openssl req -new \
-  -key verification.key \
-  -out verification.csr \
-  -subj "/CN=$verificationCode"
+# Verify
+$certCheck = az iot dps certificate show `
+  --dps-name $dpsName `
+  --resource-group $resourceGroup `
+  --certificate-name $caCertName `
+  -o json | ConvertFrom-Json
 
-openssl x509 -req \
-  -in verification.csr \
-  -CA ca.pem \
-  -CAkey ca.key \
-  -out verification.pem \
-  -days 30 -sha256
-```
-
-Upload verification certificate:
-
-```powershell
 az iot dps certificate verify `
   --dps-name $dpsName `
   --resource-group $resourceGroup `
-  --certificate-name "SkittleSorterCA" `
+  --certificate-name $caCertName `
   --path "./verification.pem" `
-  --etag (az iot dps certificate show `
-    --dps-name $dpsName `
-    --resource-group $resourceGroup `
-    --certificate-name "SkittleSorterCA" `
-    --query etag -o tsv)
+  --etag $certCheck.etag
 ```
 
-### Step 4: Create X.509 Enrollment Group
+### Step 3: Create X.509 Enrollment Group
 
 ```powershell
 az iot dps enrollment-group create `
@@ -278,7 +251,7 @@ az iot dps enrollment-group create `
   --edge-enabled false
 ```
 
-### Step 5: Configuration for Device
+### Step 4: Configuration for Device
 
 ```json
 {
@@ -286,7 +259,7 @@ az iot dps enrollment-group create `
     "IdScope": "0ne00XXXXXX",
     "RegistrationId": "dev001-skittlesorter",
     "AttestationMethod": "X509",
-    "AttestationCertPath": "./certs/bootstrap.pfx",
+    "AttestationCertPath": "./certs/device/device.pem",
     "AttestationCertPassword": "yourpassword",
     "ProvisioningHost": "global.azure-devices-provisioning.net"
   }
@@ -298,8 +271,14 @@ The device will:
 2. Connect to DPS with TLS client authentication
 3. Generate a new CSR for operational certificate
 4. Submit registration with CSR to DPS
-5. Receive assigned IoT Hub + **new** X.509 certificate
-6. Connect to IoT Hub using **new** certificate
+5. Receive assigned IoT Hub + new X.509 certificate
+6. Connect to IoT Hub using new certificate
+
+**Configuration values you'll need:**
+- `IdScope`: From DPS overview page
+- `RegistrationId`: Your device name (CN in certificate)
+- `AttestationCertPath`: Path to bootstrap certificate (.pem or .pfx)
+- `AttestationCertPassword`: Password for certificate (if encrypted)
 
 ## Comparing Both Attestation Methods
 
@@ -314,220 +293,12 @@ The device will:
 
 **Both methods result in X.509 certificate for IoT Hub communication!**
 
-## Adding Custom Device Properties
-
-You can set initial device twin properties in enrollment groups:
-
-```powershell
-# Create enrollment group with initial twin state
-az iot dps enrollment-group create `
-  --dps-name $dpsName `
-  --resource-group $resourceGroup `
-  --enrollment-id $enrollmentGroupName `
-  --attestation-type symmetricKey `
-  --iot-hub-host-name "$iotHubName.azure-devices.net" `
-  --provisioning-status enabled `
-  --credential-policy $credentialPolicyName `
-  --initial-twin-tags '{"location":"factory-1","deviceType":"skittle-sorter"}' `
-  --initial-twin-properties '{"telemetryInterval":5000,"enableSorting":true}'
-```
-
-Device twin will be initialized with:
-
-```json
-{
-  "tags": {
-    "location": "factory-1",
-    "deviceType": "skittle-sorter"
-  },
-  "properties": {
-    "desired": {
-      "telemetryInterval": 5000,
-      "enableSorting": true
-    }
-  }
-}
-```
-
-## Custom Allocation Policies
-
-You can implement custom logic to assign devices to different IoT Hubs:
-
-```powershell
-# Create Azure Function for custom allocation
-# (Function code would determine target hub based on device attributes)
-
-# Link function to enrollment group
-az iot dps enrollment-group create `
-  --dps-name $dpsName `
-  --resource-group $resourceGroup `
-  --enrollment-id $enrollmentGroupName `
-  --attestation-type symmetricKey `
-  --allocation-policy custom `
-  --webhook-url "https://your-function-app.azurewebsites.net/api/allocate" `
-  --api-version "2019-03-31" `
-  --credential-policy $credentialPolicyName
-```
-
-Custom allocation examples:
-- Route devices by geographic location
-- Load balance across multiple IoT Hubs
-- Assign based on tenant ID (multi-tenancy)
-
-## Viewing and Managing Enrollment Groups
-
-### List All Enrollment Groups
-
-```powershell
-az iot dps enrollment-group list `
-  --dps-name $dpsName `
-  --resource-group $resourceGroup `
-  --output table
-```
-
-### View Enrollment Group Details
-
-```powershell
-az iot dps enrollment-group show `
-  --dps-name $dpsName `
-  --resource-group $resourceGroup `
-  --enrollment-id $enrollmentGroupName
-```
-
-### Update Enrollment Group
-
-```powershell
-# Disable provisioning
-az iot dps enrollment-group update `
-  --dps-name $dpsName `
-  --resource-group $resourceGroup `
-  --enrollment-id $enrollmentGroupName `
-  --provisioning-status disabled
-
-# Change credential policy
-az iot dps enrollment-group update `
-  --dps-name $dpsName `
-  --resource-group $resourceGroup `
-  --enrollment-id $enrollmentGroupName `
-  --credential-policy "new-cert-policy"
-```
-
-### Delete Enrollment Group
-
-```powershell
-az iot dps enrollment-group delete `
-  --dps-name $dpsName `
-  --resource-group $resourceGroup `
-  --enrollment-id $enrollmentGroupName
-```
-
-## Testing Enrollment Configuration
-
-### Verify Credential Policy Link
-
-```powershell
-# Check that enrollment group is linked to credential policy
-$enrollment = az iot dps enrollment-group show `
-  --dps-name $dpsName `
-  --resource-group $resourceGroup `
-  --enrollment-id $enrollmentGroupName | ConvertFrom-Json
-
-Write-Host "Credential Policy: $($enrollment.credentialPolicy)"
-```
-
-### Test Device Key Derivation
-
-```powershell
-# Derive a test device key
-$testRegistrationId = "test-device-001"
-$testDeviceKey = Get-DeviceKey -enrollmentKey $enrollmentKey -registrationId $testRegistrationId
-
-Write-Host "Test Device: $testRegistrationId"
-Write-Host "Derived Key: $testDeviceKey"
-```
-
-## Security Best Practices
-
-### Symmetric Key Attestation
-
-✅ **Do:**
-- Store enrollment group key in secure configuration (Key Vault, environment variables)
-- Derive device-specific keys on device (don't pre-generate)
-- Rotate enrollment group keys periodically
-- Use different enrollment groups for dev/staging/prod
-
-❌ **Don't:**
-- Hardcode enrollment keys in source code
-- Share device-derived keys between devices
-- Log enrollment or device keys
-- Use the same enrollment group for all environments
-
-### X.509 Certificate Attestation
-
-✅ **Do:**
-- Store CA private key securely (offline, HSM)
-- Use strong key sizes (RSA 2048+, ECC 256+)
-- Set appropriate certificate validity periods
-- Implement certificate revocation checks
-
-❌ **Don't:**
-- Store CA private key in source control
-- Use self-signed device certificates without CA chain
-- Skip proof of possession verification
-- Reuse device certificates across devices
-
-## Troubleshooting
-
-### Error: "Credential policy not found"
-
-**Cause:** ADR credential policy doesn't exist or name mismatch.
-
-**Solution:**
-```powershell
-# List available credential policies
-az iot hub device-identity credential-policy list `
-  --namespace $adrNamespace `
-  --resource-group $resourceGroup
-```
-
-### Error: "IoT Hub not linked"
-
-**Cause:** DPS not properly linked to IoT Hub.
-
-**Solution:**
-```powershell
-# List linked hubs
-az iot dps linked-hub list `
-  --dps-name $dpsName `
-  --resource-group $resourceGroup
-
-# Re-link if necessary (see previous post)
-```
-
-### Device Provisioning Fails
-
-**Debug steps:**
-```powershell
-# Check DPS device registrations
-az iot dps registration list `
-  --dps-name $dpsName `
-  --resource-group $resourceGroup `
-  --enrollment-id $enrollmentGroupName
-
-# Check IoT Hub devices
-az iot hub device-identity list `
-  --hub-name $iotHubName `
-  --resource-group $resourceGroup
-```
-
 ## What We Accomplished
 
-✅ Created symmetric key enrollment group with credential policy  
-✅ Learned to derive device-specific keys  
-✅ Configured X.509 certificate attestation (optional)  
-✅ Verified proof of possession for X.509 CA  
-✅ Set up initial device twin properties  
-✅ Ready to implement device provisioning code  
+✅ Created enrollment groups for both symmetric key and X.509 attestation  
+✅ Retrieved configuration values needed for device application  
+✅ Understood the trade-offs between attestation methods  
+✅ Ready to implement device provisioning code
 
 ## Next Steps
 

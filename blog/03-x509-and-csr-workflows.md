@@ -4,41 +4,113 @@
 
 ---
 
-In this post, we'll explore the differences between traditional X.509 certificate management and the new Certificate Signing Request (CSR) workflow. Understanding both approaches will help you choose the right strategy for your IoT deployment.
+This series uses Microsoft's **new** certificate management (preview) that enables devices to receive X.509 certificates automatically during provisioning. This post provides a high-level overview and points you to resources for implementation.
+
+> **🆕 Preview Feature:** Microsoft-backed X.509 certificate management was announced in November 2025 and is currently in public preview. **Not recommended for production workloads.** For details, see [Certificate Management Overview](https://learn.microsoft.com/en-us/azure/iot-hub/iot-hub-certificate-management-overview)
 
 ---
 
-## Quick Setup
+## Two Types of Certificates
 
-### Using the Automation Scripts
+The new certificate management service makes use of a **two-phase approach**:
 
-We provide helper scripts to automate certificate generation and DPS setup:
+### Phase 1: Onboarding Credentials
+- **Purpose:** Device authenticates to DPS during initial provisioning
+- **Options:** X.509 certificates (from third-party CA), symmetric keys, or TPM
+- **Your responsibility:** Pre-install on device before shipment
+- **Lifespan:** Long-lived or used once for initial authentication
 
-#### Automated Full Setup (ADR + X.509)
+### Phase 2: Operational Certificates (Microsoft-Managed)
+- **Purpose:** Device authenticates to IoT Hub for ongoing operations
+- **How it works:** Automatically issued by ADR during provisioning via CSR
+- **Generated on:** Device itself (private key never leaves device)
+- **Lifespan:** Short-lived (1-90 days), automatically renewed
+- **Security:** Higher security, no key transport
 
-```powershell
-cd scripts
+## How It Works
 
-.\setup-x509-dps-adr.ps1 `
-  -ResourceGroup "my-iot-rg" `
-  -Location "eastus" `
-  -IoTHubName "my-iothub-001" `
-  -DPSName "my-dps-001" `
-  -AdrNamespace "my-adrnamespace-001" `
-  -UserIdentity "my-uami" `
-  -RegistrationId "my-device" `
-  -EnrollmentGroupId "my-device-group" `
-  -AttestationType "X509"
+The following diagram shows the complete provisioning flow:
+
+```mermaid
+sequenceDiagram
+    participant Device as IoT Device
+    participant DPS as DPS
+    participant ADR as ADR
+    participant PKI as PKI-R<br/>(Issuing CA)
+    participant Hub as IoT Hub
+
+    Note over Device: Pre-configured with<br/>onboarding credential<br/>and DPS endpoint
+
+    Note over DPS: Configure enrollment:<br/>1) Define onboarding method<br/>2) Link to ADR policy
+
+    Note over ADR: Configure credential<br/>(Root CA) and<br/>policies (ICAs)
+
+    Note over PKI: Manage hierarchy of<br/>Certificate<br/>Authorities (CAs)
+
+    Note over Hub: Store CA and<br/>validate leaf certs
+
+    Device->>DPS: 1. Provisioning Request + CSR
+    Note over Device,DPS: Device sends Certificate Signing Request
+
+    DPS->>DPS: 2. Verify onboarding credential
+    
+    DPS->>Hub: 3. Provision device to Hub
+    DPS->>ADR: 3. Register device in ADR
+    
+    Hub-->>DPS: Device created
+    ADR-->>DPS: Device registered
+
+    DPS->>PKI: 4. Request operational certificate
+    Note over DPS,PKI: Forward CSR to issuing CA
+
+    PKI->>PKI: 5. ICA signs and returns<br/>operational certificate
+    
+    PKI-->>DPS: 6. Operational cert + chain
+
+    DPS-->>Device: 6. Return operational cert<br/>+ Hub endpoint
+
+    Device->>Hub: 7. Authenticate with IoT Hub<br/>using operational certificate chain
+    
+    Note over Device,Hub: Device uses newly issued<br/>operational certificate for<br/>all future communications
 ```
 
-This generates:
-- Root CA (3650 days, pathlen:1)
-- Intermediate CA (1825 days, pathlen:0)
-- Device bootstrap certificate (365 days)
-- Certificate verification in DPS
-- Enrollment group with credential policy
+**Key Steps:**
+1. **Device sends provisioning request + CSR** - Device authenticates with onboarding credential and submits Certificate Signing Request
+2. **DPS verifies onboarding credential** - Validates device identity (X.509, symmetric key, or TPM)
+3. **Device provisioned to Hub and registered in ADR** - Device identity created in both services
+4. **Request operational certificate** - DPS forwards CSR to ADR issuing CA (policy)
+5. **ICA signs and returns operational certificate** - ADR issuing CA issues leaf certificate
+6. **Return operational cert + Hub endpoint** - DPS sends certificate chain back to device
+7. **Device authenticates with IoT Hub** - Device uses new operational certificate for all future connections
 
-#### Automated X.509 Only Setup
+## Microsoft-Managed PKI Architecture
+
+Azure Device Registry (ADR) manages a dedicated PKI for your namespace:
+
+- **Root CA (Credential):** One unique root CA per ADR namespace, managed by Microsoft using Azure Managed HSM
+- **Issuing CA (Policy):** One issuing CA per policy, defines certificate validity (1-90 days)
+- **Leaf Certificate (Operational):** End-entity certificate issued to device by issuing CA
+
+The issuing CA certificates are automatically synced from ADR to all linked IoT Hubs, enabling Hub to authenticate devices.
+
+## Key Features
+
+| Feature | Description |
+|---------|-------------|
+| **Algorithms** | ECC (ECDSA) with NIST P-384 curve, SHA-384 hashing |
+| **HSM Keys** | Azure Managed HSM (no additional subscription required) |
+| **Certificate Validity** | 1-90 days (configurable per policy) |
+| **Protocols** | HTTP and MQTT during provisioning |
+| **Renewal** | Device-initiated via DPS registration call |
+| **CA Sync** | Automatic sync from ADR to linked IoT Hubs |
+
+## What You Need to Do
+
+For this series, you'll create **onboarding credentials** (Phase 1) - we provide automation scripts:
+
+> **Preview Reminder:** Microsoft-backed X.509 certificate management is **new and in public preview**. Operational certificates (Phase 2) are issued by ADR during provisioning and are **not recommended for production workloads** during preview.
+
+### Quick Setup: Automated X.509 Bootstrap Certificates (if you didn't already run the full setup script!)
 
 ```powershell
 cd scripts
@@ -50,67 +122,13 @@ cd scripts
   -EnrollmentGroupId "my-device-group"
 ```
 
-Generates just X.509 certificates and performs DPS verification.
+### Manual Setup: Step-by-Step (X.509 Bootstrap Certificates)
 
----
+If you prefer not to use the script, here are the manual steps to create **onboarding credentials** (bootstrap certs) and verify your CA with DPS.
 
-## What Are X.509 Certificates?
+> **Preview Reminder:** The **operational** certificate issuance that happens after these steps is **new and in preview**. Your device will receive those certificates only during provisioning via DPS/ADR.
 
-X.509 certificates are digital documents that bind a public key to an identity. Think of them like digital passports:
-
-- **Subject:** Who the certificate belongs to (device ID)
-- **Issuer:** Who signed/issued the certificate (Certificate Authority)
-- **Public Key:** Used to encrypt data or verify signatures
-- **Private Key:** Kept secret, used to decrypt or sign
-- **Validity Period:** Start and end dates
-
-## X.509 Bootstrap Certificates for DPS Attestation
-
-To use X.509 authentication with DPS, you need to create and upload a **bootstrap certificate chain** that devices will use to authenticate with DPS during provisioning.
-
-**Important:** These bootstrap certificates are used **only for DPS authentication**. The certificates devices use to connect to IoT Hub are issued by ADR via the CSR-based workflow.
-
-```
-┌────────────────┐
-│  Your Host     │  Generate Root & Intermediate CA
-│  Machine       │  (create your certificate chain)
-└────────┬───────┘
-         │
-         ▼
-┌─────────────────────────────────────┐
-│  Upload Root/Intermediate to DPS    │
-│  (proof of possession)              │
-└────────┬────────────────────────────┘
-         │
-         ▼
-┌─────────────────────────────────────┐
-│  Create Bootstrap Device Certs      │
-│  (signed by Root CA)                │
-│  (for DPS auth only)                │
-└────────┬────────────────────────────┘
-         │
-         ▼
-┌─────────────────────────────────────┐
-│  Deploy Bootstrap Certs to Devices  │
-│  (for DPS provisioning)             │
-└─────────────────────────────────────┘
-         │
-         ▼
-┌─────────────────────────────────────┐
-│  During Provisioning:               │
-│  Device authenticates to DPS        │
-│  Device submits CSR                 │
-│  ADR issues operational cert        │
-└─────────────────────────────────────┘
-```
-
-You can either use the automation scripts from "Quick Setup" or follow these manual steps.
-
----
-
-## Manual Step-by-Step: Create Bootstrap Certificates
-
-### Prerequisites
+**Prerequisites:**
 
 ```powershell
 # Verify tools are available
@@ -118,58 +136,79 @@ az --version                    # Azure CLI
 openssl version                 # OpenSSL
 ```
 
-### Setup Variables
+If PowerShell shows this error when you run `openssl`:
 
-Before starting, define your environment:
+```
+openssl : The term 'openssl' is not recognized as the name of a cmdlet, function, script file, or operable program.
+```
+
+Add OpenSSL to your PATH for this session (check if if this is the correct path for your openssl install):
+
+```powershell
+$env:Path = "C:\Program Files\OpenSSL-Win64\bin;$env:Path"
+```
+
+**1) Set variables and create folders:**
+
+**Set variables:**
 
 ```powershell
 $resourceGroup = "my-iot-rg"
-$location = "eastus"
 $dpsName = "my-dps-001"
-$iotHubName = "my-iothub-001"
-$adrNamespace = "my-adrnamespace-001"
-$userIdentity = "my-uami"
 $registrationId = "my-device"
 $enrollmentGroupId = "my-device-group"
-$credentialPolicyName = "cert-policy"
-
-# Create directory structure for certificates
 $certDir = ".\certs"
-New-Item -ItemType Directory -Path "$certDir\root" -Force | Out-Null
-New-Item -ItemType Directory -Path "$certDir\ca" -Force | Out-Null
-New-Item -ItemType Directory -Path "$certDir\device" -Force | Out-Null
-New-Item -ItemType Directory -Path "$certDir\issued" -Force | Out-Null
 ```
 
-### Step 1: Create Your Own Certificate Authority
-
-Now we stand up a root and intermediate CA so DPS can trust a chain you control.
+**Create root CA folder:**
 
 ```powershell
-# Create root CA private key
-openssl genrsa -out "$certDir\root\root-ca.key" 4096
+New-Item -ItemType Directory -Path "$certDir\root" -Force | Out-Null
+```
 
-# Create root CA certificate
-openssl req -x509 -new -nodes `
-  -key "$certDir\root\root-ca.key" `
-  -sha256 -days 3650 `
-  -out "$certDir\root\root-ca.pem" `
+**Create intermediate CA folder:**
+
+```powershell
+New-Item -ItemType Directory -Path "$certDir\ca" -Force | Out-Null
+```
+
+**Create device folder:**
+
+```powershell
+New-Item -ItemType Directory -Path "$certDir\device" -Force | Out-Null
+```
+
+**2) Create root and intermediate CA:**
+
+**Create root CA certificate (self-signed):**
+
+```powershell
+openssl req -x509 -new -nodes -newkey rsa:4096 -keyout "$certDir\root\root-ca.key" -out "$certDir\root\root-ca.pem" -days 3650 -sha256 `
   -subj "/CN=$registrationId-root" `
   -addext "basicConstraints=critical,CA:true,pathlen:1" `
-  -addext "keyUsage=critical,keyCertSign,cRLSign"
+  -addext "keyUsage=critical,keyCertSign,cRLSign" `
+  -addext "subjectKeyIdentifier=hash" `
+  -addext "authorityKeyIdentifier=keyid:always"
+```
 
-Write-Host "✓ Root CA created: $certDir\root\root-ca.pem" -ForegroundColor Green
+**Create intermediate CA private key:**
 
-# Create intermediate CA private key
+```powershell
 openssl genrsa -out "$certDir\ca\intermediate-ca.key" 4096
+```
 
-# Create intermediate CA CSR
+**Create intermediate CA CSR:**
+
+```powershell
 openssl req -new `
   -key "$certDir\ca\intermediate-ca.key" `
   -out "$certDir\ca\intermediate-ca.csr" `
   -subj "/CN=$registrationId-intermediate"
+```
 
-# Create intermediate CA extensions file
+**Create intermediate CA extensions file:**
+
+```powershell
 @"
 [ v3_intermediate ]
 basicConstraints = critical,CA:true,pathlen:0
@@ -177,8 +216,11 @@ keyUsage = critical, keyCertSign, cRLSign
 subjectKeyIdentifier = hash
 authorityKeyIdentifier = keyid:always,issuer
 "@ | Set-Content -Path "$certDir\ca\intermediate-ext.cnf" -Encoding ASCII
+```
 
-# Sign intermediate CA with root CA
+**Sign intermediate CA with root CA:**
+
+```powershell
 openssl x509 -req `
   -in "$certDir\ca\intermediate-ca.csr" `
   -CA "$certDir\root\root-ca.pem" `
@@ -187,102 +229,110 @@ openssl x509 -req `
   -out "$certDir\ca\intermediate-ca.pem" `
   -days 1825 -sha256 `
   -extfile "$certDir\ca\intermediate-ext.cnf" -extensions v3_intermediate
-
-Write-Host "✓ Intermediate CA created: $certDir\ca\intermediate-ca.pem" -ForegroundColor Green
 ```
 
-### Step 2: Upload and Verify CA in DPS
+**3) Extract certificate thumbprints:**
 
-Next up we prove ownership of that CA to DPS via a verification code cert.
+**Extract root CA thumbprint:**
+
+```powershell
+$rootX509 = New-Object System.Security.Cryptography.X509Certificates.X509Certificate2("$certDir\root\root-ca.pem")
+$rootThumbprint = $rootX509.Thumbprint
+Write-Host "Root Thumbprint: $rootThumbprint" -ForegroundColor Green
+```
+
+**Extract intermediate CA thumbprint:**
+
+```powershell
+$caX509 = New-Object System.Security.Cryptography.X509Certificates.X509Certificate2("$certDir\ca\intermediate-ca.pem")
+$caThumbprint = $caX509.Thumbprint
+Write-Host "Intermediate Thumbprint: $caThumbprint" -ForegroundColor Green
+```
+
+**4) Upload and verify root CA with DPS:**
+
+**Upload root CA to DPS:**
+
+```powershell
+$rootCertName = "$registrationId-root"
+az iot dps certificate create --dps-name $dpsName --resource-group $resourceGroup --certificate-name $rootCertName --path "$certDir\root\root-ca.pem"
+```
+
+**Get root CA etag and generate verification code:**
+
+```powershell
+$rootCert = az iot dps certificate show --dps-name $dpsName --resource-group $resourceGroup --certificate-name $rootCertName -o json | ConvertFrom-Json
+$rootEtag = $rootCert.properties.etag
+
+$rootVer = az iot dps certificate generate-verification-code --dps-name $dpsName --resource-group $resourceGroup --certificate-name $rootCertName --etag $rootEtag -o json | ConvertFrom-Json
+$rootVerCode = $rootVer.properties.verificationCode
+Write-Host "Verification Code: $rootVerCode" -ForegroundColor Cyan
+```
+
+**Create root CA verification certificate:**
+
+```powershell
+openssl genrsa -out "$certDir\root\verification.key" 2048
+openssl req -new -key "$certDir\root\verification.key" -out "$certDir\root\verification.csr" -subj "/CN=$rootVerCode"
+openssl x509 -req -in "$certDir\root\verification.csr" -CA "$certDir\root\root-ca.pem" -CAkey "$certDir\root\root-ca.key" -CAcreateserial -out "$certDir\root\verification.pem" -days 1 -sha256
+```
+
+**Verify root CA in DPS:**
+
+```powershell
+$rootEtag = $rootVer.properties.etag
+az iot dps certificate verify --dps-name $dpsName --resource-group $resourceGroup --certificate-name $rootCertName --path "$certDir\root\verification.pem" --etag $rootEtag
+Write-Host "✓ Root CA verified in DPS" -ForegroundColor Green
+```
+
+**5) Upload and verify intermediate CA with DPS:**
+
+**Upload intermediate CA to DPS:**
 
 ```powershell
 $caCertName = "$registrationId-intermediate"
-
-# Upload CA certificate to DPS
-az iot dps certificate create `
-  --dps-name $dpsName `
-  --resource-group $resourceGroup `
-  --certificate-name $caCertName `
-  --path "$certDir\ca\intermediate-ca.pem"
-
-Write-Host "✓ Certificate uploaded to DPS" -ForegroundColor Green
-
-# Get etag for verification
-$cert = az iot dps certificate show `
-  --dps-name $dpsName `
-  --resource-group $resourceGroup `
-  --certificate-name $caCertName `
-  -o json | ConvertFrom-Json -AsHashTable
-$etag = $cert.properties.etag
-
-# Generate verification code
-$verResponse = az iot dps certificate generate-verification-code `
-  --dps-name $dpsName `
-  --resource-group $resourceGroup `
-  --certificate-name $caCertName `
-  --etag $etag `
-  -o json | ConvertFrom-Json -AsHashTable
-$verificationCode = $verResponse.properties.verificationCode
-
-Write-Host "  Verification Code: $verificationCode" -ForegroundColor Cyan
-
-# Create verification certificate (proof of possession)
-openssl genrsa -out "$certDir\ca\verification.key" 2048
-
-openssl req -new `
-  -key "$certDir\ca\verification.key" `
-  -out "$certDir\ca\verification.csr" `
-  -subj "/CN=$verificationCode"
-
-openssl x509 -req `
-  -in "$certDir\ca\verification.csr" `
-  -CA "$certDir\ca\intermediate-ca.pem" `
-  -CAkey "$certDir\ca\intermediate-ca.key" `
-  -out "$certDir\ca\verification.pem" `
-  -days 30 -sha256
-
-# Update etag before verification
-$certCheck = az iot dps certificate show `
-  --dps-name $dpsName `
-  --resource-group $resourceGroup `
-  --certificate-name $caCertName `
-  -o json | ConvertFrom-Json -AsHashTable
-$etag = $certCheck.properties.etag
-
-# Upload verification certificate
-az iot dps certificate verify `
-  --dps-name $dpsName `
-  --resource-group $resourceGroup `
-  --certificate-name $caCertName `
-  --path "$certDir\ca\verification.pem" `
-  --etag $etag
-
-# Check verification status
-$final = az iot dps certificate show `
-  --dps-name $dpsName `
-  --resource-group $resourceGroup `
-  --certificate-name $caCertName `
-  -o json | ConvertFrom-Json -AsHashTable
-$isVerified = $final.properties.isVerified
-
-Write-Host "✓ Certificate verified in DPS (isVerified: $isVerified)" -ForegroundColor Green
+az iot dps certificate create --dps-name $dpsName --resource-group $resourceGroup --certificate-name $caCertName --path "$certDir\ca\intermediate-ca.pem"
 ```
 
-### Step 3: Create Bootstrap Device Certificates
-
-Create per-device bootstrap certificates signed by your intermediate CA. These certificates will be deployed to devices and used for DPS authentication.
+**Get intermediate CA etag and generate verification code:**
 
 ```powershell
-# Create device private key (stays on device)
+$caCert = az iot dps certificate show --dps-name $dpsName --resource-group $resourceGroup --certificate-name $caCertName -o json | ConvertFrom-Json
+$caEtag = $caCert.properties.etag
+
+$caVer = az iot dps certificate generate-verification-code --dps-name $dpsName --resource-group $resourceGroup --certificate-name $caCertName --etag $caEtag -o json | ConvertFrom-Json
+$caVerCode = $caVer.properties.verificationCode
+Write-Host "Verification Code: $caVerCode" -ForegroundColor Cyan
+```
+
+**Create intermediate CA verification certificate:**
+
+```powershell
+openssl genrsa -out "$certDir\ca\verification.key" 2048
+openssl req -new -key "$certDir\ca\verification.key" -out "$certDir\ca\verification.csr" -subj "/CN=$caVerCode"
+openssl x509 -req -in "$certDir\ca\verification.csr" -CA "$certDir\ca\intermediate-ca.pem" -CAkey "$certDir\ca\intermediate-ca.key" -CAcreateserial -out "$certDir\ca\verification.pem" -days 1 -sha256
+```
+
+**Verify intermediate CA in DPS:**
+
+```powershell
+$caEtag = $caVer.properties.etag
+az iot dps certificate verify --dps-name $dpsName --resource-group $resourceGroup --certificate-name $caCertName --path "$certDir\ca\verification.pem" --etag $caEtag
+Write-Host "✓ Intermediate CA verified in DPS" -ForegroundColor Green
+```
+
+**6) Create device bootstrap certificate:**
+
+**Create device private key and CSR:**
+
+```powershell
 openssl genrsa -out "$certDir\device\device.key" 2048
+openssl req -new -key "$certDir\device\device.key" -out "$certDir\device\device.csr" -subj "/CN=$registrationId"
+```
 
-# Create device CSR
-openssl req -new `
-  -key "$certDir\device\device.key" `
-  -out "$certDir\device\device.csr" `
-  -subj "/CN=$registrationId"
+**Create device extensions file:**
 
-# Create device extensions file
+```powershell
 @"
 [ v3_req ]
 basicConstraints = CA:FALSE
@@ -291,444 +341,107 @@ extendedKeyUsage = clientAuth
 subjectAltName = DNS:$registrationId
 authorityKeyIdentifier = keyid:always,issuer
 "@ | Set-Content -Path "$certDir\device\device-ext.cnf" -Encoding ASCII
-
-# Sign device certificate with intermediate CA
-openssl x509 -req `
-  -in "$certDir\device\device.csr" `
-  -CA "$certDir\ca\intermediate-ca.pem" `
-  -CAkey "$certDir\ca\intermediate-ca.key" `
-  -out "$certDir\device\device.pem" `
-  -days 365 -sha256 `
-  -extfile "$certDir\device\device-ext.cnf" -extensions v3_req
-
-Write-Host "✓ Bootstrap device certificate created: $certDir\device\device.pem" -ForegroundColor Green
-
-# Verify certificate chain
-$verification = openssl verify `
-  -CAfile "$certDir\root\root-ca.pem" `
-  -untrusted "$certDir\ca\intermediate-ca.pem" `
-  "$certDir\device\device.pem" 2>&1
-
-Write-Host "✓ Certificate chain verified: $verification" -ForegroundColor Green
-
-# Create certificate chain for TLS (needed for DPS connection)
-Get-Content "$certDir\ca\intermediate-ca.pem", "$certDir\root\root-ca.pem" | `
-  Set-Content -Path "$certDir\device\chain.pem" -Encoding ASCII
-
-Write-Host "✓ Certificate chain file created: $certDir\device\chain.pem" -ForegroundColor Green
 ```
 
-### Step 4: Summary - Bootstrap Certificates Ready
+**Sign device certificate with intermediate CA:**
 
 ```powershell
-Write-Host "`n=== Bootstrap Certificate Setup Complete ===" -ForegroundColor Green
-
-Write-Host "`nBootstrap Certificate Files (for DPS authentication):"
-Write-Host "  Root CA: $certDir\root\root-ca.pem"
-Write-Host "  Intermediate CA: $certDir\ca\intermediate-ca.pem"
-Write-Host "  Device Bootstrap Cert: $certDir\device\device.pem"
-Write-Host "  Device Private Key: $certDir\device\device.key"
-Write-Host "  Trust Chain: $certDir\device\chain.pem"
-
-Write-Host "`nNext Steps:"
-Write-Host "1. Deploy these bootstrap certificates to your device:"
-Write-Host "   - AttestationCertPath: $certDir\device\device.pem"
-Write-Host "   - AttestationKeyPath: $certDir\device\device.key"
-Write-Host "2. Device uses these to authenticate with DPS"
-Write-Host "3. During provisioning, device submits CSR"
-Write-Host "4. ADR issues operational certificate for IoT Hub"
-Write-Host "5. See post 04 to create the enrollment group"
+openssl x509 -req -in "$certDir\device\device.csr" -CA "$certDir\ca\intermediate-ca.pem" -CAkey "$certDir\ca\intermediate-ca.key" -out "$certDir\device\device.pem" -days 365 -sha256 -extfile "$certDir\device\device-ext.cnf" -extensions v3_req
 ```
 
----
+**Create certificate chain files:**
 
-## Comparing Attestation Approaches
-
-
-
-### Step 4: Deploy Certificates to Devices
-Then we copy certs + keys onto devices and plan for secure storage and rotation.
-
-- Copy device certificate + private key to each device
-- Secure storage required (TPM, secure element, etc.)
-- Manual certificate rotation when certificates expire
-
-### Problems with Traditional (Self-Signed) Approach
-
-❌ **Operational:** Keys must be pre-generated and securely deployed to every device  
-❌ **Security Risk:** Private keys are transported during setup, increasing exposure  
-❌ **Rotation:** Manual process to renew expiring bootstrap certificates  
-❌ **Scaling:** Each new device requires pre-configuration  
-
-## New CSR-Based Workflow (Microsoft-Managed CA)
-
-The new approach flips the model: devices generate their own keys and request certificates during provisioning.
-
-### How CSR Works
-
-**Certificate Signing Request (CSR)** contains:
-- Device's public key
-- Device identity information (Subject, Common Name)
-- Signature proving possession of private key
-
-**The device:**
-1. Generates a private key (stays on device, never leaves)
-2. Generates a CSR using the private key
-3. Sends CSR to DPS during provisioning
-4. Receives signed certificate back
-
-### Step-by-Step: Device Perspective
-Now we flip to the CSR model: the device makes its own key, asks DPS/ADR to sign it.
-
-```
-┌─────────────────────────┐
-│      Device (Boot)      │
-│                         │
-│  Generate RSA/ECC Key   │
-│  (private key stays)    │
-└────────┬────────────────┘
-         │
-         ▼
-┌─────────────────────────┐
-│  Build CSR              │
-│  (CN=registration_id)   │
-└────────┬────────────────┘
-         │
-         ▼
-┌─────────────────────────┐
-│  Connect to DPS         │
-│  (symmetric key auth)   │
-└────────┬────────────────┘
-         │
-         ▼
-┌─────────────────────────┐
-│  Submit CSR to DPS      │
-│  (Base64-encoded DER)   │
-└────────┬────────────────┘
-         │
-         ▼
-┌─────────────────────────┐
-│  DPS validates CSR      │
-│  (proves ownership)     │
-└────────┬────────────────┘
-         │
-         ▼
-┌─────────────────────────┐
-│  ADR signs CSR          │
-│  (issues certificate)   │
-└────────┬────────────────┘
-         │
-         ▼
-┌─────────────────────────┐
-│  Device receives cert   │
-│  + certificate chain    │
-└────────┬────────────────┘
-         │
-         ▼
-┌─────────────────────────┐
-│  Combine cert +         │
-│  private key (PFX)      │
-└────────┬────────────────┘
-         │
-         ▼
-┌─────────────────────────┐
-│  Connect to IoT Hub     │
-│  (X.509 TLS)            │
-└─────────────────────────┘
+```powershell
+Get-Content "$certDir\ca\intermediate-ca.pem", "$certDir\root\root-ca.pem" | Set-Content -Path "$certDir\device\chain.pem" -Encoding ASCII
+Get-Content "$certDir\device\device.pem", "$certDir\ca\intermediate-ca.pem", "$certDir\root\root-ca.pem" | Set-Content -Path "$certDir\device\device-full-chain.pem" -Encoding ASCII
+Write-Host "✓ Device bootstrap certificate created" -ForegroundColor Green
 ```
 
-**Key difference:** Private key is **generated and stays on the device** - never transmitted to DPS or any other service.
+**7) Create DPS enrollment group:**
 
-### Advantages of CSR Approach
+```powershell
+az iot dps enrollment-group create --dps-name $dpsName --resource-group $resourceGroup --enrollment-id $enrollmentGroupId --ca-name "$registrationId-intermediate" --credential-policy "default" --provisioning-status enabled
 
-✅ **No CA Management:** Microsoft manages the Certificate Authority  
-✅ **Private Key Security:** Keys generated on device, never transmitted  
-✅ **Automated:** Certificates issued during provisioning  
-✅ **Scalable:** Works for millions of devices  
-✅ **Lifecycle Management:** ADR credential policies handle renewal  
-✅ **Zero-Touch:** Device provisions itself on first boot  
-
-## Comparing Attestation Approaches
-
-| Feature | Bootstrap X.509 (DPS only) | CSR-Based (IoT Hub) |
-|---------|--------------------------|-------------------|
-| **Purpose** | Device authenticates to DPS | Device authenticates to IoT Hub |
-| **Issued By** | You (self-signed CA) | Microsoft (ADR) |
-| **Generated On** | Host machine | Device itself |
-| **Private Key** | Pre-deployed | Never leaves device |
-| **Lifecycle** | Manual renewal | Automatic (ADR policies) |
-| **Risk** | Keys must be securely deployed | Minimal (no key transport) |
-
-## Dual Attestation Pattern
-
-One powerful pattern: **authenticate with symmetric key, receive X.509 certificate**.
-
-```
-┌──────────────────────────────────┐
-│     PHASE 1: PROVISIONING        │
-│     (Symmetric Key + CSR)        │
-└──────────┬───────────────────────┘
-           │
-    ┌──────┴──────┐
-    │             │
-    ▼             ▼
-┌────────┐  ┌──────────────┐
-│ Device │  │ Enrollment   │
-│ Derives│  │ Group Key    │
-│ Key    │  │              │
-└────┬───┘  └──────┬───────┘
-     │             │
-     │             │
-     └──────┬──────┘
-            ▼
-      ┌──────────────┐
-      │ Generate SAS │
-      │ Token        │
-      └───────┬──────┘
-              ▼
-      ┌──────────────────┐
-      │ Connect to DPS   │
-      │ (Token Auth)     │
-      └───────┬──────────┘
-              ▼
-      ┌──────────────────┐
-      │ Submit CSR       │
-      │ Generate Cert    │
-      └───────┬──────────┘
-              ▼
-      ┌──────────────────┐
-      │ Receive X.509    │
-      │ Certificate      │
-      └───────┬──────────┘
-              │
-┌─────────────┴──────────────┐
-│                            │
-▼                            ▼
-┌──────────────────────────────────┐
-│     PHASE 2: OPERATION           │
-│     (X.509 Certificate Auth)     │
-└──────────┬───────────────────────┘
-           │
-           ▼
-      ┌──────────────────┐
-      │ Connect to IoT   │
-      │ Hub using X.509  │
-      │ (TLS 1.2+)       │
-      └──────────────────┘
+Write-Host "✓ Enrollment group created with CSR-based certificate issuance" -ForegroundColor Green
 ```
 
-### Why this pattern?
+**8) Deploy to device:**
 
-- ✅ **Easy provisioning:** Symmetric keys are simple, no pre-generated certs needed
-- ✅ **Secure operation:** X.509 is stronger than SAS tokens for long-lived connections
-- ✅ **Best of both worlds:** Use what's convenient for setup, use what's secure for operation
+Copy to your device:
+- `$certDir\device\device.pem` - Bootstrap certificate
+- `$certDir\device\device.key` - Device private key
+- `$certDir\device\device-full-chain.pem` - Full certificate chain
 
-**Why this pattern?**
-- ✅ Easy provisioning (no pre-generated certs needed)
-- ✅ Secure operation (X.509 is stronger than SAS)
-- ✅ Best of both worlds
+Store keys securely (TPM/secure element if available).
 
-## Certificate Chain Structure
+## Setup Complete
 
-When DPS issues a certificate, it returns a **certificate chain**:
+You've now completed all manual setup steps:
 
-```
-┌─────────────────────────────┐
-│  Root CA Certificate        │  (Microsoft-managed)
-└──────────┬──────────────────┘
-           │ Signs
-           ▼
-┌─────────────────────────────┐
-│  Intermediate CA Certificate│  (Microsoft-managed)
-└──────────┬──────────────────┘
-           │ Signs
-           ▼
-┌─────────────────────────────┐
-│  Device Certificate         │  (Your device)
-└─────────────────────────────┘
-```
+**✓ Certificate Authority Chain Created:**
+- Root CA (uploaded and verified in DPS)
+- Intermediate CA (uploaded and verified in DPS)
+- Device bootstrap certificate (signed by intermediate CA)
 
-**Device must install the full chain:**
+**✓ DPS Enrollment Configured:**
+- Enrollment group linked to intermediate CA
+- CSR-based certificate issuance enabled
+- Ready for device provisioning
 
-The response from DPS contains an array of Base64-encoded certificates:
-- **[0]** = Device certificate (the one issued by ADR)
-- **[1]** = Intermediate CA certificate  
-- **[2]** = Root CA certificate (optional, often in system trust store)
+**Certificate Files Created:**
+- Root: `$certDir\root\root-ca.pem`
+- Intermediate: `$certDir\ca\intermediate-ca.pem`
+- Device: `$certDir\device\device.pem`
+- Device Key: `$certDir\device\device.key`
+- TLS Chain: `$certDir\device\chain.pem` (intermediate + root)
+- Full Chain: `$certDir\device\device-full-chain.pem` (leaf + intermediate + root)
 
-The device must:
-1. Decode the certificate from Base64
-2. Combine it with the private key that was used to create the CSR
-3. Export the combined cert+key to a format for persistent storage (PFX on Windows, PEM on Linux)
-4. Use this cert+key pair for all future IoT Hub connections
+**What Happens Next:**
+1. Deploy `device.pem`, `device.key`, and `device-full-chain.pem` to your device
+2. Device boots and authenticates to DPS with bootstrap certificate
+3. Device generates new key pair and submits Certificate Signing Request (CSR)
+4. DPS forwards CSR to ADR issuing CA (via credential policy)
+5. ADR issues operational certificate (Phase 2)
+6. Device receives operational certificate from DPS
+7. Device uses operational certificate for all IoT Hub connections
 
-## When to Use Which Approach?
+**For Detailed Explanations:**
+See [Understanding X.509 and CSR Workflows (Deep Dive)](03a-x509-and-csr-workflows-deep-dive.md) for complete technical details, certificate architecture, and advanced scenarios.
 
-### Use Traditional X.509 When:
-- ✅ You already have PKI infrastructure
-- ✅ Regulatory requirements for specific CA
-- ✅ Offline provisioning required (no internet during setup)
-- ✅ Certificates must be pre-installed at factory
+## Certificate Renewal
 
-### Use CSR-Based Approach When:
-- ✅ New IoT deployment
-- ✅ Want zero-touch provisioning
-- ✅ Don't want to manage CA infrastructure
-- ✅ Need automated certificate lifecycle
-- ✅ Maximum security (keys never leave device)
+Devices are responsible for monitoring operational certificate expiration:
 
-## Certificate Lifecycle with ADR
+- Check `Valid until` date periodically
+- Initiate renewal before expiration (recommended: 7 days before)
+- Generate new CSR and submit to DPS (same as initial provisioning)
+- Receive renewed certificate from ADR
 
-ADR credential policies automate certificate management:
+**Best Practice:** Use Device Twin reported properties to track certificate issuance/expiration dates for monitoring.
 
-```json
-{
-  "name": "cert-policy",
-  "type": "x509CA",
-  "validity": "P30D",        // 30 days
-  "renewalWindow": "P7D"     // Renew 7 days before expiry
-}
-```
+## Preview Limitations
 
-**Automatic Renewal Flow:**
+⚠️ **Certificate Revocation:** Not supported in preview - disable device in IoT Hub instead
+⚠️ **Production Use:** Not recommended during preview
+⚠️ **SDK Support:** Official Microsoft SDKs don't yet support `2025-07-01-preview` API
 
-```
-Day 0:   Device provisions, receives certificate (valid 30 days)
-Day 23:  Renewal window opens (7 days before expiry)
-Day 23:  Device checks for renewal (via ADR API)
-Day 23:  New certificate issued automatically
-Day 30:  Old certificate expires (but already replaced)
-```
+## Learn More
 
-**Renewal logic:**
+**Official Microsoft Documentation:**
+- [What's New in IoT Hub](https://learn.microsoft.com/en-us/azure/iot-hub/iot-hub-what-is-new)
+- [Certificate Management Overview](https://learn.microsoft.com/en-us/azure/iot-hub/iot-hub-certificate-management-overview)
+- [Certificate Management Concepts](https://learn.microsoft.com/en-us/azure/iot-hub/iot-hub-certificate-management-concepts)
 
-The device should periodically check if its certificate is within the renewal window (typically 7 days before expiry). When renewal is needed, the device generates a new CSR and submits it to ADR to receive a new certificate.
-
-```
-     Day 0              Day 23              Day 30
-     ↓                  ↓                   ↓
-┌──────────────────────────────────────────────────────┐
-│ Certificate Lifecycle (30-day validity)              │
-├──────────────────────────────────────────────────────┤
-│                                                      │
-│  [Valid]          [Renewal Window]    [Expired]      │
-│                   (7 days before)                    │
-│                                                      │
-│  Day 0-22         Day 23-29           Day 30+        │
-│  ✓ Using          ↓ Check for         ✗ Invalid      │
-│    Old Cert       renewal             (shouldn't     │
-│                   ↓ Generate          reach here)    │
-│                     new CSR                          │
-│                   ↓ Request new cert                 │
-│                   ↓ Receive & save                   │
-│                   ✓ New Cert Ready                   │
-│                                                      │
-└──────────────────────────────────────────────────────┘
-```
-
-## CSR Generation Deep Dive
-
-### RSA vs ECC
-
-**RSA (Rivest-Shamir-Adleman):**
-- Traditional, widely supported
-- 2048-bit or 4096-bit keys
-- Larger key size = slower operations, higher overhead on IoT devices
-- Fine for devices with sufficient computing power
-
-**ECC (Elliptic Curve Cryptography):**
-- Modern, more efficient
-- 256-bit provides equivalent security to RSA 3072-bit
-- Smaller keys, faster operations, lower power consumption
-- **Recommended for resource-constrained IoT devices**
-
-### CSR Format
-
-CSR must be in **Base64-encoded DER format** (not PEM headers/footers).
-
-The registration payload sent to DPS looks like:
-```json
-{
-  "registrationId": "device-001",
-  "csr": "MIICXTCCAUUCAQAwGDEWMBQGA1UEAxMNZGV2aWNlLTAwMTCCAS..."
-}
-```
-
-The CSR value is the raw DER bytes, base64-encoded, without the `-----BEGIN CERTIFICATE REQUEST-----` headers.
-
-## Security Best Practices
-
-### Private Key Storage
-
-```
-    ✅ GOOD                      ❌ BAD
-                                
-    Device                       Host Machine
-       ↓                             ↓
-  ┌────────────┐             ┌──────────────┐
-  │ Generate   │             │ Generate Key │
-  │ Private    │             │              │
-  │ Key        │             └──────┬───────┘
-  └────┬───────┘                    │
-       │                            ▼
-       ▼                     ┌──────────────┐
-  ┌────────────┐             │ Store in DB  │
-  │ TPM/Secure │             │ or Config    │
-  │ Element    │             │ (Risk!)      │
-  │ (Hardware) │             └──────┬───────┘
-  └────┬───────┘                    │
-       │                            ▼
-       ▼                      Transfer
-  ┌────────────┐             Network
-  │ Encrypted  │             (Exposed!)
-  │ at Rest    │                    │
-  │ (Optional) │                    ▼
-  └────┬───────┘             ┌──────────────┐
-       │                     │ Device       │
-       └──────────┬──────────┤ (Late)       │
-                  │          └──────────────┘
-                  ▼
-             ┌─────────┐
-             │ Use Key │
-             │ Locally │
-             └─────────┘
-```
-
-**Do:**
-- ✅ Generate keys on device (never transmit)
-- ✅ Use hardware security modules (TPM, secure element)
-- ✅ Encrypt at rest if storing in filesystem
-- ✅ Use strong file permissions (chmod 600)
-
-**Don't:**
-- ❌ Generate keys on a server and transfer to device
-- ❌ Store unencrypted in filesystem
-- ❌ Hardcode in source code
-- ❌ Log or transmit private keys
-
-### Certificate Validation
-
-When using a certificate to connect to IoT Hub, verify:
-- ✅ Certificate has not expired (NotAfter > current time)
-- ✅ Certificate subject matches the device ID
-- ✅ Certificate chain is valid (IoT Hub trusts the issuer)
-- ✅ Certificate was issued by the expected CA
-
-## Testing Certificate Workflows
-
-For testing CSR generation:
-- Generate a CSR on your device using OpenSSL or your cryptography library
-- Inspect it with: `openssl req -text -noout -in device.csr`
-- Verify the subject (CN) matches your registration ID
-- Verify the public key is present and correct
-- Submit to DPS and verify the returned certificate chain
+**Deep Dive:**
+- [Understanding X.509 and CSR Workflows (Deep Dive)](03a-x509-and-csr-workflows-deep-dive.md) - Detailed technical explanation with manual steps
 
 ## Next Steps
 
-Now that you understand certificate workflows, we'll configure enrollment groups to use these certificates:
-- Creating symmetric key enrollment groups
-- Creating X.509 enrollment groups  
-- Linking credential policies for CSR issuance
-- Testing enrollment configurations
+Now that you understand the certificate workflow, you'll configure enrollment groups to use these certificates:
+
+- Creating X.509 enrollment groups
+- Linking ADR policies for operational certificate issuance
+- Testing provisioning with certificates
 
 ---
 

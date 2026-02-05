@@ -13,13 +13,13 @@ Now that you know what DPS does, let's stand up the Azure resources. We'll creat
 We provide two helper scripts depending on your setup needs:
 
 #### Option A: Full ADR + X.509 Setup (Recommended)
-This script automates everything: Azure resources, ADR integration, X.509 certificates, DPS enrollment, and certificate verification.
+This script automates everything: Azure resources, ADR integration, and X.509 certificates.
 
 ```powershell
 # Navigate to scripts directory
 cd scripts
 
-# Run the full setup (creates RG, UAMI, ADR Namespace, IoT Hub, DPS, and enrollment)
+# Run the full setup (creates RG, UAMI, ADR Namespace, IoT Hub, DPS)
 .\setup-x509-dps-adr.ps1 `
   -ResourceGroup "my-iot-rg" `
   -Location "eastus" `
@@ -27,30 +27,26 @@ cd scripts
   -DPSName "my-dps-001" `
   -AdrNamespace "my-adrnamespace-001" `
   -UserIdentity "my-uami" `
-  -RegistrationId "my-device" `
-  -EnrollmentGroupId "my-device-group" `
-  -AttestationType "X509"
+  -RegistrationId "my-device"
 ```
 
 The script will output:
 - DPS ID Scope (needed for device config)
-- Certificate paths (for device authentication)
 - Azure resource details
-- Enrollment group information
+- ADR namespace and credential policy information
 
-#### Option B: X.509 Only Setup (No ADR)
-Use this for traditional X.509 workflows without Microsoft certificate management. Requires existing DPS/IoT Hub.
+#### Option B: X.509 Certificate Setup Only
+If you already have Azure resources but need X.509 certificates:
 
 ```powershell
 # Navigate to scripts directory
 cd scripts
 
-# Run X.509 certificate setup (generates certs and creates enrollment)
+# Run X.509 certificate setup (generates certs, verifies with DPS)
 .\setup-x509-attestation.ps1 `
   -RegistrationId "my-device" `
   -DpsName "my-dps-001" `
-  -ResourceGroup "my-iot-rg" `
-  -EnrollmentGroupId "my-device-group"
+  -ResourceGroup "my-iot-rg"
 ```
 
 Output includes:
@@ -150,12 +146,18 @@ az iot hub create `
 
 DPS is the front door. It will handle attestation and hand out hubs.
 
+**Create DPS instance:**
+
 ```powershell
 az iot dps create `
   --name $dpsName `
   --resource-group $resourceGroup `
   --location $location
+```
 
+**Get DPS ID Scope:**
+
+```powershell
 $idScope = az iot dps show `
   --name $dpsName `
   --resource-group $resourceGroup `
@@ -168,6 +170,8 @@ Write-Host "DPS ID Scope: $idScope" -ForegroundColor Green
 
 ADR backs certificate issuance. We create the namespace and a policy that uses Microsoft-managed CA.
 
+**Create ADR namespace:**
+
 ```powershell
 az iot ops asset endpoint create `
   --name $adrNamespace `
@@ -175,7 +179,11 @@ az iot ops asset endpoint create `
   --location $location `
   --certificate-authority-name microsoft-managed `
   --identity-type SystemAssigned
+```
 
+**Create credential policy:**
+
+```powershell
 az iot hub device-identity credential-policy create `
   --namespace $adrNamespace `
   --resource-group $resourceGroup `
@@ -189,12 +197,18 @@ az iot hub device-identity credential-policy create `
 
 We need permissions for DPS and IoT Hub to read ADR. Now we create UAMI and grant access.
 
+**Create user-assigned managed identity:**
+
 ```powershell
 az identity create `
   --name $userIdentity `
   --resource-group $resourceGroup `
   --location $location
+```
 
+**Get identity principal ID and ADR resource ID:**
+
+```powershell
 $uamiPrincipalId = az identity show `
   --name $userIdentity `
   --resource-group $resourceGroup `
@@ -204,17 +218,29 @@ $adrResourceId = az iot ops asset endpoint show `
   --name $adrNamespace `
   --resource-group $resourceGroup `
   --query id -o tsv
+```
 
+**Assign Device Registry Contributor role to identity:**
+
+```powershell
 az role assignment create `
   --assignee $uamiPrincipalId `
   --role "Device Registry Contributor" `
   --scope $adrResourceId
+```
 
+**Get IoT Hub identity principal ID:**
+
+```powershell
 $hubIdentityPrincipalId = az iot hub show `
   --name $iotHubName `
   --resource-group $resourceGroup `
   --query identity.principalId -o tsv
+```
 
+**Assign Device Registry Contributor role to IoT Hub:**
+
+```powershell
 az role assignment create `
   --assignee $hubIdentityPrincipalId `
   --role "Device Registry Contributor" `
@@ -225,24 +251,38 @@ az role assignment create `
 
 Onwards we wire everything together.
 
+**Get IoT Hub connection string:**
+
 ```powershell
 $hubConnectionString = az iot hub connection-string show `
   --hub-name $iotHubName `
   --resource-group $resourceGroup `
   --policy-name iothubowner `
   --query connectionString -o tsv
+```
 
+**Create linked hub in DPS:**
+
+```powershell
 az iot dps linked-hub create `
   --dps-name $dpsName `
   --resource-group $resourceGroup `
   --connection-string $hubConnectionString `
   --location $location
+```
 
+**Get identity resource ID:**
+
+```powershell
 $uamiResourceId = az identity show `
   --name $userIdentity `
   --resource-group $resourceGroup `
   --query id -o tsv
+```
 
+**Update DPS with ADR and identity configuration:**
+
+```powershell
 az iot dps update `
   --name $dpsName `
   --resource-group $resourceGroup `
@@ -256,11 +296,17 @@ az iot dps update `
 
 Next up we sync ADR credentials into IoT Hub so certs verify correctly.
 
+**Sync credential policy to IoT Hub:**
+
 ```powershell
 az iot hub device-identity credential-policy sync `
   --hub-name $iotHubName `
   --resource-group $resourceGroup
+```
 
+**List certificates in IoT Hub:**
+
+```powershell
 az iot hub certificate list `
   --hub-name $iotHubName `
   --resource-group $resourceGroup
@@ -268,53 +314,16 @@ az iot hub certificate list `
 
 You should see the Microsoft-managed CA in the list.
 
-## Step 8: Create Enrollment Group (X.509 + CSR)
+## What You'll Need for Device Configuration
 
-We'll use X.509 certificates for attestation and CSR for certificate issuance.
+Collect these values for later posts:
 
-```powershell
-az iot dps enrollment-group create `
-  --dps-name $dpsName `
-  --resource-group $resourceGroup `
-  --enrollment-id $enrollmentGroupName `
-  --attestation-type x509 `
-  --ca-name "$registrationId-intermediate" `
-  --iot-hub-host-name "$iotHubName.azure-devices.net" `
-  --provisioning-status enabled `
-  --credential-policy $credentialPolicyName
+- **IdScope**: `$idScope` (from DPS overview)
+- **RegistrationId**: `$registrationId` (your device name)
+- **ProvisioningHost**: `global.azure-devices-provisioning.net`
+- **CredentialPolicy**: `$credentialPolicyName`
 
-$enrollmentGroup = az iot dps enrollment-group show `
-  --dps-name $dpsName `
-  --resource-group $resourceGroup `
-  --enrollment-id $enrollmentGroupName `
-  -o json | ConvertFrom-Json -AsHashTable
-
-Write-Host "Enrollment Group created with X.509 attestation" -ForegroundColor Cyan
-```
-
-## Step 9: Capture What You Need for the Device
-
-Collect these values for the next post:
-
-- IdScope: `$idScope`
-- RegistrationId: `$registrationId`
-- EnrollmentGroupKeyBase64: `$enrollmentKey`
-- ProvisioningHost: `global.azure-devices-provisioning.net`
-- CredentialPolicy: `$credentialPolicyName`
-
-Sample config:
-
-```json
-{
-  "Dps": {
-    "IdScope": "0ne00XXXXXX",
-    "RegistrationId": "dev001-skittlesorter",
-    "AttestationMethod": "SymmetricKey",
-    "EnrollmentGroupKeyBase64": "your-enrollment-key-here",
-    "ProvisioningHost": "global.azure-devices-provisioning.net"
-  }
-}
-```
+You'll use these when configuring your device application in Post 06.
 
 ## Verify in Portal
 
@@ -337,11 +346,10 @@ Now we check:
 ✅ IoT Hub created (Standard)  
 ✅ DPS created and ID Scope captured  
 ✅ ADR namespace + credential policy ready  
-✅ Links and roles wired up  
-✅ Enrollment group with symmetric key + CSR path
+✅ Links and roles wired up
 
-Next up we generate the X.509 material and talk CSR workflows.
+Next up we generate the X.509 bootstrap certificates and explore CSR workflows.
 
 ---
 
-[Next: Creating X.509 Certificates →](03-x509-and-csr-workflows.md)
+[Next: Understanding X.509 and CSR Workflows →](03-x509-and-csr-workflows.md)
