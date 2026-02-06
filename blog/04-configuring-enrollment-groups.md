@@ -4,7 +4,7 @@
 
 ---
 
-In this post, we'll configure Device Provisioning Service (DPS) enrollment groups that use Azure Device Registry (ADR) credential policies for certificate issuance. We'll cover both symmetric key and X.509 attestation methods.
+In this post, we'll configure Device Provisioning Service (DPS) enrollment groups that use Azure Device Registry (ADR) credential policies for certificate issuance. We'll focus on **X.509 attestation**, while still noting **symmetric key** as an option.
 
 ## What Are Enrollment Groups?
 
@@ -21,11 +21,11 @@ Think of enrollment groups as "templates" for device provisioning.
 
 | Type | Description | Use Case |
 |------|-------------|----------|
-| **Symmetric Key** | Shared secret attestation | Development, testing, simple devices |
 | **X.509 Certificate** | Certificate-based attestation | Production, high-security environments |
 | **TPM** | Hardware security module | Devices with TPM chips |
+| **Symmetric Key** | Shared secret attestation | Development, testing, simple devices |
 
-This post covers **Symmetric Key** and **X.509** with CSR-based certificate issuance.
+This post covers **X.509** with CSR-based certificate issuance. Symmetric key is an alternative option, but steps are not included here.
 
 ## Prerequisites
 
@@ -34,127 +34,7 @@ Before proceeding, ensure you've completed:
 - ADR credential policy created (`cert-policy`)
 - DPS linked to IoT Hub and ADR namespace
 
-## Option 1: Symmetric Key Attestation with CSR
-
-This is the **recommended approach for this project** because it balances simplicity and security:
-- **Phase 1 (Provisioning):** Device authenticates with symmetric key
-- **Phase 2 (Operation):** Device uses X.509 certificate issued by DPS
-
-### Step 1: Create Enrollment Group
-
-```powershell
-# Variables (from previous post)
-$dpsName = "dev001-skittlesorter-dps"
-$resourceGroup = "dev001-skittlesorter-rg"
-$iotHubName = "dev001-skittlesorter-hub"
-$enrollmentGroupName = "dev001-skittlesorter-group"
-$credentialPolicyName = "cert-policy"
-
-# Create symmetric key enrollment group with credential policy
-az iot dps enrollment-group create `
-  --dps-name $dpsName `
-  --resource-group $resourceGroup `
-  --enrollment-id $enrollmentGroupName `
-  --attestation-type symmetricKey `
-  --iot-hub-host-name "$iotHubName.azure-devices.net" `
-  --provisioning-status enabled `
-  --credential-policy $credentialPolicyName `
-  --edge-enabled false
-```
-
-**Key parameters:**
-- `--attestation-type symmetricKey` - Use symmetric key for DPS authentication
-- `--credential-policy $credentialPolicyName` - Link to ADR policy for certificate issuance
-- `--edge-enabled false` - Standard IoT device (not IoT Edge)
-
-### Step 2: Retrieve Enrollment Group Key
-
-```powershell
-# Get the primary key
-$enrollmentKey = az iot dps enrollment-group show `
-  --dps-name $dpsName `
-  --resource-group $resourceGroup `
-  --enrollment-id $enrollmentGroupName `
-  --query attestation.symmetricKey.primaryKey -o tsv
-
-Write-Host "Enrollment Group Primary Key:" -ForegroundColor Cyan
-Write-Host $enrollmentKey
-```
-
-> **Important:** Save this key securely! You'll need it in your device configuration.
-
-### Step 3: Derive Device Key
-
-Each device derives its own unique key from the enrollment group key:
-
-```csharp
-using System.Security.Cryptography;
-using System.Text;
-
-public static string DeriveDeviceKey(string enrollmentGroupKey, string registrationId)
-{
-    byte[] keyBytes = Convert.FromBase64String(enrollmentGroupKey);
-    using var hmac = new HMACSHA256(keyBytes);
-    byte[] deviceKeyBytes = hmac.ComputeHash(Encoding.UTF8.GetBytes(registrationId));
-    return Convert.ToBase64String(deviceKeyBytes);
-}
-
-// Example usage
-string enrollmentKey = "your-enrollment-group-key";
-string registrationId = "dev001-skittlesorter";
-string deviceKey = DeriveDeviceKey(enrollmentKey, registrationId);
-```
-
-**PowerShell equivalent:**
-
-```powershell
-function Get-DeviceKey {
-    param(
-        [string]$enrollmentKey,
-        [string]$registrationId
-    )
-    
-    $keyBytes = [Convert]::FromBase64String($enrollmentKey)
-    $hmac = New-Object System.Security.Cryptography.HMACSHA256
-    $hmac.Key = $keyBytes
-    $deviceKeyBytes = $hmac.ComputeHash([Text.Encoding]::UTF8.GetBytes($registrationId))
-    return [Convert]::ToBase64String($deviceKeyBytes)
-}
-
-$deviceKey = Get-DeviceKey -enrollmentKey $enrollmentKey -registrationId "dev001-skittlesorter"
-Write-Host "Device Key: $deviceKey"
-```
-
-### Step 4: Configuration for Device
-
-Your device application needs these values:
-
-```json
-{
-  "Dps": {
-    "IdScope": "0ne00XXXXXX",
-    "RegistrationId": "dev001-skittlesorter",
-    "AttestationMethod": "SymmetricKey",
-    "EnrollmentGroupKeyBase64": "your-enrollment-group-key-here",
-    "ProvisioningHost": "global.azure-devices-provisioning.net"
-  }
-}
-```
-
-The device will:
-1. Derive its unique key using `HMACSHA256`
-2. Generate a SAS token for DPS authentication
-3. Generate a CSR (Certificate Signing Request)
-4. Submit registration with CSR to DPS
-5. Receive assigned IoT Hub + X.509 certificate
-6. Connect to IoT Hub using X.509 certificate
-
-**Configuration values you'll need:**
-- `IdScope`: From DPS overview page
-- `RegistrationId`: Your device name
-- `EnrollmentGroupKeyBase64`: The primary key retrieved in Step 2
-
-## Option 2: X.509 Certificate Attestation with CSR
+## X.509 Certificate Attestation with CSR
 
 This approach uses an **existing X.509 certificate** (bootstrap certificate) for DPS authentication, then receives a **new certificate** for IoT Hub communication.
 
@@ -176,67 +56,54 @@ You should have already created bootstrap certificates in the previous post. If 
   -EnrollmentGroupId "dev001-skittlesorter-group"
 ```
 
-### Step 1: Upload CA Certificate to DPS
+### Step 1: Ensure CA is Uploaded and Verified
 
-If you used the automation script, this is already done. Otherwise:
+This was completed in [Post 03: X.509 and CSR Workflows](03-x509-and-csr-workflows.md). If you skipped that post, complete the CA upload and verification steps there before continuing.
 
-```powershell
-# Variables
-$dpsName = "dev001-skittlesorter-dps"
-$resourceGroup = "dev001-skittlesorter-rg"
-$caCertName = "SkittleSorterCA"
+**Quick checks (confirm both root and intermediate are verified):**
 
-# Upload CA certificate
-az iot dps certificate create `
-  --dps-name $dpsName `
-  --resource-group $resourceGroup `
-  --name $caCertName `
-  --path "./certs/ca/intermediate-ca.pem"
-```
-
-### Step 2: Verify CA Certificate (Proof of Possession)
-
-DPS requires proof that you control the private key:
+**Set variables:**
 
 ```powershell
-# Get etag
-$cert = az iot dps certificate show `
-  --dps-name $dpsName `
-  --resource-group $resourceGroup `
-  --certificate-name $caCertName `
-  -o json | ConvertFrom-Json
+$dpsName = "my-dps-001"
+$resourceGroup = "my-iot-rg"
+$registrationId = "my-device"
 
-# Generate verification code
-$verResponse = az iot dps certificate generate-verification-code `
-  --dps-name $dpsName `
-  --resource-group $resourceGroup `
-  --certificate-name $caCertName `
-  --etag $cert.etag `
-  -o json | ConvertFrom-Json
-
-$verificationCode = $verResponse.properties.verificationCode
-
-# Create verification certificate
-openssl genrsa -out verification.key 2048
-openssl req -new -key verification.key -out verification.csr -subj "/CN=$verificationCode"
-openssl x509 -req -in verification.csr -CA ./certs/ca/intermediate-ca.pem -CAkey ./certs/ca/intermediate-ca.key -out verification.pem -days 30 -sha256
-
-# Verify
-$certCheck = az iot dps certificate show `
-  --dps-name $dpsName `
-  --resource-group $resourceGroup `
-  --certificate-name $caCertName `
-  -o json | ConvertFrom-Json
-
-az iot dps certificate verify `
-  --dps-name $dpsName `
-  --resource-group $resourceGroup `
-  --certificate-name $caCertName `
-  --path "./verification.pem" `
-  --etag $certCheck.etag
+$rootCertName = "$registrationId-root"
+$intermediateCertName = "$registrationId-intermediate"
 ```
 
-### Step 3: Create X.509 Enrollment Group
+**Check root CA verification status:**
+
+```powershell
+az iot dps certificate show `
+  --dps-name $dpsName `
+  --resource-group $resourceGroup `
+  --certificate-name $rootCertName `
+  --query properties.isVerified -o tsv
+```
+
+**Check intermediate CA verification status:**
+
+```powershell
+az iot dps certificate show `
+  --dps-name $dpsName `
+  --resource-group $resourceGroup `
+  --certificate-name $intermediateCertName `
+  --query properties.isVerified -o tsv
+```
+
+### Step 2: Create X.509 Enrollment Group
+
+**Set variables for enrollment:**
+
+```powershell
+$enrollmentGroupName = "my-device-group"
+$iotHubName = "my-iothub-001"
+$credentialPolicyName = "cert-policy"
+```
+
+**Create enrollment group:**
 
 ```powershell
 az iot dps enrollment-group create `
@@ -244,20 +111,20 @@ az iot dps enrollment-group create `
   --resource-group $resourceGroup `
   --enrollment-id "${enrollmentGroupName}-x509" `
   --attestation-type x509 `
-  --ca-name "SkittleSorterCA" `
+  --ca-name "$registrationId-intermediate" `
   --iot-hub-host-name "$iotHubName.azure-devices.net" `
   --provisioning-status enabled `
   --credential-policy $credentialPolicyName `
   --edge-enabled false
 ```
 
-### Step 4: Configuration for Device
+### Step 3: Configuration for Device
 
 ```json
 {
   "Dps": {
     "IdScope": "0ne00XXXXXX",
-    "RegistrationId": "dev001-skittlesorter",
+    "RegistrationId": "my-device",
     "AttestationMethod": "X509",
     "AttestationCertPath": "./certs/device/device.pem",
     "AttestationCertPassword": "yourpassword",
@@ -295,7 +162,7 @@ The device will:
 
 ## What We Accomplished
 
-✅ Created enrollment groups for both symmetric key and X.509 attestation  
+✅ Created enrollment groups for X.509 attestation  
 ✅ Retrieved configuration values needed for device application  
 ✅ Understood the trade-offs between attestation methods  
 ✅ Ready to implement device provisioning code
