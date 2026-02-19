@@ -14,6 +14,8 @@
     Name of the DPS enrollment group to create (defaults to RegistrationId)
 .PARAMETER SkipEnrollment
     Skip creating DPS enrollment group (manual setup required)
+.PARAMETER SkipVerification
+    Skip certificate verification step (uploads certs but doesn't verify them)
 #>
 
 param(
@@ -23,7 +25,8 @@ param(
     [string]$ResourceGroup,
     [string]$CredentialPolicy = "default",
     [string]$EnrollmentGroupId,
-    [switch]$SkipEnrollment
+    [switch]$SkipEnrollment,
+    [switch]$SkipVerification
 )
 
 $ErrorActionPreference = "Stop"
@@ -146,7 +149,11 @@ Write-Host "  Valid: $($deviceX509.NotBefore) to $($deviceX509.NotAfter)" -Foreg
 # Step 4: Upload & verify root CA in DPS
 $rootVerified = $false
 if ($DpsName -and $ResourceGroup) {
-    Write-Host "[4/7] Uploading and verifying root CA in DPS..." -ForegroundColor Yellow
+    if ($SkipVerification) {
+        Write-Host "[4/7] Uploading root CA to DPS (verification skipped)..." -ForegroundColor Yellow
+    } else {
+        Write-Host "[4/7] Uploading and verifying root CA in DPS..." -ForegroundColor Yellow
+    }
     $rootCertName = "$RegistrationId-root"
     try {
         az iot dps certificate create `
@@ -156,49 +163,54 @@ if ($DpsName -and $ResourceGroup) {
             --path $rootCertPath `
             --output none
 
-        $cert = az iot dps certificate show `
-            --dps-name $DpsName `
-            --resource-group $ResourceGroup `
-            --certificate-name $rootCertName `
-            -o json | ConvertFrom-Json
-        $etag = if ($cert.properties -and $cert.properties.etag) { $cert.properties.etag } else { $cert.etag }
+        if ($SkipVerification) {
+            Write-Host "  ✓ Root CA uploaded (not verified)" -ForegroundColor Yellow
+            $rootVerified = $false
+        } else {
+            $cert = az iot dps certificate show `
+                --dps-name $DpsName `
+                --resource-group $ResourceGroup `
+                --certificate-name $rootCertName `
+                -o json | ConvertFrom-Json
+            $etag = if ($cert.properties -and $cert.properties.etag) { $cert.properties.etag } else { $cert.etag }
 
-        $ver = az iot dps certificate generate-verification-code `
-            --dps-name $DpsName `
-            --resource-group $ResourceGroup `
-            --certificate-name $rootCertName `
-            --etag $etag `
-            -o json | ConvertFrom-Json
-        $code = $ver.properties.verificationCode
-        $etag = if ($ver.properties -and $ver.properties.etag) { $ver.properties.etag } else { $ver.etag }
+            $ver = az iot dps certificate generate-verification-code `
+                --dps-name $DpsName `
+                --resource-group $ResourceGroup `
+                --certificate-name $rootCertName `
+                --etag $etag `
+                -o json | ConvertFrom-Json
+            $code = $ver.properties.verificationCode
+            $etag = if ($ver.properties -and $ver.properties.etag) { $ver.properties.etag } else { $ver.etag }
 
-        Write-Host "  Verification Code: $code" -ForegroundColor Green
+            Write-Host "  Verification Code: $code" -ForegroundColor Green
 
-        $rootDir = Split-Path $rootCertPath
-        Push-Location $rootDir
-        Remove-Item verification.key, verification.csr, verification.pem, root.pem.srl -ErrorAction SilentlyContinue
-        openssl genrsa -out verification.key 2048
-        openssl req -new -key verification.key -out verification.csr -subj "/CN=$code"
-        openssl x509 -req -in verification.csr -CA root.pem -CAkey $rootKeyPath -CAcreateserial -out verification.pem -days 1 -sha256
-        Pop-Location
+            $rootDir = Split-Path $rootCertPath
+            Push-Location $rootDir
+            Remove-Item verification.key, verification.csr, verification.pem, root.pem.srl -ErrorAction SilentlyContinue
+            openssl genrsa -out verification.key 2048
+            openssl req -new -key verification.key -out verification.csr -subj "/CN=$code"
+            openssl x509 -req -in verification.csr -CA root.pem -CAkey $rootKeyPath -CAcreateserial -out verification.pem -days 1 -sha256
+            Pop-Location
 
-        $verPem = Join-Path $rootDir "verification.pem"
+            $verPem = Join-Path $rootDir "verification.pem"
 
-        az iot dps certificate verify `
-            --dps-name $DpsName `
-            --resource-group $ResourceGroup `
-            --certificate-name $rootCertName `
-            --path $verPem `
-            --etag $etag `
-            --output none
+            az iot dps certificate verify `
+                --dps-name $DpsName `
+                --resource-group $ResourceGroup `
+                --certificate-name $rootCertName `
+                --path $verPem `
+                --etag $etag `
+                --output none
 
-        $final = az iot dps certificate show `
-            --dps-name $DpsName `
-            --resource-group $ResourceGroup `
-            --certificate-name $rootCertName `
-            -o json | ConvertFrom-Json
-        $rootVerified = $final.properties.isVerified
-        Write-Host "  Root isVerified: $rootVerified" -ForegroundColor Cyan
+            $final = az iot dps certificate show `
+                --dps-name $DpsName `
+                --resource-group $ResourceGroup `
+                --certificate-name $rootCertName `
+                -o json | ConvertFrom-Json
+            $rootVerified = $final.properties.isVerified
+            Write-Host "  Root isVerified: $rootVerified" -ForegroundColor Cyan
+        }
     } catch {
         Write-Host "  ⚠ Root verification failed: $($_.Exception.Message)" -ForegroundColor Red
     }
@@ -209,7 +221,11 @@ if ($DpsName -and $ResourceGroup) {
 # Step 5: Upload & verify intermediate CA in DPS
 $intermediateVerified = $false
 if ($DpsName -and $ResourceGroup) {
-    Write-Host "[5/7] Uploading and verifying intermediate CA in DPS..." -ForegroundColor Yellow
+    if ($SkipVerification) {
+        Write-Host "[5/7] Uploading intermediate CA to DPS (verification skipped)..." -ForegroundColor Yellow
+    } else {
+        Write-Host "[5/7] Uploading and verifying intermediate CA in DPS..." -ForegroundColor Yellow
+    }
     $intermediateCertName = "$RegistrationId-intermediate"
     try {
         az iot dps certificate create `
@@ -219,48 +235,53 @@ if ($DpsName -and $ResourceGroup) {
             --path $caCertPath `
             --output none
 
-        $cert = az iot dps certificate show `
-            --dps-name $DpsName `
-            --resource-group $ResourceGroup `
-            --certificate-name $intermediateCertName `
-            -o json | ConvertFrom-Json
-        $etag = if ($cert.properties -and $cert.properties.etag) { $cert.properties.etag } else { $cert.etag }
+        if ($SkipVerification) {
+            Write-Host "  ✓ Intermediate CA uploaded (not verified)" -ForegroundColor Yellow
+            $intermediateVerified = $false
+        } else {
+            $cert = az iot dps certificate show `
+                --dps-name $DpsName `
+                --resource-group $ResourceGroup `
+                --certificate-name $intermediateCertName `
+                -o json | ConvertFrom-Json
+            $etag = if ($cert.properties -and $cert.properties.etag) { $cert.properties.etag } else { $cert.etag }
 
-        $ver = az iot dps certificate generate-verification-code `
-            --dps-name $DpsName `
-            --resource-group $ResourceGroup `
-            --certificate-name $intermediateCertName `
-            --etag $etag `
-            -o json | ConvertFrom-Json
-        $code = $ver.properties.verificationCode
-        $etag = if ($ver.properties -and $ver.properties.etag) { $ver.properties.etag } else { $ver.etag }
+            $ver = az iot dps certificate generate-verification-code `
+                --dps-name $DpsName `
+                --resource-group $ResourceGroup `
+                --certificate-name $intermediateCertName `
+                --etag $etag `
+                -o json | ConvertFrom-Json
+            $code = $ver.properties.verificationCode
+            $etag = if ($ver.properties -and $ver.properties.etag) { $ver.properties.etag } else { $ver.etag }
 
-        Write-Host "  Verification Code: $code" -ForegroundColor Green
+            Write-Host "  Verification Code: $code" -ForegroundColor Green
 
-        Push-Location $caDir
-        Remove-Item verification-intermediate.key, verification-intermediate.csr, verification-intermediate.pem, ca.pem.srl -ErrorAction SilentlyContinue
-        openssl genrsa -out verification-intermediate.key 2048
-        openssl req -new -key verification-intermediate.key -out verification-intermediate.csr -subj "/CN=$code"
-        openssl x509 -req -in verification-intermediate.csr -CA ca.pem -CAkey ca.key -CAcreateserial -out verification-intermediate.pem -days 1 -sha256
-        Pop-Location
+            Push-Location $caDir
+            Remove-Item verification-intermediate.key, verification-intermediate.csr, verification-intermediate.pem, ca.pem.srl -ErrorAction SilentlyContinue
+            openssl genrsa -out verification-intermediate.key 2048
+            openssl req -new -key verification-intermediate.key -out verification-intermediate.csr -subj "/CN=$code"
+            openssl x509 -req -in verification-intermediate.csr -CA ca.pem -CAkey ca.key -CAcreateserial -out verification-intermediate.pem -days 1 -sha256
+            Pop-Location
 
-        $verPem = Join-Path $caDir "verification-intermediate.pem"
+            $verPem = Join-Path $caDir "verification-intermediate.pem"
 
-        az iot dps certificate verify `
-            --dps-name $DpsName `
-            --resource-group $ResourceGroup `
-            --certificate-name $intermediateCertName `
-            --path $verPem `
-            --etag $etag `
-            --output none
+            az iot dps certificate verify `
+                --dps-name $DpsName `
+                --resource-group $ResourceGroup `
+                --certificate-name $intermediateCertName `
+                --path $verPem `
+                --etag $etag `
+                --output none
 
-        $final = az iot dps certificate show `
-            --dps-name $DpsName `
-            --resource-group $ResourceGroup `
-            --certificate-name $intermediateCertName `
-            -o json | ConvertFrom-Json
-        $intermediateVerified = $final.properties.isVerified
-        Write-Host "  Intermediate isVerified: $intermediateVerified" -ForegroundColor Cyan
+            $final = az iot dps certificate show `
+                --dps-name $DpsName `
+                --resource-group $ResourceGroup `
+                --certificate-name $intermediateCertName `
+                -o json | ConvertFrom-Json
+            $intermediateVerified = $final.properties.isVerified
+            Write-Host "  Intermediate isVerified: $intermediateVerified" -ForegroundColor Cyan
+        }
     } catch {
         Write-Host "  ⚠ Intermediate verification failed: $($_.Exception.Message)" -ForegroundColor Red
     }
@@ -340,11 +361,17 @@ if ($SkipEnrollment) {
     Write-Host "  Intermediate (verify in DPS): $caThumbprint"
     Write-Host "  Leaf: $thumbprint"
 } else {
-    Write-Host "`n=== Verification Status ===" -ForegroundColor Cyan
-    Write-Host "Root CA isVerified: $rootVerified" -ForegroundColor $(if ($rootVerified) { "Green" } else { "Red" })
-    Write-Host "Intermediate CA isVerified: $intermediateVerified" -ForegroundColor $(if ($intermediateVerified) { "Green" } else { "Red" })
-    if (-not $rootVerified -or -not $intermediateVerified) {
-        Write-Host "`n⚠ WARNING: Both root and intermediate must be verified for provisioning to work!" -ForegroundColor Yellow
+    if ($SkipVerification) {
+        Write-Host "\n=== Verification Status ===" -ForegroundColor Cyan
+        Write-Host "Certificate verification was SKIPPED (-SkipVerification flag used)" -ForegroundColor Yellow
+        Write-Host "ℹ Note: Verification is optional but recommended for production environments" -ForegroundColor Gray
+    } else {
+        Write-Host "\n=== Verification Status ===" -ForegroundColor Cyan
+        Write-Host "Root CA isVerified: $rootVerified" -ForegroundColor $(if ($rootVerified) { "Green" } else { "Red" })
+        Write-Host "Intermediate CA isVerified: $intermediateVerified" -ForegroundColor $(if ($intermediateVerified) { "Green" } else { "Red" })
+        if (-not $rootVerified -or -not $intermediateVerified) {
+            Write-Host "\n⚠ WARNING: Verification failed - this may cause provisioning issues!" -ForegroundColor Yellow
+        }
     }
 }
 
