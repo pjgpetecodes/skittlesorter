@@ -571,12 +571,12 @@ sequenceDiagram
 
 **Key Steps:**
 1. **Device sends provisioning request + CSR** - Device authenticates with onboarding credential and submits Certificate Signing Request
-2. **DPS verifies onboarding credential** - Validates device identity using pre-configured credential (X.509, symmetric key, or TPM)
+2. **DPS verifies onboarding credential** - Validates device identity (X.509, symmetric key, or TPM)
 3. **Device provisioned to Hub and registered in ADR** - Device identity created in both services
-4. **Request operational certificate** - DPS forwards CSR to PKI (issuing CA/policy)
-5. **ICA signs and returns operational certificate** - Issuing CA validates CSR and issues leaf certificate
-6. **Return operational cert + Hub endpoint** - DPS sends certificate chain and connection details back to device
-7. **Device authenticates with IoT Hub** - Device uses new operational certificate for secure TLS connection
+4. **Request operational certificate** - DPS uses the CSR to request an operational certificate from the PKI. The PKI validates the CSR and forwards it to the policy (issuing CA) linked to the DPS enrollment.
+5. **ICA signs and returns operational certificate** - Issuing CA issues leaf certificate
+6. **Return operational cert + Hub endpoint** - DPS sends certificate chain back to device
+7. **Device authenticates with IoT Hub** - Device uses new operational certificate for all future connections
 
 ### Step-by-Step: Device Perspective
 

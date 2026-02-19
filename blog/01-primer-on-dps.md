@@ -50,6 +50,9 @@ Devices can be reassigned to different IoT Hubs based on business logic, geoloca
 ### Multi-tenancy
 Different devices can automatically be directed to different IoT Hubs based on enrollment configuration.
 
+### Separation: 
+Separation between bootstrap and operational credentials for devices.
+
 ### 🆕 Automated Certificate Management (2025 Feature)
 DPS can now issue X.509 certificates dynamically during provisioning using Certificate Signing Requests (CSR). No need to run your own Certificate Authority!
 
@@ -154,6 +157,12 @@ ADR is a **device identity and management layer** that:
 - Decouples device identity from IoT Hub
 - Enables multi-hub scenarios
 - Provides query and update APIs
+
+### What is an ADR Namespace?
+
+An ADR namespace establishes a management and security boundary for devices represented in ADR.
+
+A namespace can include devices connecting to different IoT Hub instances, and is where you can enable new features like Microsoft-backed X.509 certificate management (preview).
 
 ### Why ADR Matters
 
@@ -295,8 +304,6 @@ One powerful pattern enabled by the new API:
 - Only a few devices (< 10)
 - Devices never move between hubs
 - Prototyping with connection strings is acceptable
-- You don't need automated provisioning
-- You prefer managing your own CA infrastructure
 
 ## Preview API Status
 

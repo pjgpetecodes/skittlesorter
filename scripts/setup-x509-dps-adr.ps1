@@ -61,6 +61,9 @@
 .PARAMETER SkipEnrollment
     Skip enrollment group creation (manual setup required).
 
+.PARAMETER SkipVerification
+    Skip certificate verification step (uploads certs but doesn't verify them).
+
 .EXAMPLE
     .\setup-x509-dps-adr.ps1 -ResourceGroup "iot-demo-rg" -Location "eastus" -IoTHubName "my-hub-001" -DPSName "my-dps-001" -AdrNamespace "my-adr-001" -UserIdentity "my-uami"
 
@@ -109,7 +112,9 @@ param(
 
     [switch]$SkipCertGeneration,
 
-    [switch]$SkipEnrollment
+    [switch]$SkipEnrollment,
+
+    [switch]$SkipVerification
 )
 
 # Error handling
@@ -275,13 +280,52 @@ if (-not $SkipAzureSetup) {
 
     # Create ADR Namespace with System-Assigned Identity and Default Policy
     Write-Log "Creating ADR Namespace: $AdrNamespace (this may take up to 5 minutes...)" "INFO"
-    az iot adr ns create `
+    
+    $adrCreateOutput = az iot adr ns create `
         --name $AdrNamespace `
         --resource-group $ResourceGroup `
         --location $Location `
         --enable-credential-policy true `
         --policy-name $CredentialPolicyName `
-        --output none
+        --output json 2>&1
+    
+    if ($LASTEXITCODE -ne 0) {
+        $errorMsg = $adrCreateOutput | Out-String
+        if ($errorMsg -match "CredentialQuotaExceeded") {
+            Write-Log "Credential quota exceeded in region $Location" "ERROR"
+            Write-Log "Azure Device Registry allows a maximum of 2 credential resources per tenant per region." "ERROR"
+            Write-Log "" "INFO"
+            Write-Log "To resolve this issue:" "INFO"
+            Write-Log "" "INFO"
+            Write-Log "1. List ADR namespaces to find which have credentials:" "INFO"
+            Write-Log "   az iot adr ns list --subscription $subscriptionId -o table" "INFO"
+            Write-Log "" "INFO"
+            Write-Log "2. Delete credentials from unused namespaces (RECOMMENDED):" "INFO"
+            Write-Log "   az iot adr ns credential delete --ns <NAMESPACE> -g <RESOURCE_GROUP>" "INFO"
+            Write-Log "" "INFO"
+            Write-Log "3. Show credentials for a specific namespace:" "INFO"
+            Write-Log "   az iot adr ns show --name <NAMESPACE> --resource-group <RG> --query 'properties.credentials'" "INFO"
+            Write-Log "" "INFO"
+            Write-Log "4. List all credential resources directly:" "INFO"
+            Write-Log "   az resource list --resource-type 'Microsoft.DeviceRegistry/credentials' --subscription $subscriptionId" "INFO"
+            Write-Log "" "INFO"
+            Write-Log "5. Delete unused namespace (if credential deletion doesn't work):" "INFO"
+            Write-Log "   az iot adr ns delete --name <NAMESPACE> --resource-group <RG>" "INFO"
+            Write-Log "" "INFO"
+            Write-Log "   If deletion fails due to IoT Hub DNS errors, try:" "INFO"
+            Write-Log "   a) Delete the associated IoT Hub first:" "INFO"
+            Write-Log "      az iot hub delete --name <HUB_NAME> --resource-group <RG>" "INFO"
+            Write-Log "   b) Then delete the namespace" "INFO"
+            Write-Log "   c) Or use Azure Portal to force delete resources" "INFO"
+            Write-Log "" "INFO"
+            Write-Log "6. Or use a different Azure region: -Location 'westus2' or 'centralus'" "INFO"
+            Write-Log "" "INFO"
+            throw "Credential quota exceeded. Please clean up existing credentials or use a different region."
+        } else {
+            Write-Log "Failed to create ADR namespace: $errorMsg" "ERROR"
+            throw "ADR namespace creation failed"
+        }
+    }
     
     $namespaceResourceId = az iot adr ns show `
         --name $AdrNamespace `
@@ -362,11 +406,18 @@ if (-not $SkipAzureSetup) {
 
     # Sync credentials and policies to IoT Hub
     Write-Log "Syncing ADR credentials and policies to IoT Hub..." "INFO"
-    az iot adr ns credential sync `
+    $syncOutput = az iot adr ns credential sync `
         --namespace $AdrNamespace `
         --resource-group $ResourceGroup `
-        --output none
-    Write-Log "Credentials synced" "SUCCESS"
+        --output json 2>&1
+    
+    if ($LASTEXITCODE -ne 0) {
+        $errorMsg = $syncOutput | Out-String
+        Write-Log "Warning: Credential sync encountered an issue: $errorMsg" "WARNING"
+        Write-Log "This may not be critical if credentials were already synced" "WARNING"
+    } else {
+        Write-Log "Credentials synced" "SUCCESS"
+    }
 
     # Validate IoT Hub CA certificate
     Write-Log "Validating IoT Hub CA certificate registration..." "INFO"
@@ -643,56 +694,60 @@ if ($AttestationType -eq "X509") {
     if ($LASTEXITCODE -eq 0) {
         Write-Log "Root CA uploaded to DPS" "SUCCESS"
         
-        # Generate verification code for Root CA
-        Write-Log "Generating verification code for Root CA..." "INFO"
-        try {
-            $cert = az iot dps certificate show `
-                --dps-name $DPSName `
-                --resource-group $ResourceGroup `
-                --certificate-name $rootCertName `
-                -o json 2>$null | ConvertFrom-Json
-            $etag = if ($cert.properties -and $cert.properties.etag) { $cert.properties.etag } else { $cert.etag }
+        if ($SkipVerification) {
+            Write-Log "Skipping Root CA verification (SkipVerification flag used)" "WARNING"
+        } else {
+            # Generate verification code for Root CA
+            Write-Log "Generating verification code for Root CA..." "INFO"
+            try {
+                $cert = az iot dps certificate show `
+                    --dps-name $DPSName `
+                    --resource-group $ResourceGroup `
+                    --certificate-name $rootCertName `
+                    -o json 2>$null | ConvertFrom-Json
+                $etag = if ($cert.properties -and $cert.properties.etag) { $cert.properties.etag } else { $cert.etag }
 
-            $ver = az iot dps certificate generate-verification-code `
-                --dps-name $DPSName `
-                --resource-group $ResourceGroup `
-                --certificate-name $rootCertName `
-                --etag $etag `
-                -o json 2>$null | ConvertFrom-Json
-            $code = $ver.properties.verificationCode
-            $etag = if ($ver.properties -and $ver.properties.etag) { $ver.properties.etag } else { $ver.etag }
+                $ver = az iot dps certificate generate-verification-code `
+                    --dps-name $DPSName `
+                    --resource-group $ResourceGroup `
+                    --certificate-name $rootCertName `
+                    --etag $etag `
+                    -o json 2>$null | ConvertFrom-Json
+                $code = $ver.properties.verificationCode
+                $etag = if ($ver.properties -and $ver.properties.etag) { $ver.properties.etag } else { $ver.etag }
 
-            Write-Log "Verification Code: $code" "INFO"
+                Write-Log "Verification Code: $code" "INFO"
 
-            # Create verification certificate
-            $rootVerDir = Split-Path $rootCertPath
-            Push-Location $rootVerDir
-            Remove-Item verification.key, verification.csr, verification.pem, root.pem.srl -ErrorAction SilentlyContinue
-            openssl genrsa -out verification.key 2048 2>$null
-            openssl req -new -key verification.key -out verification.csr -subj "/CN=$code" 2>$null
-            openssl x509 -req -in verification.csr -CA root.pem -CAkey $rootKeyPath -CAcreateserial -out verification.pem -days 1 -sha256 2>$null
-            Pop-Location
+                # Create verification certificate
+                $rootVerDir = Split-Path $rootCertPath
+                Push-Location $rootVerDir
+                Remove-Item verification.key, verification.csr, verification.pem, root.pem.srl -ErrorAction SilentlyContinue
+                openssl genrsa -out verification.key 2048 2>$null
+                openssl req -new -key verification.key -out verification.csr -subj "/CN=$code" 2>$null
+                openssl x509 -req -in verification.csr -CA root.pem -CAkey $rootKeyPath -CAcreateserial -out verification.pem -days 1 -sha256 2>$null
+                Pop-Location
 
-            $verPem = Join-Path $rootVerDir "verification.pem"
+                $verPem = Join-Path $rootVerDir "verification.pem"
 
-            # Verify Root CA in DPS
-            az iot dps certificate verify `
-                --dps-name $DPSName `
-                --resource-group $ResourceGroup `
-                --certificate-name $rootCertName `
-                --path $verPem `
-                --etag $etag `
-                --output none 2>$null
+                # Verify Root CA in DPS
+                az iot dps certificate verify `
+                    --dps-name $DPSName `
+                    --resource-group $ResourceGroup `
+                    --certificate-name $rootCertName `
+                    --path $verPem `
+                    --etag $etag `
+                    --output none 2>$null
 
-            $final = az iot dps certificate show `
-                --dps-name $DPSName `
-                --resource-group $ResourceGroup `
-                --certificate-name $rootCertName `
-                -o json 2>$null | ConvertFrom-Json
-            $rootVerified = $final.properties.isVerified
-            Write-Log "Root CA isVerified: $rootVerified" $(if ($rootVerified) { "SUCCESS" } else { "WARNING" })
-        } catch {
-            Write-Log "Root CA verification failed: $($_.Exception.Message)" "WARNING"
+                $final = az iot dps certificate show `
+                    --dps-name $DPSName `
+                    --resource-group $ResourceGroup `
+                    --certificate-name $rootCertName `
+                    -o json 2>$null | ConvertFrom-Json
+                $rootVerified = $final.properties.isVerified
+                Write-Log "Root CA isVerified: $rootVerified" $(if ($rootVerified) { "SUCCESS" } else { "WARNING" })
+            } catch {
+                Write-Log "Root CA verification failed: $($_.Exception.Message)" "WARNING"
+            }
         }
     } else {
         Write-Log "Root CA may already exist in DPS" "INFO"
@@ -712,56 +767,60 @@ if ($AttestationType -eq "X509") {
     if ($LASTEXITCODE -eq 0) {
         Write-Log "Intermediate CA uploaded to DPS" "SUCCESS"
         
-        # Generate verification code for Intermediate CA
-        Write-Log "Generating verification code for Intermediate CA..." "INFO"
-        try {
-            $cert = az iot dps certificate show `
-                --dps-name $DPSName `
-                --resource-group $ResourceGroup `
-                --certificate-name $caCertName `
-                -o json 2>$null | ConvertFrom-Json
-            $etag = if ($cert.properties -and $cert.properties.etag) { $cert.properties.etag } else { $cert.etag }
+        if ($SkipVerification) {
+            Write-Log "Skipping Intermediate CA verification (SkipVerification flag used)" "WARNING"
+        } else {
+            # Generate verification code for Intermediate CA
+            Write-Log "Generating verification code for Intermediate CA..." "INFO"
+            try {
+                $cert = az iot dps certificate show `
+                    --dps-name $DPSName `
+                    --resource-group $ResourceGroup `
+                    --certificate-name $caCertName `
+                    -o json 2>$null | ConvertFrom-Json
+                $etag = if ($cert.properties -and $cert.properties.etag) { $cert.properties.etag } else { $cert.etag }
 
-            $ver = az iot dps certificate generate-verification-code `
-                --dps-name $DPSName `
-                --resource-group $ResourceGroup `
-                --certificate-name $caCertName `
-                --etag $etag `
-                -o json 2>$null | ConvertFrom-Json
-            $code = $ver.properties.verificationCode
-            $etag = if ($ver.properties -and $ver.properties.etag) { $ver.properties.etag } else { $ver.etag }
+                $ver = az iot dps certificate generate-verification-code `
+                    --dps-name $DPSName `
+                    --resource-group $ResourceGroup `
+                    --certificate-name $caCertName `
+                    --etag $etag `
+                    -o json 2>$null | ConvertFrom-Json
+                $code = $ver.properties.verificationCode
+                $etag = if ($ver.properties -and $ver.properties.etag) { $ver.properties.etag } else { $ver.etag }
 
-            Write-Log "Verification Code: $code" "INFO"
+                Write-Log "Verification Code: $code" "INFO"
 
-            # Create verification certificate
-            $caVerDir = Split-Path $caCertPath
-            Push-Location $caVerDir
-            Remove-Item verification-intermediate.key, verification-intermediate.csr, verification-intermediate.pem, ca.pem.srl -ErrorAction SilentlyContinue
-            openssl genrsa -out verification-intermediate.key 2048 2>$null
-            openssl req -new -key verification-intermediate.key -out verification-intermediate.csr -subj "/CN=$code" 2>$null
-            openssl x509 -req -in verification-intermediate.csr -CA ca.pem -CAkey $caKeyPath -CAcreateserial -out verification-intermediate.pem -days 1 -sha256 2>$null
-            Pop-Location
+                # Create verification certificate
+                $caVerDir = Split-Path $caCertPath
+                Push-Location $caVerDir
+                Remove-Item verification-intermediate.key, verification-intermediate.csr, verification-intermediate.pem, ca.pem.srl -ErrorAction SilentlyContinue
+                openssl genrsa -out verification-intermediate.key 2048 2>$null
+                openssl req -new -key verification-intermediate.key -out verification-intermediate.csr -subj "/CN=$code" 2>$null
+                openssl x509 -req -in verification-intermediate.csr -CA ca.pem -CAkey $caKeyPath -CAcreateserial -out verification-intermediate.pem -days 1 -sha256 2>$null
+                Pop-Location
 
-            $verPem = Join-Path $caVerDir "verification-intermediate.pem"
+                $verPem = Join-Path $caVerDir "verification-intermediate.pem"
 
-            # Verify Intermediate CA in DPS
-            az iot dps certificate verify `
-                --dps-name $DPSName `
-                --resource-group $ResourceGroup `
-                --certificate-name $caCertName `
-                --path $verPem `
-                --etag $etag `
-                --output none 2>$null
+                # Verify Intermediate CA in DPS
+                az iot dps certificate verify `
+                    --dps-name $DPSName `
+                    --resource-group $ResourceGroup `
+                    --certificate-name $caCertName `
+                    --path $verPem `
+                    --etag $etag `
+                    --output none 2>$null
 
-            $final = az iot dps certificate show `
-                --dps-name $DPSName `
-                --resource-group $ResourceGroup `
-                --certificate-name $caCertName `
-                -o json 2>$null | ConvertFrom-Json
-            $intermediateVerified = $final.properties.isVerified
-            Write-Log "Intermediate CA isVerified: $intermediateVerified" $(if ($intermediateVerified) { "SUCCESS" } else { "WARNING" })
-        } catch {
-            Write-Log "Intermediate CA verification failed: $($_.Exception.Message)" "WARNING"
+                $final = az iot dps certificate show `
+                    --dps-name $DPSName `
+                    --resource-group $ResourceGroup `
+                    --certificate-name $caCertName `
+                    -o json 2>$null | ConvertFrom-Json
+                $intermediateVerified = $final.properties.isVerified
+                Write-Log "Intermediate CA isVerified: $intermediateVerified" $(if ($intermediateVerified) { "SUCCESS" } else { "WARNING" })
+            } catch {
+                Write-Log "Intermediate CA verification failed: $($_.Exception.Message)" "WARNING"
+            }
         }
     } else {
         Write-Log "Intermediate CA may already exist in DPS" "INFO"
