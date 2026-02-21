@@ -1,5 +1,24 @@
 # Skittle Sorter
 
+## Use the NuGet Package (Fastest Path)
+
+If you only need the DPS/ADR preview integration in your own C# app, use the `AzureDpsFramework` NuGet package instead of copying framework source files.
+
+**Why use the package?**
+- Keeps your app code clean (consume API, don’t fork internals)
+- Lets you pin a known version and upgrade intentionally
+- Gives teams a consistent integration path while official SDK support is still pending
+
+**Quick start (consumer app):**
+1. Add a GitHub Packages feed to your `NuGet.config` (owner feed URL):
+  - `https://nuget.pkg.github.com/pjgpetecodes/index.json`
+2. Install a pinned version:
+  - `dotnet add package AzureDpsFramework --version 0.1.2-preview.1`
+3. Restore/build:
+  - `dotnet restore && dotnet build`
+
+For full package feed setup and versioning details, see [AzureDpsFramework/README.md](AzureDpsFramework/README.md#nuget-distribution).
+
 ## Documentation
 - Quickstart: [docs/Quickstart.md](docs/Quickstart.md)
 - Hardware: [docs/Hardware.md](docs/Hardware.md)
