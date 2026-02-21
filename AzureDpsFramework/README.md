@@ -25,6 +25,49 @@ This library works around these limitations by implementing the **DPS MQTT proto
 ✅ **X.509 Certificate Loading** - Parse and load issued certificates with private keys  
 ✅ **Preview API Support** - Access to `2025-07-01-preview` API features
 
+## NuGet Distribution
+
+This library is packaged as a NuGet package named `AzureDpsFramework` for internal distribution.
+
+### Versioning Strategy
+
+- Use semantic versioning with preview suffixes while features are in preview (for example `0.2.0-preview.1`).
+- Create git tags in the form `v<version>` (for example `v0.2.0-preview.1`).
+- The publish workflow uses the tag value as the NuGet package version.
+
+### GitHub Packages Feed Setup
+
+Create or update `NuGet.config` in the consuming repository:
+
+```xml
+<?xml version="1.0" encoding="utf-8"?>
+<configuration>
+  <packageSources>
+    <add key="github" value="https://nuget.pkg.github.com/YOUR_ORG_OR_USER/index.json" />
+    <add key="nuget.org" value="https://api.nuget.org/v3/index.json" />
+  </packageSources>
+  <packageSourceCredentials>
+    <github>
+      <add key="Username" value="YOUR_GITHUB_USERNAME" />
+      <add key="ClearTextPassword" value="YOUR_GITHUB_PAT" />
+    </github>
+  </packageSourceCredentials>
+</configuration>
+```
+
+### Install / Update
+
+```bash
+dotnet add package AzureDpsFramework --version 0.2.0-preview.1
+```
+
+In CI, ensure credentials are available for GitHub Packages restore.
+
+### Publish Pipeline
+
+- Build/package artifact workflow: `.github/workflows/build-azure-dps-framework-package.yml`
+- Tag-based publish workflow: `.github/workflows/publish-azure-dps-framework-package.yml`
+
 ## How It Works
 
 ### Authentication Methods

@@ -1,0 +1,43 @@
+name: Build AzureDpsFramework Package
+
+on:
+  workflow_dispatch:
+  push:
+    branches: [ main, master ]
+    paths:
+      - "AzureDpsFramework/**"
+      - ".github/workflows/build-azure-dps-framework-package.yml"
+  pull_request:
+    paths:
+      - "AzureDpsFramework/**"
+      - ".github/workflows/build-azure-dps-framework-package.yml"
+
+jobs:
+  pack:
+    runs-on: windows-latest
+
+    steps:
+      - name: Checkout
+        uses: actions/checkout@v4
+
+      - name: Setup .NET
+        uses: actions/setup-dotnet@v4
+        with:
+          dotnet-version: "10.0.x"
+
+      - name: Restore
+        run: dotnet restore ./AzureDpsFramework/AzureDpsFramework.csproj
+
+      - name: Build
+        run: dotnet build ./AzureDpsFramework/AzureDpsFramework.csproj --configuration Release --no-restore
+
+      - name: Pack
+        run: dotnet pack ./AzureDpsFramework/AzureDpsFramework.csproj --configuration Release --no-build --output ./artifacts/nuget
+
+      - name: Upload NuGet artifacts
+        uses: actions/upload-artifact@v4
+        with:
+          name: AzureDpsFramework-nuget
+          path: |
+            artifacts/nuget/*.nupkg
+            artifacts/nuget/*.snupkg

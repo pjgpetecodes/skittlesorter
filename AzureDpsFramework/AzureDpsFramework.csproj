@@ -7,6 +7,19 @@
     <NoWarn>$(NoWarn);0436;2001</NoWarn>
     <GenerateAssemblyInfo>false</GenerateAssemblyInfo>
     <GenerateTargetFrameworkAttribute>false</GenerateTargetFrameworkAttribute>
+    <IsPackable>true</IsPackable>
+    <PackageId>AzureDpsFramework</PackageId>
+    <Version>0.1.0-preview</Version>
+    <Authors>Skittle Sorter Contributors</Authors>
+    <Company>Skittle Sorter Contributors</Company>
+    <Description>Azure DPS MQTT framework for preview API workflows including CSR-based X.509 certificate issuance and ADR credential policy scenarios.</Description>
+    <PackageTags>azure;iot;dps;adr;mqtt;x509;csr;preview</PackageTags>
+    <PackageLicenseExpression>MIT</PackageLicenseExpression>
+    <PackageReadmeFile>README.md</PackageReadmeFile>
+    <RepositoryType>git</RepositoryType>
+    <PublishRepositoryUrl>true</PublishRepositoryUrl>
+    <IncludeSymbols>true</IncludeSymbols>
+    <SymbolPackageFormat>snupkg</SymbolPackageFormat>
   </PropertyGroup>
 
   <ItemGroup>
@@ -14,6 +27,10 @@
     <PackageReference Include="MQTTnet" Version="4.3.3.952" />
     <PackageReference Include="Newtonsoft.Json" Version="13.0.4" />
     <PackageReference Include="Azure.Identity" Version="1.17.1" />
+  </ItemGroup>
+
+  <ItemGroup>
+    <None Include="README.md" Pack="true" PackagePath="\" />
   </ItemGroup>
 
 </Project>

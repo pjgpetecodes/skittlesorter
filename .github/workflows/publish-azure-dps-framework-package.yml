@@ -1,0 +1,56 @@
+name: Publish AzureDpsFramework Package
+
+on:
+  push:
+    tags:
+      - "v*"
+  workflow_dispatch:
+
+permissions:
+  contents: read
+  packages: write
+
+jobs:
+  publish:
+    runs-on: windows-latest
+
+    steps:
+      - name: Checkout
+        uses: actions/checkout@v4
+
+      - name: Setup .NET
+        uses: actions/setup-dotnet@v4
+        with:
+          dotnet-version: "10.0.x"
+
+      - name: Resolve version from tag
+        id: version
+        shell: pwsh
+        run: |
+          if ("${{ github.ref_type }}" -eq "tag") {
+            $version = "${{ github.ref_name }}".TrimStart('v')
+          } else {
+            $version = "0.1.0-preview-local"
+          }
+          "version=$version" >> $env:GITHUB_OUTPUT
+          Write-Host "Package version: $version"
+
+      - name: Restore
+        run: dotnet restore ./AzureDpsFramework/AzureDpsFramework.csproj
+
+      - name: Build
+        run: dotnet build ./AzureDpsFramework/AzureDpsFramework.csproj --configuration Release --no-restore
+
+      - name: Pack
+        run: dotnet pack ./AzureDpsFramework/AzureDpsFramework.csproj --configuration Release --no-build --output ./artifacts/nuget -p:Version=${{ steps.version.outputs.version }}
+
+      - name: Publish to GitHub Packages
+        run: dotnet nuget push "./artifacts/nuget/*.nupkg" --source "https://nuget.pkg.github.com/${{ github.repository_owner }}/index.json" --api-key "${{ secrets.GITHUB_TOKEN }}" --skip-duplicate
+
+      - name: Upload package artifacts
+        uses: actions/upload-artifact@v4
+        with:
+          name: AzureDpsFramework-published-packages
+          path: |
+            artifacts/nuget/*.nupkg
+            artifacts/nuget/*.snupkg
