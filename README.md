@@ -1,5 +1,11 @@
 # Skittle Sorter
 
+## What's this project about?
+
+This project powers a 3D-printed Skittle sorter with Azure IoT integration. It combines hardware control (sensor + servos) with cloud provisioning via Azure DPS, including preview X.509 CSR issuance workflows that are not yet fully covered by the official C# SDK.
+
+The hardware design is based on the [PTC Education Candy Sorter](https://github.com/PTC-Education/Candy-Sorter/) project.
+
 ## Use the NuGet Package (Fastest Path)
 
 If you only need the DPS/ADR preview integration in your own C# app, use the `AzureDpsFramework` NuGet package instead of copying framework source files.
@@ -33,10 +39,6 @@ For full package feed setup and versioning details, see [AzureDpsFramework/READM
 - Telemetry: [docs/Telemetry.md](docs/Telemetry.md)
 
 > ⚠️ **Preview Features & Unsupported SDK**: This project uses Azure DPS preview API (`2025-07-01-preview`) with X.509 CSR-based certificate issuance. **There is currently no official C# SDK support for these preview features.** This implementation provides direct MQTT protocol integration as a workaround. See [Device Provisioning Flow](#device-provisioning-flow) for implementation details.
-
-This project drives a 3D printed Skittle Sorter with Azure IoT Hub integration using Azure Device Provisioning Service (DPS) with X.509 certificate-based authentication.
-
-The hardware design is based on the [PTC Education Candy Sorter](https://github.com/PTC-Education/Candy-Sorter/) project.
 
 ## Features
 
