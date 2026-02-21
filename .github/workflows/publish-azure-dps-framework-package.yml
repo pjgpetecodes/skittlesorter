@@ -45,7 +45,17 @@ jobs:
         run: dotnet pack ./AzureDpsFramework/AzureDpsFramework.csproj --configuration Release --no-build --output ./artifacts/nuget -p:Version=${{ steps.version.outputs.version }}
 
       - name: Publish to GitHub Packages
-        run: dotnet nuget push "./artifacts/nuget/*.nupkg" --source "https://nuget.pkg.github.com/${{ github.repository_owner }}/index.json" --api-key "${{ secrets.GITHUB_TOKEN }}" --skip-duplicate
+        shell: pwsh
+        run: |
+          $packages = Get-ChildItem -Path "./artifacts/nuget" -Filter "*.nupkg" | Where-Object { $_.Name -notlike "*.snupkg" }
+          if (-not $packages) {
+            throw "No .nupkg files found in ./artifacts/nuget"
+          }
+
+          foreach ($package in $packages) {
+            Write-Host "Publishing $($package.FullName)..."
+            dotnet nuget push $package.FullName --source "https://nuget.pkg.github.com/${{ github.repository_owner }}/index.json" --api-key "${{ secrets.GITHUB_TOKEN }}" --skip-duplicate
+          }
 
       - name: Upload package artifacts
         uses: actions/upload-artifact@v4
