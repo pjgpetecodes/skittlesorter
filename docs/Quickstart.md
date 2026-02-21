@@ -28,10 +28,14 @@ pwsh ./scripts/setup-x509-attestation.ps1 `
   -CredentialPolicy cert-policy
 ```
 
-This creates the full certificate hierarchy (root, intermediate, device) and configures DPS. After it runs, update `appsettings.json` with your `RegistrationId` and the generated cert paths:
+This creates the full certificate hierarchy (root, intermediate, device) and configures DPS. Files are now generated per identity (for example, `skittlesorter-device.pem`) so multiple identities can coexist.
+
+After it runs, ensure `appsettings.json` uses tokenized paths so switching identity only requires changing `RegistrationId`:
 - `IoTHub:DpsProvisioning:RegistrationId` = the same value you passed to `-RegistrationId`
-- `IoTHub:DpsProvisioning:AttestationCertPath` = `scripts/certs/device/device.pem`
-- `IoTHub:DpsProvisioning:AttestationCertChainPath` = `scripts/certs/device/device-full-chain.pem`
+- `IoTHub:DeviceId` = `{RegistrationId}`
+- `IoTHub:DpsProvisioning:AttestationCertPath` = `scripts/certs/device/{RegistrationId}-device.pem`
+- `IoTHub:DpsProvisioning:AttestationKeyPath` = `scripts/certs/device/{RegistrationId}-device.key`
+- `IoTHub:DpsProvisioning:AttestationCertChainPath` = `scripts/certs/ca/{RegistrationId}-chain.pem`
 
 **Note:** For detailed explanation of the certificate hierarchy and verification process, see [Azure Setup](./Azure-Setup.md).
 

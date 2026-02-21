@@ -16,6 +16,10 @@
     Skip creating DPS enrollment group (manual setup required)
 .PARAMETER SkipVerification
     Skip certificate verification step (uploads certs but doesn't verify them)
+.PARAMETER ReuseCa
+    Reuse existing local root/intermediate CA files instead of regenerating them
+.PARAMETER CaRegistrationId
+    CA identity prefix to use for root/intermediate cert names/files (defaults to RegistrationId)
 #>
 
 param(
@@ -26,16 +30,21 @@ param(
     [string]$CredentialPolicy = "default",
     [string]$EnrollmentGroupId,
     [switch]$SkipEnrollment,
-    [switch]$SkipVerification
+    [switch]$SkipVerification,
+    [switch]$ReuseCa,
+    [string]$CaRegistrationId
 )
 
 $ErrorActionPreference = "Stop"
 $scriptRoot = Split-Path -Parent $PSCommandPath
 
 if (-not $EnrollmentGroupId) { $EnrollmentGroupId = $RegistrationId }
+if (-not $CaRegistrationId) { $CaRegistrationId = $RegistrationId }
 
 Write-Host "`n=== X.509 Attestation Setup for Azure DPS ===" -ForegroundColor Cyan
-Write-Host "Registration ID: $RegistrationId`n"
+Write-Host "Registration ID: $RegistrationId"
+Write-Host "CA Identity: $CaRegistrationId"
+Write-Host "Reuse CA: $($ReuseCa.IsPresent)`n"
 
 # Step 1: Create certs directory structure
 Write-Host "[1/7] Creating certs directory structure..." -ForegroundColor Yellow
@@ -48,19 +57,21 @@ New-Item -ItemType Directory -Force -Path $caDir | Out-Null
 New-Item -ItemType Directory -Force -Path $deviceDir | Out-Null
 New-Item -ItemType Directory -Force -Path $issuedDir | Out-Null
 
-# Step 2: Generate root CA, intermediate CA, and device certificate using OpenSSL
-Write-Host "[2/7] Generating root CA + intermediate CA + device X.509 certificates..." -ForegroundColor Yellow
+# Step 2: Generate/reuse CA and generate device certificate using OpenSSL
+Write-Host "[2/7] Preparing CA and generating device X.509 certificate..." -ForegroundColor Yellow
 
-$rootCertPath = Join-Path $rootDir "root.pem"
-$rootKeyPath = Join-Path $rootDir "root.key"
-$caCertPath = Join-Path $caDir "ca.pem"
-$caKeyPath = Join-Path $caDir "ca.key"
-$caCsrPath = Join-Path $caDir "ca.csr"
-$chainPath = Join-Path $caDir "chain.pem"
-$deviceCertPath = Join-Path $deviceDir "device.pem"
-$deviceKeyPath = Join-Path $deviceDir "device.key"
-$deviceCsrPath = Join-Path $deviceDir "device.csr"
-$deviceFullChainPath = Join-Path $deviceDir "device-full-chain.pem"
+$safeRegistrationId = ($RegistrationId -replace '[^A-Za-z0-9_.-]', '-')
+$safeCaRegistrationId = ($CaRegistrationId -replace '[^A-Za-z0-9_.-]', '-')
+$rootCertPath = Join-Path $rootDir "$safeCaRegistrationId-root.pem"
+$rootKeyPath = Join-Path $rootDir "$safeCaRegistrationId-root.key"
+$caCertPath = Join-Path $caDir "$safeCaRegistrationId-intermediate.pem"
+$caKeyPath = Join-Path $caDir "$safeCaRegistrationId-intermediate.key"
+$caCsrPath = Join-Path $caDir "$safeCaRegistrationId-intermediate.csr"
+$chainPath = Join-Path $caDir "$safeRegistrationId-chain.pem"
+$deviceCertPath = Join-Path $deviceDir "$safeRegistrationId-device.pem"
+$deviceKeyPath = Join-Path $deviceDir "$safeRegistrationId-device.key"
+$deviceCsrPath = Join-Path $deviceDir "$safeRegistrationId-device.csr"
+$deviceFullChainPath = Join-Path $deviceDir "$safeRegistrationId-device-full-chain.pem"
 
 # Check if openssl is available
 if (-not (Get-Command openssl -ErrorAction SilentlyContinue)) {
@@ -68,21 +79,33 @@ if (-not (Get-Command openssl -ErrorAction SilentlyContinue)) {
     exit 1
 }
 
-## Root CA (self-signed, pathlen 1)
-openssl req -x509 -new -nodes -newkey rsa:4096 -keyout "$rootKeyPath" -out "$rootCertPath" -days 3650 -sha256 `
-    -subj "/CN=$RegistrationId-root" `
-    -addext "basicConstraints=critical,CA:true,pathlen:1" `
-    -addext "keyUsage=critical,keyCertSign,cRLSign" `
-    -addext "subjectKeyIdentifier=hash" `
-    -addext "authorityKeyIdentifier=keyid:always"
+if ($ReuseCa) {
+    Write-Host "  Reusing existing root/intermediate CA files..." -ForegroundColor Cyan
+    if (-not (Test-Path $rootCertPath) -or -not (Test-Path $rootKeyPath) -or -not (Test-Path $caCertPath) -or -not (Test-Path $caKeyPath)) {
+        Write-Host "  ⚠ ReuseCa requested but CA files were not found for CA identity '$CaRegistrationId'" -ForegroundColor Red
+        Write-Host "    Expected root cert: $rootCertPath" -ForegroundColor Gray
+        Write-Host "    Expected root key:  $rootKeyPath" -ForegroundColor Gray
+        Write-Host "    Expected int cert:  $caCertPath" -ForegroundColor Gray
+        Write-Host "    Expected int key:   $caKeyPath" -ForegroundColor Gray
+        exit 1
+    }
+} else {
+    Write-Host "  Generating new root/intermediate CA files..." -ForegroundColor Cyan
+    ## Root CA (self-signed, pathlen 1)
+    openssl req -x509 -new -nodes -newkey rsa:4096 -keyout "$rootKeyPath" -out "$rootCertPath" -days 3650 -sha256 `
+        -subj "/CN=$CaRegistrationId-root" `
+        -addext "basicConstraints=critical,CA:true,pathlen:1" `
+        -addext "keyUsage=critical,keyCertSign,cRLSign" `
+        -addext "subjectKeyIdentifier=hash" `
+        -addext "authorityKeyIdentifier=keyid:always"
 
-if (-not (Test-Path $rootCertPath)) { Write-Host "  ⚠ Failed to generate root CA certificate" -ForegroundColor Red; exit 1 }
+    if (-not (Test-Path $rootCertPath)) { Write-Host "  ⚠ Failed to generate root CA certificate" -ForegroundColor Red; exit 1 }
 
-## Intermediate CA CSR (signed by root)
-openssl req -new -nodes -newkey rsa:4096 -keyout "$caKeyPath" -out "$caCsrPath" -subj "/CN=$RegistrationId-intermediate"
+    ## Intermediate CA CSR (signed by root)
+    openssl req -new -nodes -newkey rsa:4096 -keyout "$caKeyPath" -out "$caCsrPath" -subj "/CN=$CaRegistrationId-intermediate"
 
-$interExt = Join-Path $caDir "ca-ext.cnf"
-@"
+    $interExt = Join-Path $caDir "ca-ext.cnf"
+    @"
 [ v3_intermediate ]
 basicConstraints = critical,CA:true,pathlen:0
 keyUsage = critical, keyCertSign, cRLSign
@@ -90,10 +113,11 @@ subjectKeyIdentifier = hash
 authorityKeyIdentifier = keyid:always,issuer
 "@ | Set-Content -Path $interExt -Encoding ASCII
 
-openssl x509 -req -in "$caCsrPath" -CA "$rootCertPath" -CAkey "$rootKeyPath" -CAcreateserial -out "$caCertPath" -days 1825 -sha256 `
-    -extfile "$interExt" -extensions v3_intermediate
+    openssl x509 -req -in "$caCsrPath" -CA "$rootCertPath" -CAkey "$rootKeyPath" -CAcreateserial -out "$caCertPath" -days 1825 -sha256 `
+        -extfile "$interExt" -extensions v3_intermediate
 
-if (-not (Test-Path $caCertPath)) { Write-Host "  ⚠ Failed to generate intermediate certificate" -ForegroundColor Red; exit 1 }
+    if (-not (Test-Path $caCertPath)) { Write-Host "  ⚠ Failed to generate intermediate certificate" -ForegroundColor Red; exit 1 }
+}
 
 ## Device CSR and leaf cert (client auth, signed by intermediate)
 openssl req -new -nodes -newkey rsa:2048 -keyout "$deviceKeyPath" -out "$deviceCsrPath" -subj "/CN=$RegistrationId"
@@ -154,14 +178,24 @@ if ($DpsName -and $ResourceGroup) {
     } else {
         Write-Host "[4/7] Uploading and verifying root CA in DPS..." -ForegroundColor Yellow
     }
-    $rootCertName = "$RegistrationId-root"
+    $rootCertName = "$CaRegistrationId-root"
     try {
-        az iot dps certificate create `
+        $existing = az iot dps certificate show `
             --dps-name $DpsName `
             --resource-group $ResourceGroup `
             --certificate-name $rootCertName `
-            --path $rootCertPath `
-            --output none
+            -o json 2>$null
+
+        if ($LASTEXITCODE -eq 0 -and $existing) {
+            Write-Host "  ✓ Root CA already exists in DPS: $rootCertName" -ForegroundColor Green
+        } else {
+            az iot dps certificate create `
+                --dps-name $DpsName `
+                --resource-group $ResourceGroup `
+                --certificate-name $rootCertName `
+                --path $rootCertPath `
+                --output none
+        }
 
         if ($SkipVerification) {
             Write-Host "  ✓ Root CA uploaded (not verified)" -ForegroundColor Yellow
@@ -187,13 +221,16 @@ if ($DpsName -and $ResourceGroup) {
 
             $rootDir = Split-Path $rootCertPath
             Push-Location $rootDir
-            Remove-Item verification.key, verification.csr, verification.pem, root.pem.srl -ErrorAction SilentlyContinue
-            openssl genrsa -out verification.key 2048
-            openssl req -new -key verification.key -out verification.csr -subj "/CN=$code"
-            openssl x509 -req -in verification.csr -CA root.pem -CAkey $rootKeyPath -CAcreateserial -out verification.pem -days 1 -sha256
+            $verificationKey = "$safeRegistrationId-verification.key"
+            $verificationCsr = "$safeRegistrationId-verification.csr"
+            $verificationPem = "$safeRegistrationId-verification.pem"
+            Remove-Item $verificationKey, $verificationCsr, $verificationPem -ErrorAction SilentlyContinue
+            openssl genrsa -out $verificationKey 2048
+            openssl req -new -key $verificationKey -out $verificationCsr -subj "/CN=$code"
+            openssl x509 -req -in $verificationCsr -CA $rootCertPath -CAkey $rootKeyPath -CAcreateserial -out $verificationPem -days 1 -sha256
             Pop-Location
 
-            $verPem = Join-Path $rootDir "verification.pem"
+            $verPem = Join-Path $rootDir $verificationPem
 
             az iot dps certificate verify `
                 --dps-name $DpsName `
@@ -226,14 +263,24 @@ if ($DpsName -and $ResourceGroup) {
     } else {
         Write-Host "[5/7] Uploading and verifying intermediate CA in DPS..." -ForegroundColor Yellow
     }
-    $intermediateCertName = "$RegistrationId-intermediate"
+    $intermediateCertName = "$CaRegistrationId-intermediate"
     try {
-        az iot dps certificate create `
+        $existing = az iot dps certificate show `
             --dps-name $DpsName `
             --resource-group $ResourceGroup `
             --certificate-name $intermediateCertName `
-            --path $caCertPath `
-            --output none
+            -o json 2>$null
+
+        if ($LASTEXITCODE -eq 0 -and $existing) {
+            Write-Host "  ✓ Intermediate CA already exists in DPS: $intermediateCertName" -ForegroundColor Green
+        } else {
+            az iot dps certificate create `
+                --dps-name $DpsName `
+                --resource-group $ResourceGroup `
+                --certificate-name $intermediateCertName `
+                --path $caCertPath `
+                --output none
+        }
 
         if ($SkipVerification) {
             Write-Host "  ✓ Intermediate CA uploaded (not verified)" -ForegroundColor Yellow
@@ -258,13 +305,16 @@ if ($DpsName -and $ResourceGroup) {
             Write-Host "  Verification Code: $code" -ForegroundColor Green
 
             Push-Location $caDir
-            Remove-Item verification-intermediate.key, verification-intermediate.csr, verification-intermediate.pem, ca.pem.srl -ErrorAction SilentlyContinue
-            openssl genrsa -out verification-intermediate.key 2048
-            openssl req -new -key verification-intermediate.key -out verification-intermediate.csr -subj "/CN=$code"
-            openssl x509 -req -in verification-intermediate.csr -CA ca.pem -CAkey ca.key -CAcreateserial -out verification-intermediate.pem -days 1 -sha256
+            $verificationIntermediateKey = "$safeRegistrationId-verification-intermediate.key"
+            $verificationIntermediateCsr = "$safeRegistrationId-verification-intermediate.csr"
+            $verificationIntermediatePem = "$safeRegistrationId-verification-intermediate.pem"
+            Remove-Item $verificationIntermediateKey, $verificationIntermediateCsr, $verificationIntermediatePem -ErrorAction SilentlyContinue
+            openssl genrsa -out $verificationIntermediateKey 2048
+            openssl req -new -key $verificationIntermediateKey -out $verificationIntermediateCsr -subj "/CN=$code"
+            openssl x509 -req -in $verificationIntermediateCsr -CA $caCertPath -CAkey $caKeyPath -CAcreateserial -out $verificationIntermediatePem -days 1 -sha256
             Pop-Location
 
-            $verPem = Join-Path $caDir "verification-intermediate.pem"
+            $verPem = Join-Path $caDir $verificationIntermediatePem
 
             az iot dps certificate verify `
                 --dps-name $DpsName `
@@ -292,24 +342,33 @@ if ($DpsName -and $ResourceGroup) {
 # Step 6: Create DPS enrollment (if Azure CLI available and params provided)
 if (-not $SkipEnrollment) {
     if ($DpsName -and $ResourceGroup) {
-        Write-Host "[6/7] Creating DPS enrollment group (Intermediate attestation) with credential policy..." -ForegroundColor Yellow
+        Write-Host "[6/7] Ensuring DPS enrollment group exists (Intermediate attestation)..." -ForegroundColor Yellow
         
         # Check if Azure CLI is available
         if (Get-Command az -ErrorAction SilentlyContinue) {
             try {
-                # Use CA reference instead of embedded cert (better for cert rotation)
-                az iot dps enrollment-group create `
+                $existingEnrollment = az iot dps enrollment-group show `
                     --dps-name $DpsName `
                     --resource-group $ResourceGroup `
                     --enrollment-id $EnrollmentGroupId `
-                    --ca-name "$RegistrationId-intermediate" `
-                    --credential-policy $CredentialPolicy `
-                    --provisioning-status enabled `
-                    --output none
-                
-                Write-Host "  ✓ Enrollment group created with credential policy: $CredentialPolicy" -ForegroundColor Green
-                Write-Host "  ✓ CSR-based certificate issuance enabled" -ForegroundColor Green
-                Write-Host "  ✓ Using CA reference (intermediate must be verified)" -ForegroundColor Green
+                    -o json 2>$null
+
+                if ($LASTEXITCODE -eq 0 -and $existingEnrollment) {
+                    Write-Host "  ✓ Enrollment group already exists: $EnrollmentGroupId (skipping create)" -ForegroundColor Green
+                } else {
+                    az iot dps enrollment-group create `
+                        --dps-name $DpsName `
+                        --resource-group $ResourceGroup `
+                        --enrollment-id $EnrollmentGroupId `
+                        --ca-name "$CaRegistrationId-intermediate" `
+                        --credential-policy $CredentialPolicy `
+                        --provisioning-status enabled `
+                        --output none
+
+                    Write-Host "  ✓ Enrollment group created with credential policy: $CredentialPolicy" -ForegroundColor Green
+                    Write-Host "  ✓ CSR-based certificate issuance enabled" -ForegroundColor Green
+                    Write-Host "  ✓ Using CA reference (intermediate must be verified)" -ForegroundColor Green
+                }
             } catch {
                 Write-Host "  ⚠ Failed to create enrollment: $($_.Exception.Message)" -ForegroundColor Red
                 Write-Host "  You may need to create the enrollment manually" -ForegroundColor Yellow
@@ -346,6 +405,8 @@ Write-Host "Update appsettings.json with your RegistrationId and certificate pat
 Write-Host "  IoTHub:DpsProvisioning:RegistrationId = $RegistrationId" -ForegroundColor Gray
 Write-Host "  IoTHub:DpsProvisioning:AttestationCertPath = $deviceCertPath" -ForegroundColor Gray
 Write-Host "  IoTHub:DpsProvisioning:AttestationCertChainPath = $deviceFullChainPath" -ForegroundColor Gray
+Write-Host "  IoTHub:DpsProvisioning:AttestationKeyPath = $deviceKeyPath" -ForegroundColor Gray
+Write-Host "  Tip: Use tokenized paths like certs/.../{RegistrationId}-device.pem to switch identities by RegistrationId only" -ForegroundColor Gray
 
 if ($SkipEnrollment) {
     Write-Host "`n=== Manual Steps Required ===" -ForegroundColor Yellow
@@ -354,7 +415,7 @@ if ($SkipEnrollment) {
     Write-Host "    --dps-name <DPS_NAME>"
     Write-Host "    --resource-group <RESOURCE_GROUP>"
     Write-Host "    --enrollment-id $EnrollmentGroupId"
-    Write-Host "    --ca-name $RegistrationId-intermediate"
+    Write-Host "    --ca-name $CaRegistrationId-intermediate"
     Write-Host "    --credential-policy $CredentialPolicy"
     Write-Host ""
     Write-Host "  Root (verify in DPS): $rootThumbprint"

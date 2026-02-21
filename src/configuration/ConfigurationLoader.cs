@@ -7,6 +7,8 @@ namespace skittle_sorter
 {
     public class ConfigurationLoader
     {
+        private const string RegistrationIdToken = "{RegistrationId}";
+
         public static MockColorSensorConfig LoadMockConfiguration(string appSettingsPath = "appsettings.json")
         {
             try
@@ -98,7 +100,7 @@ namespace skittle_sorter
                     var value = deviceId.GetString();
                     if (value != null && !value.StartsWith("<"))
                     {
-                        config.DeviceId = value;
+                        config.DeviceId = ResolveDeviceId(value, iotHubElement);
                     }
                 }
 
@@ -209,6 +211,27 @@ namespace skittle_sorter
                 Console.WriteLine($"Error loading servo positions: {ex.Message}");
                 return config;
             }
+        }
+
+        private static string ResolveDeviceId(string configuredDeviceId, JsonElement iotHubElement)
+        {
+            if (!configuredDeviceId.Contains(RegistrationIdToken, StringComparison.OrdinalIgnoreCase))
+            {
+                return configuredDeviceId;
+            }
+
+            if (iotHubElement.TryGetProperty("DpsProvisioning", out var dpsElement) &&
+                dpsElement.TryGetProperty("RegistrationId", out var registrationIdElement) &&
+                registrationIdElement.ValueKind == JsonValueKind.String)
+            {
+                var registrationId = registrationIdElement.GetString();
+                if (!string.IsNullOrWhiteSpace(registrationId))
+                {
+                    return configuredDeviceId.Replace(RegistrationIdToken, registrationId, StringComparison.OrdinalIgnoreCase);
+                }
+            }
+
+            return configuredDeviceId;
         }
     }
 

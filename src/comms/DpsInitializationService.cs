@@ -149,8 +149,10 @@ namespace skittle_sorter
                 
                 WriteSection("DPS Registration Result");
                 Console.WriteLine($"DPS Response Status: {result.Status}");
+                Console.WriteLine($"Registration ID: {result.RegistrationId}");
                 Console.WriteLine($"Device ID: {result.DeviceId}");
                 Console.WriteLine($"Assigned Hub: {result.AssignedHub}");
+                Console.WriteLine($"Substatus: {result.Substatus}");
                 Console.WriteLine($"Certificate Chain Present: {(result.IssuedCertificateChain != null && result.IssuedCertificateChain.Length > 0)}");
                 if (result.IssuedCertificateChain != null && result.IssuedCertificateChain.Length > 0)
                 {
@@ -205,7 +207,13 @@ namespace skittle_sorter
                 }
                 else
                 {
-                    Console.WriteLine("DPS provisioning did not assign the device. Telemetry disabled.\n");
+                    Console.WriteLine($"DPS provisioning did not assign the device (final status: {result.Status}). Telemetry disabled.\n");
+                    Console.WriteLine("Provisioning diagnostics:");
+                    Console.WriteLine($"  RegistrationId: {result.RegistrationId}");
+                    Console.WriteLine($"  DeviceId: {result.DeviceId}");
+                    Console.WriteLine($"  AssignedHub: {result.AssignedHub}");
+                    Console.WriteLine($"  Status: {result.Status}");
+                    Console.WriteLine($"  Substatus: {result.Substatus}");
                     iotConfig.SendTelemetry = false;
                     return null;
                 }
@@ -219,6 +227,8 @@ namespace skittle_sorter
                 {
                     Console.WriteLine($"Details: {ex.InnerException.Message}");
                 }
+                Console.WriteLine("Exception dump:");
+                Console.WriteLine(ex.ToString());
                 Console.WriteLine("\nThe device cannot be provisioned. Check your configuration and try again.");
                 throw;  // Re-throw to stop the app
             }
@@ -226,6 +236,8 @@ namespace skittle_sorter
             {
                 // Other non-critical errors - continue without telemetry
                 Console.WriteLine($"Warning: DPS/IoT Hub setup failed: {ex.Message}");
+                Console.WriteLine("Exception dump:");
+                Console.WriteLine(ex.ToString());
                 Console.WriteLine("Continuing without telemetry.\n");
                 iotConfig.SendTelemetry = false;
                 return null;
