@@ -54,12 +54,13 @@ Configure servo angle for each color chute:
 
 #### Standard Connection (without DPS)
 - `DeviceConnectionString`: Your Azure IoT Hub device connection string
-- `DeviceId`: Your device identifier
+- `DeviceId`: Your device identifier (supports `{RegistrationId}` token)
 - `SendTelemetry`: Enable/disable telemetry sending
 
 #### DPS Provisioning Configuration
 - `IdScope`: Your DPS ID Scope
 - `RegistrationId`: Device registration ID (e.g., `skittlesorter`)
+- `{RegistrationId}` token support: You can use this token in path fields (and `IoTHub.DeviceId`) to switch identities by changing only `RegistrationId`
 - `AttestationMethod`: `"SymmetricKey"` (default) or `"X509"` for certificate-based authentication
 - `ProvisioningHost`: DPS endpoint (usually `global.azure-devices-provisioning.net`)
 
@@ -69,15 +70,15 @@ Configure servo angle for each color chute:
 - Leave `AttestationCertPath`, `AttestationKeyPath`, `AttestationCertChainPath` empty
 
 #### For X.509 Certificate Attestation
-- `AttestationCertPath`: Path to device certificate (e.g., `certs/device/device.pem`)
-- `AttestationKeyPath`: Path to device private key (e.g., `certs/device/device.key`)
-- `AttestationCertChainPath`: Path to certificate chain file (e.g., `certs/ca/chain.pem` containing intermediate + root)
+- `AttestationCertPath`: Path to device certificate (e.g., `scripts/certs/device/{RegistrationId}-device.pem`)
+- `AttestationKeyPath`: Path to device private key (e.g., `scripts/certs/device/{RegistrationId}-device.key`)
+- `AttestationCertChainPath`: Path to certificate chain file (e.g., `scripts/certs/ca/{RegistrationId}-chain.pem` containing intermediate + root)
 - Leave `EnrollmentGroupKeyBase64` empty
 
 #### Common Settings
-- `CertificatePath`: Path to CSR file for new certificate issuance
-- `PrivateKeyPath`: Path to private key for CSR
-- `IssuedCertificatePath`: Path to store the issued X.509 certificate
+- `CsrFilePath`: Path to CSR file for new certificate issuance (supports `{RegistrationId}`)
+- `CsrKeyFilePath`: Path to private key for CSR (supports `{RegistrationId}`)
+- `IssuedCertFilePath`: Path to store the issued X.509 certificate (supports `{RegistrationId}`)
 - `ApiVersion`: DPS API version (use `2025-07-01-preview` for CSR-based provisioning)
 - `SasExpirySeconds`: SAS token TTL in seconds (default: 3600) - only used for symmetric key attestation
 - `AutoGenerateCsr`: Auto-generate CSR and private key if files don't exist (default: true)

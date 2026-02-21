@@ -2,6 +2,7 @@
 param(
     [Parameter(Mandatory=$true)][string]$DpsName,
     [Parameter(Mandatory=$true)][string]$IotHubName,
+    [Parameter(Mandatory=$false)][string[]]$AdditionalIotHubNames = @(),
     [Parameter(Mandatory=$true)][string]$ResourceGroup,
     [Parameter(Mandatory=$true)][string]$EnrollmentGroupName,
     [Parameter(Mandatory=$true)][string]$DeviceId,
@@ -10,7 +11,9 @@ param(
     [Parameter(Mandatory=$false)][string]$RootCertName = "root-ca",
     [Parameter(Mandatory=$false)][string]$IntermediateCertName = "intermediate-ca",
     [Parameter(Mandatory=$false)][bool]$DeleteResourceGroup = $true,
-    [switch]$NoWaitForResourceGroupDeletion
+    [switch]$NoWaitForResourceGroupDeletion,
+    [switch]$DryRun,
+    [switch]$NoQuiet
 )
 
 $ErrorActionPreference = "Continue"
@@ -22,8 +25,19 @@ function Remove-Quiet {
     )
     try {
         Write-Host $Description -ForegroundColor Cyan
-        & $Action | Out-Null
-        if ($LASTEXITCODE -ne 0) {
+        if ($DryRun) {
+            Write-Host "  -> WHATIF (dry run enabled; no changes made)" -ForegroundColor Yellow
+            return
+        }
+        $global:LASTEXITCODE = 0
+        if ($NoQuiet) {
+            & $Action
+        } else {
+            & $Action | Out-Null
+        }
+        if (-not $?) {
+            Write-Host "  -> FAILED" -ForegroundColor Red
+        } elseif ($LASTEXITCODE -ne 0) {
             Write-Host "  -> FAILED (exit $LASTEXITCODE)" -ForegroundColor Red
         } else {
             Write-Host "  -> OK" -ForegroundColor Green
@@ -81,6 +95,9 @@ function Supports-AdrDelete {
 Write-Host "Parameters:" -ForegroundColor Yellow
 Write-Host "  DPS:                $DpsName"
 Write-Host "  IoT Hub:            $IotHubName"
+if ($AdditionalIotHubNames.Count -gt 0) {
+    Write-Host "  Extra IoT Hubs:     $($AdditionalIotHubNames -join ', ')"
+}
 Write-Host "  Resource Group:     $ResourceGroup"
 Write-Host "  Enrollment Group:   $EnrollmentGroupName"
 Write-Host "  DeviceId:           $DeviceId"
@@ -90,11 +107,15 @@ Write-Host "  Root Cert Name:     $RootCertName"
 Write-Host "  Int Cert Name:      $IntermediateCertName"
 Write-Host "  Delete RG:          $DeleteResourceGroup"
 Write-Host "  RG Delete No-Wait:  $($NoWaitForResourceGroupDeletion.IsPresent)"
+Write-Host "  Dry Run:            $($DryRun.IsPresent)"
+Write-Host "  No Quiet:           $($NoQuiet.IsPresent)"
 Write-Host ""
 
 Write-Host "==========================================" -ForegroundColor Green
 Write-Host " Remove Resources" -ForegroundColor Green
 Write-Host "==========================================" -ForegroundColor Green
+
+$allIotHubs = @($IotHubName) + $AdditionalIotHubNames | Where-Object { -not [string]::IsNullOrWhiteSpace($_) } | Select-Object -Unique
 
 # Honour existing clean-start ordering first
 
@@ -106,12 +127,14 @@ Remove-Quiet {
       --resource-group $ResourceGroup
 } "[1/11] Removing enrollment group from DPS..."
 
-# 2. Remove device from IoT Hub
-Remove-Quiet {
-    az iot hub device-identity delete `
-      --hub-name $IotHubName `
-      --device-id $DeviceId
-} "[2/11] Removing device from IoT Hub..."
+# 2. Remove device from IoT Hub(s) (best effort pre-delete cleanup)
+foreach ($hubName in $allIotHubs) {
+        Remove-Quiet {
+                az iot hub device-identity delete `
+                    --hub-name $hubName `
+                    --device-id $DeviceId
+        } "[2/11] Removing device from IoT Hub '$hubName'..."
+}
 
 # 3. Remove device from ADR
 if (Supports-AdrDelete) {
@@ -132,42 +155,45 @@ Remove-DpsCert -CertName $RootCertName
 Remove-DpsCert -CertName $IntermediateCertName
 
 # 5. Clean local certificates and CSR files
-$repoRoot = Split-Path -Parent $PSScriptRoot
-$certsPath = Join-Path $repoRoot "certs"
+$certsPath = Join-Path $PSScriptRoot "certs"
 Remove-Quiet {
     Remove-Item -Path $certsPath -Recurse -Force -ErrorAction SilentlyContinue
 } "[5/11] Cleaning local certificates..."
 
 # Then remove remaining Azure resources
 
-# 6. Unlink IoT Hub from DPS (best effort)
-Remove-Quiet {
-    az iot dps linked-hub delete `
-        --dps-name $DpsName `
-        --resource-group $ResourceGroup `
-        --linked-hub $IotHubName
-} "[6/11] Unlinking IoT Hub from DPS..."
+# 6. Delete all IoT Hubs first (ADR dependency)
+foreach ($hubName in $allIotHubs) {
+    Remove-Quiet {
+        az iot hub delete `
+            --name $hubName `
+            --resource-group $ResourceGroup
+    } "[6/11] Deleting IoT Hub '$hubName'..."
+}
 
-# 7. Delete DPS
+# 7. Unlink IoT Hub(s) from DPS (best effort; may already be removed after hub delete)
+foreach ($hubName in $allIotHubs) {
+    Remove-Quiet {
+        az iot dps linked-hub delete `
+            --dps-name $DpsName `
+            --resource-group $ResourceGroup `
+            --linked-hub $hubName
+    } "[7/11] Unlinking IoT Hub '$hubName' from DPS..."
+}
+
+# 8. Delete DPS
 Remove-Quiet {
     az iot dps delete `
         --name $DpsName `
-        --resource-group $ResourceGroup `
-        --yes
-} "[7/11] Deleting DPS..."
+    --resource-group $ResourceGroup
+} "[8/11] Deleting DPS..."
 
-# 8. Delete IoT Hub
-Remove-Quiet {
-    az iot hub delete `
-        --name $IotHubName `
-        --resource-group $ResourceGroup
-} "[8/11] Deleting IoT Hub..."
-
-# 9. Delete ADR namespace
+# 9. Delete ADR namespace (after linked IoT Hub + DPS are deleted)
 Remove-Quiet {
     az iot adr ns delete `
         --name $AdrNamespace `
-        --resource-group $ResourceGroup
+    --resource-group $ResourceGroup `
+    --yes
 } "[9/11] Deleting ADR namespace..."
 
 # 10. Delete user-assigned managed identity

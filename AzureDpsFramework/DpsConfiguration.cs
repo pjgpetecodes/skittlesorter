@@ -6,6 +6,8 @@ namespace AzureDpsFramework
 {
     public class DpsConfiguration
     {
+        private const string RegistrationIdToken = "{RegistrationId}";
+
         public string ProvisioningHost { get; set; } = "global.azure-devices-provisioning.net";
         public string IdScope { get; set; } = string.Empty;
         public string RegistrationId { get; set; } = string.Empty;
@@ -66,18 +68,30 @@ namespace AzureDpsFramework
             var groupKey = GetString(dps, nameof(EnrollmentGroupKeyBase64));
             cfg.EnrollmentGroupKeyBase64 = string.IsNullOrWhiteSpace(groupKey) ? null : groupKey;
             var attCertPath = GetString(dps, nameof(AttestationCertPath));
-            cfg.AttestationCertPath = string.IsNullOrWhiteSpace(attCertPath) ? null : attCertPath;
+            cfg.AttestationCertPath = string.IsNullOrWhiteSpace(attCertPath)
+                ? null
+                : ResolveRegistrationIdToken(attCertPath, cfg.RegistrationId);
             var attKeyPath = GetString(dps, nameof(AttestationKeyPath));
-            cfg.AttestationKeyPath = string.IsNullOrWhiteSpace(attKeyPath) ? null : attKeyPath;
+            cfg.AttestationKeyPath = string.IsNullOrWhiteSpace(attKeyPath)
+                ? null
+                : ResolveRegistrationIdToken(attKeyPath, cfg.RegistrationId);
             var attChainPath = GetString(dps, nameof(AttestationCertChainPath));
-            cfg.AttestationCertChainPath = string.IsNullOrWhiteSpace(attChainPath) ? null : attChainPath;
+            cfg.AttestationCertChainPath = string.IsNullOrWhiteSpace(attChainPath)
+                ? null
+                : ResolveRegistrationIdToken(attChainPath, cfg.RegistrationId);
             cfg.SasExpirySeconds = GetInt(dps, nameof(SasExpirySeconds), cfg.SasExpirySeconds);
             cfg.ApiVersion = GetString(dps, nameof(ApiVersion), cfg.ApiVersion);
             cfg.MqttPort = GetInt(dps, nameof(MqttPort), cfg.MqttPort);
             cfg.AutoGenerateCsr = GetBool(dps, nameof(AutoGenerateCsr), cfg.AutoGenerateCsr);
-            cfg.CsrFilePath = GetString(dps, nameof(CsrFilePath), cfg.CsrFilePath);
-            cfg.CsrKeyFilePath = GetString(dps, nameof(CsrKeyFilePath), cfg.CsrKeyFilePath);
-            cfg.IssuedCertFilePath = GetString(dps, nameof(IssuedCertFilePath), cfg.IssuedCertFilePath);
+            cfg.CsrFilePath = ResolveRegistrationIdToken(
+                GetString(dps, nameof(CsrFilePath), cfg.CsrFilePath),
+                cfg.RegistrationId);
+            cfg.CsrKeyFilePath = ResolveRegistrationIdToken(
+                GetString(dps, nameof(CsrKeyFilePath), cfg.CsrKeyFilePath),
+                cfg.RegistrationId);
+            cfg.IssuedCertFilePath = ResolveRegistrationIdToken(
+                GetString(dps, nameof(IssuedCertFilePath), cfg.IssuedCertFilePath),
+                cfg.RegistrationId);
             cfg.EnableDebugLogging = GetBool(dps, nameof(EnableDebugLogging), cfg.EnableDebugLogging);
 
             cfg.Validate();
@@ -122,6 +136,16 @@ namespace AzureDpsFramework
             if (string.IsNullOrWhiteSpace(EnrollmentGroupKeyBase64))
                 throw new InvalidOperationException("EnrollmentGroupKeyBase64 is required to derive device key");
             return DpsSasTokenGenerator.DeriveDeviceKey(RegistrationId, EnrollmentGroupKeyBase64!);
+        }
+
+        private static string ResolveRegistrationIdToken(string value, string registrationId)
+        {
+            if (string.IsNullOrEmpty(value) || string.IsNullOrEmpty(registrationId))
+            {
+                return value;
+            }
+
+            return value.Replace(RegistrationIdToken, registrationId, StringComparison.OrdinalIgnoreCase);
         }
     }
 }
