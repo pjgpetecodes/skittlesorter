@@ -478,17 +478,20 @@ if ($AttestationType -eq "X509") {
         Write-Log "Device Dir: $deviceDir" "DEBUG"
         Write-Log "Issued Dir: $issuedDir" "DEBUG"
 
+        # Keep file names identity-scoped so multiple device identities can coexist.
+        $safeRegistrationId = ($RegistrationId -replace '[^A-Za-z0-9_.-]', '-')
+
         # Certificate paths
-        $rootCertPath = Join-Path $rootDir "root.pem"
-        $rootKeyPath = Join-Path $rootDir "root.key"
-        $caCertPath = Join-Path $caDir "ca.pem"
-        $caKeyPath = Join-Path $caDir "ca.key"
-        $caCsrPath = Join-Path $caDir "ca.csr"
-        $chainPath = Join-Path $caDir "chain.pem"
-        $deviceCertPath = Join-Path $deviceDir "device.pem"
-        $deviceKeyPath = Join-Path $deviceDir "device.key"
-        $deviceCsrPath = Join-Path $deviceDir "device.csr"
-        $deviceFullChainPath = Join-Path $deviceDir "device-full-chain.pem"
+        $rootCertPath = Join-Path $rootDir "$safeRegistrationId-root.pem"
+        $rootKeyPath = Join-Path $rootDir "$safeRegistrationId-root.key"
+        $caCertPath = Join-Path $caDir "$safeRegistrationId-intermediate.pem"
+        $caKeyPath = Join-Path $caDir "$safeRegistrationId-intermediate.key"
+        $caCsrPath = Join-Path $caDir "$safeRegistrationId-intermediate.csr"
+        $chainPath = Join-Path $caDir "$safeRegistrationId-chain.pem"
+        $deviceCertPath = Join-Path $deviceDir "$safeRegistrationId-device.pem"
+        $deviceKeyPath = Join-Path $deviceDir "$safeRegistrationId-device.key"
+        $deviceCsrPath = Join-Path $deviceDir "$safeRegistrationId-device.csr"
+        $deviceFullChainPath = Join-Path $deviceDir "$safeRegistrationId-device-full-chain.pem"
 
         # Generate Root CA (self-signed, pathlen 1)
         Write-Log "Generating Root CA: $RegistrationId-root" "INFO"
@@ -633,6 +636,9 @@ authorityKeyIdentifier = keyid:always,issuer
     
     } else {
         Write-Log "Skipping certificate generation (using existing certificates)" "INFO"
+
+        # Keep paths consistent with the generated identity-scoped naming format.
+        $safeRegistrationId = ($RegistrationId -replace '[^A-Za-z0-9_.-]', '-')
         
         # Set paths for existing certificates
         $rootDir = Join-Path $PSScriptRoot $CertsBasePath "root"
@@ -640,13 +646,13 @@ authorityKeyIdentifier = keyid:always,issuer
         $deviceDir = Join-Path $PSScriptRoot $CertsBasePath "device"
         $issuedDir = Join-Path $PSScriptRoot $CertsBasePath "issued"
         
-        $rootCertPath = Join-Path $rootDir "root.pem"
-        $rootKeyPath = Join-Path $rootDir "root.key"
-        $caCertPath = Join-Path $caDir "ca.pem"
-        $caKeyPath = Join-Path $caDir "ca.key"
-        $deviceCertPath = Join-Path $deviceDir "device.pem"
-        $deviceKeyPath = Join-Path $deviceDir "device.key"
-        $deviceFullChainPath = Join-Path $deviceDir "device-full-chain.pem"
+        $rootCertPath = Join-Path $rootDir "$safeRegistrationId-root.pem"
+        $rootKeyPath = Join-Path $rootDir "$safeRegistrationId-root.key"
+        $caCertPath = Join-Path $caDir "$safeRegistrationId-intermediate.pem"
+        $caKeyPath = Join-Path $caDir "$safeRegistrationId-intermediate.key"
+        $deviceCertPath = Join-Path $deviceDir "$safeRegistrationId-device.pem"
+        $deviceKeyPath = Join-Path $deviceDir "$safeRegistrationId-device.key"
+        $deviceFullChainPath = Join-Path $deviceDir "$safeRegistrationId-device-full-chain.pem"
     }
 
 } elseif ($AttestationType -eq "SymmetricKey") {
@@ -720,11 +726,13 @@ if ($AttestationType -eq "X509") {
 
                 # Create verification certificate
                 $rootVerDir = Split-Path $rootCertPath
+                $rootCertLeaf = Split-Path $rootCertPath -Leaf
+                $rootSerialLeaf = "$rootCertLeaf.srl"
                 Push-Location $rootVerDir
-                Remove-Item verification.key, verification.csr, verification.pem, root.pem.srl -ErrorAction SilentlyContinue
+                Remove-Item verification.key, verification.csr, verification.pem, $rootSerialLeaf -ErrorAction SilentlyContinue
                 openssl genrsa -out verification.key 2048 2>$null
                 openssl req -new -key verification.key -out verification.csr -subj "/CN=$code" 2>$null
-                openssl x509 -req -in verification.csr -CA root.pem -CAkey $rootKeyPath -CAcreateserial -out verification.pem -days 1 -sha256 2>$null
+                openssl x509 -req -in verification.csr -CA $rootCertLeaf -CAkey $rootKeyPath -CAcreateserial -out verification.pem -days 1 -sha256 2>$null
                 Pop-Location
 
                 $verPem = Join-Path $rootVerDir "verification.pem"
@@ -793,11 +801,13 @@ if ($AttestationType -eq "X509") {
 
                 # Create verification certificate
                 $caVerDir = Split-Path $caCertPath
+                $caCertLeaf = Split-Path $caCertPath -Leaf
+                $caSerialLeaf = "$caCertLeaf.srl"
                 Push-Location $caVerDir
-                Remove-Item verification-intermediate.key, verification-intermediate.csr, verification-intermediate.pem, ca.pem.srl -ErrorAction SilentlyContinue
+                Remove-Item verification-intermediate.key, verification-intermediate.csr, verification-intermediate.pem, $caSerialLeaf -ErrorAction SilentlyContinue
                 openssl genrsa -out verification-intermediate.key 2048 2>$null
                 openssl req -new -key verification-intermediate.key -out verification-intermediate.csr -subj "/CN=$code" 2>$null
-                openssl x509 -req -in verification-intermediate.csr -CA ca.pem -CAkey $caKeyPath -CAcreateserial -out verification-intermediate.pem -days 1 -sha256 2>$null
+                openssl x509 -req -in verification-intermediate.csr -CA $caCertLeaf -CAkey $caKeyPath -CAcreateserial -out verification-intermediate.pem -days 1 -sha256 2>$null
                 Pop-Location
 
                 $verPem = Join-Path $caVerDir "verification-intermediate.pem"
