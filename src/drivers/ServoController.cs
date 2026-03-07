@@ -29,7 +29,10 @@ namespace skittle_sorter
             var effectiveHardware = hardwareConfig ?? new ServoSystemHardwareConfig();
             _armConfig = effectiveHardware.Arm;
             _chuteConfig = effectiveHardware.Chute;
-            _colorAngles = chutePositions ?? new Dictionary<string, int>
+
+            // Use case-insensitive keys so config values like "Red" and runtime values like "red" both resolve.
+            _colorAngles = new Dictionary<string, int>(StringComparer.OrdinalIgnoreCase);
+            var sourceAngles = chutePositions ?? new Dictionary<string, int>
             {
                 { "red", 22 },
                 { "green", 44 },
@@ -37,6 +40,10 @@ namespace skittle_sorter
                 { "yellow", 88 },
                 { "orange", 112 }
             };
+            foreach (var kv in sourceAngles)
+            {
+                _colorAngles[kv.Key] = kv.Value;
+            }
 
             if (_useMockServo)
             {
@@ -77,7 +84,7 @@ namespace skittle_sorter
 
         public void MoveToColor(string color)
         {
-            if (_colorAngles.TryGetValue(color.ToLower(), out int angle))
+            if (_colorAngles.TryGetValue(color, out int angle))
             {
                 MoveChuteToAngle(angle);
             }
@@ -154,7 +161,7 @@ namespace skittle_sorter
 
         public int GetAngleForColor(string color)
         {
-            return _colorAngles.TryGetValue(color.ToLower(), out int angle) ? angle : -1;
+            return _colorAngles.TryGetValue(color, out int angle) ? angle : -1;
         }
 
         public Dictionary<string, int> GetColorAngles()
