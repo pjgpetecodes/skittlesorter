@@ -22,8 +22,9 @@ namespace skittle_sorter
                 string json = File.ReadAllText(appSettingsPath);
                 using var doc = JsonDocument.Parse(json);
                 var root = doc.RootElement;
+                var configRoot = GetHardwareRoot(root);
 
-                if (!root.TryGetProperty("MockMode", out var mockModeElement))
+                if (!configRoot.TryGetProperty("MockMode", out var mockModeElement))
                 {
                     Console.WriteLine("Warning: MockMode section not found in config. Using defaults.");
                     return new MockColorSensorConfig();
@@ -139,8 +140,9 @@ namespace skittle_sorter
                 string json = File.ReadAllText(appSettingsPath);
                 using var doc = JsonDocument.Parse(json);
                 var root = doc.RootElement;
+                var configRoot = GetHardwareRoot(root);
 
-                if (!root.TryGetProperty("ChutePositions", out var chuteElement))
+                if (!configRoot.TryGetProperty("ChutePositions", out var chuteElement))
                 {
                     return positions;
                 }
@@ -183,8 +185,9 @@ namespace skittle_sorter
                 string json = File.ReadAllText(appSettingsPath);
                 using var doc = JsonDocument.Parse(json);
                 var root = doc.RootElement;
+                var configRoot = GetHardwareRoot(root);
 
-                if (!root.TryGetProperty("ServoPositions", out var servoElement))
+                if (!configRoot.TryGetProperty("ServoPositions", out var servoElement))
                 {
                     return config;
                 }
@@ -213,6 +216,200 @@ namespace skittle_sorter
             }
         }
 
+        public static ServoHardwareConfig LoadServoHardwareConfiguration(string appSettingsPath = "appsettings.json")
+        {
+            var config = new ServoHardwareConfig();
+
+            try
+            {
+                if (!File.Exists(appSettingsPath))
+                {
+                    return config;
+                }
+
+                string json = File.ReadAllText(appSettingsPath);
+                using var doc = JsonDocument.Parse(json);
+                var root = doc.RootElement;
+                var configRoot = GetHardwareRoot(root);
+
+                if (!configRoot.TryGetProperty("ServoHardware", out var servoHardwareElement))
+                {
+                    return config;
+                }
+
+                if (servoHardwareElement.TryGetProperty("UseSoftwarePwm", out var useSoftwarePwm))
+                {
+                    config.UseSoftwarePwm = useSoftwarePwm.GetBoolean();
+                }
+
+                if (servoHardwareElement.TryGetProperty("GpioPin", out var gpioPin))
+                {
+                    config.GpioPin = gpioPin.GetInt32();
+                }
+
+                if (servoHardwareElement.TryGetProperty("PwmChip", out var pwmChip))
+                {
+                    config.PwmChip = pwmChip.GetInt32();
+                }
+
+                if (servoHardwareElement.TryGetProperty("PwmChannel", out var pwmChannel))
+                {
+                    config.PwmChannel = pwmChannel.GetInt32();
+                }
+
+                if (servoHardwareElement.TryGetProperty("FrequencyHz", out var frequencyHz))
+                {
+                    config.FrequencyHz = frequencyHz.GetInt32();
+                }
+
+                if (servoHardwareElement.TryGetProperty("AngleRange", out var angleRange))
+                {
+                    config.AngleRange = angleRange.GetInt32();
+                }
+
+                if (servoHardwareElement.TryGetProperty("MinPulseWidthMicroseconds", out var minPulseWidth))
+                {
+                    config.MinPulseWidthMicroseconds = minPulseWidth.GetInt32();
+                }
+
+                if (servoHardwareElement.TryGetProperty("MaxPulseWidthMicroseconds", out var maxPulseWidth))
+                {
+                    config.MaxPulseWidthMicroseconds = maxPulseWidth.GetInt32();
+                }
+
+                if (servoHardwareElement.TryGetProperty("HomeAngle", out var homeAngle))
+                {
+                    config.HomeAngle = homeAngle.GetInt32();
+                }
+
+                return config;
+            }
+            catch (Exception ex)
+            {
+                Console.WriteLine($"Error loading servo hardware configuration: {ex.Message}");
+                return config;
+            }
+        }
+
+        public static ServoSystemHardwareConfig LoadServoSystemHardwareConfiguration(string appSettingsPath = "appsettings.json")
+        {
+            var config = new ServoSystemHardwareConfig();
+
+            try
+            {
+                if (!File.Exists(appSettingsPath))
+                {
+                    return config;
+                }
+
+                string json = File.ReadAllText(appSettingsPath);
+                using var doc = JsonDocument.Parse(json);
+                var root = doc.RootElement;
+                var configRoot = GetHardwareRoot(root);
+
+                if (configRoot.TryGetProperty("ArmServoHardware", out var armElement))
+                {
+                    config.Arm = ParseServoHardwareElement(armElement, config.Arm);
+                }
+
+                if (configRoot.TryGetProperty("ChuteServoHardware", out var chuteElement))
+                {
+                    config.Chute = ParseServoHardwareElement(chuteElement, config.Chute);
+                }
+
+                // Legacy fallback: if only ServoHardware exists, apply to both channels.
+                if (configRoot.TryGetProperty("ServoHardware", out var legacyElement)
+                    && !configRoot.TryGetProperty("ArmServoHardware", out _)
+                    && !configRoot.TryGetProperty("ChuteServoHardware", out _))
+                {
+                    var parsed = ParseServoHardwareElement(legacyElement, config.Arm);
+                    config.Arm = parsed;
+                    config.Chute = new ServoHardwareConfig
+                    {
+                        UseSoftwarePwm = parsed.UseSoftwarePwm,
+                        GpioPin = parsed.GpioPin,
+                        PwmChip = parsed.PwmChip,
+                        PwmChannel = parsed.UseSoftwarePwm ? parsed.PwmChannel : 1,
+                        FrequencyHz = parsed.FrequencyHz,
+                        AngleRange = parsed.AngleRange,
+                        MinPulseWidthMicroseconds = parsed.MinPulseWidthMicroseconds,
+                        MaxPulseWidthMicroseconds = parsed.MaxPulseWidthMicroseconds,
+                        HomeAngle = 22
+                    };
+                }
+
+                return config;
+            }
+            catch (Exception ex)
+            {
+                Console.WriteLine($"Error loading servo system hardware configuration: {ex.Message}");
+                return config;
+            }
+        }
+
+        private static ServoHardwareConfig ParseServoHardwareElement(JsonElement servoHardwareElement, ServoHardwareConfig defaults)
+        {
+            var config = new ServoHardwareConfig
+            {
+                UseSoftwarePwm = defaults.UseSoftwarePwm,
+                GpioPin = defaults.GpioPin,
+                PwmChip = defaults.PwmChip,
+                PwmChannel = defaults.PwmChannel,
+                FrequencyHz = defaults.FrequencyHz,
+                AngleRange = defaults.AngleRange,
+                MinPulseWidthMicroseconds = defaults.MinPulseWidthMicroseconds,
+                MaxPulseWidthMicroseconds = defaults.MaxPulseWidthMicroseconds,
+                HomeAngle = defaults.HomeAngle
+            };
+
+            if (servoHardwareElement.TryGetProperty("UseSoftwarePwm", out var useSoftwarePwm))
+            {
+                config.UseSoftwarePwm = useSoftwarePwm.GetBoolean();
+            }
+
+            if (servoHardwareElement.TryGetProperty("GpioPin", out var gpioPin))
+            {
+                config.GpioPin = gpioPin.GetInt32();
+            }
+
+            if (servoHardwareElement.TryGetProperty("PwmChip", out var pwmChip))
+            {
+                config.PwmChip = pwmChip.GetInt32();
+            }
+
+            if (servoHardwareElement.TryGetProperty("PwmChannel", out var pwmChannel))
+            {
+                config.PwmChannel = pwmChannel.GetInt32();
+            }
+
+            if (servoHardwareElement.TryGetProperty("FrequencyHz", out var frequencyHz))
+            {
+                config.FrequencyHz = frequencyHz.GetInt32();
+            }
+
+            if (servoHardwareElement.TryGetProperty("AngleRange", out var angleRange))
+            {
+                config.AngleRange = angleRange.GetInt32();
+            }
+
+            if (servoHardwareElement.TryGetProperty("MinPulseWidthMicroseconds", out var minPulseWidth))
+            {
+                config.MinPulseWidthMicroseconds = minPulseWidth.GetInt32();
+            }
+
+            if (servoHardwareElement.TryGetProperty("MaxPulseWidthMicroseconds", out var maxPulseWidth))
+            {
+                config.MaxPulseWidthMicroseconds = maxPulseWidth.GetInt32();
+            }
+
+            if (servoHardwareElement.TryGetProperty("HomeAngle", out var homeAngle))
+            {
+                config.HomeAngle = homeAngle.GetInt32();
+            }
+
+            return config;
+        }
+
         private static string ResolveDeviceId(string configuredDeviceId, JsonElement iotHubElement)
         {
             if (!configuredDeviceId.Contains(RegistrationIdToken, StringComparison.OrdinalIgnoreCase))
@@ -232,6 +429,17 @@ namespace skittle_sorter
             }
 
             return configuredDeviceId;
+        }
+
+        private static JsonElement GetHardwareRoot(JsonElement root)
+        {
+            if (root.TryGetProperty("Hardware", out var hardwareRoot)
+                && hardwareRoot.ValueKind == JsonValueKind.Object)
+            {
+                return hardwareRoot;
+            }
+
+            return root;
         }
     }
 

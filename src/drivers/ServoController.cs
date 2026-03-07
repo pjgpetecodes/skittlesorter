@@ -1,16 +1,34 @@
 using System;
 using System.Collections.Generic;
+using Iot.Device.ServoMotor;
+using System.Device.Pwm;
+using System.Device.Pwm.Drivers;
 
 namespace skittle_sorter
 {
-    public class ServoController
+    public class ServoController : IDisposable
     {
         private readonly Dictionary<string, int> _colorAngles;
         private readonly bool _useMockServo;
+        private readonly ServoHardwareConfig _armConfig;
+        private readonly ServoHardwareConfig _chuteConfig;
+        private readonly MockServoMotor? _mockArm;
+        private readonly MockServoMotor? _mockChute;
+        private readonly PwmChannel? _armPwmChannel;
+        private readonly PwmChannel? _chutePwmChannel;
+        private readonly ServoMotor? _armServo;
+        private readonly ServoMotor? _chuteServo;
+        private bool _disposed;
 
-        public ServoController(bool useMockServo = false, Dictionary<string, int>? chutePositions = null)
+        public ServoController(
+            bool useMockServo = false,
+            Dictionary<string, int>? chutePositions = null,
+            ServoSystemHardwareConfig? hardwareConfig = null)
         {
             _useMockServo = useMockServo;
+            var effectiveHardware = hardwareConfig ?? new ServoSystemHardwareConfig();
+            _armConfig = effectiveHardware.Arm;
+            _chuteConfig = effectiveHardware.Chute;
             _colorAngles = chutePositions ?? new Dictionary<string, int>
             {
                 { "red", 22 },
@@ -19,13 +37,49 @@ namespace skittle_sorter
                 { "yellow", 88 },
                 { "orange", 112 }
             };
+
+            if (_useMockServo)
+            {
+                _mockArm = new MockServoMotor("ArmServo");
+                _mockChute = new MockServoMotor("ChuteServo");
+                _mockArm.Start();
+                _mockChute.Start();
+                return;
+            }
+
+            try
+            {
+                _armPwmChannel = CreatePwmChannel(_armConfig, "Arm");
+                _chutePwmChannel = CreatePwmChannel(_chuteConfig, "Chute");
+
+                _armServo = new ServoMotor(
+                    _armPwmChannel,
+                    _armConfig.AngleRange,
+                    _armConfig.MinPulseWidthMicroseconds,
+                    _armConfig.MaxPulseWidthMicroseconds);
+
+                _chuteServo = new ServoMotor(
+                    _chutePwmChannel,
+                    _chuteConfig.AngleRange,
+                    _chuteConfig.MinPulseWidthMicroseconds,
+                    _chuteConfig.MaxPulseWidthMicroseconds);
+
+                _armServo.Start();
+                _chuteServo.Start();
+            }
+            catch (Exception ex)
+            {
+                throw new InvalidOperationException(
+                    $"Failed to initialize real servo. Check PWM pin/channel configuration and permissions. Details: {ex.Message}",
+                    ex);
+            }
         }
 
         public void MoveToColor(string color)
         {
             if (_colorAngles.TryGetValue(color.ToLower(), out int angle))
             {
-                MoveToAngle(angle);
+                MoveChuteToAngle(angle);
             }
             else
             {
@@ -33,26 +87,68 @@ namespace skittle_sorter
             }
         }
 
-        public void MoveToAngle(int angle)
+        public void MoveArmToAngle(int angle)
         {
-            if (angle < 0 || angle > 360)
+            if (angle < 0 || angle > _armConfig.AngleRange)
             {
-                Console.WriteLine($"[Servo] Invalid angle: {angle}");
+                Console.WriteLine($"[Servo:Arm] Invalid angle: {angle}");
                 return;
             }
 
-            Console.WriteLine($"[Servo] Moving to angle: {angle}°");
-            // In real hardware, this would interface with ServoMotor/PwmChannel
-            // In mock mode, this just logs
+            Console.WriteLine($"[Servo:Arm] Moving to angle: {angle}°");
+
+            if (_useMockServo)
+            {
+                _mockArm?.WriteAngle(angle);
+                return;
+            }
+
+            _armServo?.WriteAngle(angle);
+        }
+
+        public void MoveChuteToAngle(int angle)
+        {
+            if (angle < 0 || angle > _chuteConfig.AngleRange)
+            {
+                Console.WriteLine($"[Servo:Chute] Invalid angle: {angle}");
+                return;
+            }
+
+            Console.WriteLine($"[Servo:Chute] Moving to angle: {angle}°");
+
+            if (_useMockServo)
+            {
+                _mockChute?.WriteAngle(angle);
+                return;
+            }
+
+            _chuteServo?.WriteAngle(angle);
+        }
+
+        // Backward-compatible API: default angle movement controls arm servo.
+        public void MoveToAngle(int angle)
+        {
+            MoveArmToAngle(angle);
         }
 
         public void Home()
         {
-            MoveToAngle(0);
+            MoveArmToAngle(_armConfig.HomeAngle);
         }
 
         public void Stop()
         {
+            if (_useMockServo)
+            {
+                _mockArm?.Stop();
+                _mockChute?.Stop();
+                return;
+            }
+
+            _armServo?.Stop();
+            _chuteServo?.Stop();
+            _armPwmChannel?.Stop();
+            _chutePwmChannel?.Stop();
             Console.WriteLine("[Servo] Stopping");
         }
 
@@ -64,6 +160,35 @@ namespace skittle_sorter
         public Dictionary<string, int> GetColorAngles()
         {
             return new Dictionary<string, int>(_colorAngles);
+        }
+
+        public void Dispose()
+        {
+            if (_disposed)
+            {
+                return;
+            }
+
+            Stop();
+            _armServo?.Dispose();
+            _chuteServo?.Dispose();
+            _armPwmChannel?.Dispose();
+            _chutePwmChannel?.Dispose();
+            _mockArm?.Dispose();
+            _mockChute?.Dispose();
+            _disposed = true;
+        }
+
+        private static PwmChannel CreatePwmChannel(ServoHardwareConfig config, string label)
+        {
+            if (config.UseSoftwarePwm)
+            {
+                Console.WriteLine($"[Servo:{label}] Using software PWM on GPIO {config.GpioPin} at {config.FrequencyHz}Hz");
+                return new SoftwarePwmChannel(config.GpioPin, config.FrequencyHz, 0.0, false);
+            }
+
+            Console.WriteLine($"[Servo:{label}] Using hardware PWM chip {config.PwmChip}, channel {config.PwmChannel} at {config.FrequencyHz}Hz");
+            return PwmChannel.Create(config.PwmChip, config.PwmChannel, config.FrequencyHz, 0.0);
         }
     }
 }
