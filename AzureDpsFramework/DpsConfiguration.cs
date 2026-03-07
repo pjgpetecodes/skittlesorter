@@ -1,6 +1,7 @@
 using System;
 using System.IO;
 using System.Text.Json;
+using System.Linq;
 
 namespace AzureDpsFramework
 {
@@ -71,14 +72,23 @@ namespace AzureDpsFramework
             cfg.AttestationCertPath = string.IsNullOrWhiteSpace(attCertPath)
                 ? null
                 : ResolveRegistrationIdToken(attCertPath, cfg.RegistrationId);
+            cfg.AttestationCertPath = string.IsNullOrWhiteSpace(cfg.AttestationCertPath)
+                ? null
+                : ResolveRelativePath(cfg.AttestationCertPath, appSettingsPath);
             var attKeyPath = GetString(dps, nameof(AttestationKeyPath));
             cfg.AttestationKeyPath = string.IsNullOrWhiteSpace(attKeyPath)
                 ? null
                 : ResolveRegistrationIdToken(attKeyPath, cfg.RegistrationId);
+            cfg.AttestationKeyPath = string.IsNullOrWhiteSpace(cfg.AttestationKeyPath)
+                ? null
+                : ResolveRelativePath(cfg.AttestationKeyPath, appSettingsPath);
             var attChainPath = GetString(dps, nameof(AttestationCertChainPath));
             cfg.AttestationCertChainPath = string.IsNullOrWhiteSpace(attChainPath)
                 ? null
                 : ResolveRegistrationIdToken(attChainPath, cfg.RegistrationId);
+            cfg.AttestationCertChainPath = string.IsNullOrWhiteSpace(cfg.AttestationCertChainPath)
+                ? null
+                : ResolveRelativePath(cfg.AttestationCertChainPath, appSettingsPath);
             cfg.SasExpirySeconds = GetInt(dps, nameof(SasExpirySeconds), cfg.SasExpirySeconds);
             cfg.ApiVersion = GetString(dps, nameof(ApiVersion), cfg.ApiVersion);
             cfg.MqttPort = GetInt(dps, nameof(MqttPort), cfg.MqttPort);
@@ -86,12 +96,15 @@ namespace AzureDpsFramework
             cfg.CsrFilePath = ResolveRegistrationIdToken(
                 GetString(dps, nameof(CsrFilePath), cfg.CsrFilePath),
                 cfg.RegistrationId);
+            cfg.CsrFilePath = ResolveRelativePath(cfg.CsrFilePath, appSettingsPath);
             cfg.CsrKeyFilePath = ResolveRegistrationIdToken(
                 GetString(dps, nameof(CsrKeyFilePath), cfg.CsrKeyFilePath),
                 cfg.RegistrationId);
+            cfg.CsrKeyFilePath = ResolveRelativePath(cfg.CsrKeyFilePath, appSettingsPath);
             cfg.IssuedCertFilePath = ResolveRegistrationIdToken(
                 GetString(dps, nameof(IssuedCertFilePath), cfg.IssuedCertFilePath),
                 cfg.RegistrationId);
+            cfg.IssuedCertFilePath = ResolveRelativePath(cfg.IssuedCertFilePath, appSettingsPath);
             cfg.EnableDebugLogging = GetBool(dps, nameof(EnableDebugLogging), cfg.EnableDebugLogging);
 
             cfg.Validate();
@@ -146,6 +159,47 @@ namespace AzureDpsFramework
             }
 
             return value.Replace(RegistrationIdToken, registrationId, StringComparison.OrdinalIgnoreCase);
+        }
+
+        private static string ResolveRelativePath(string value, string appSettingsPath)
+        {
+            if (string.IsNullOrWhiteSpace(value))
+            {
+                return value;
+            }
+
+            var normalized = value.Replace('/', Path.DirectorySeparatorChar).Replace('\\', Path.DirectorySeparatorChar);
+            if (Path.IsPathRooted(normalized))
+            {
+                return normalized;
+            }
+
+            var appSettingsFullPath = Path.GetFullPath(appSettingsPath);
+            var appSettingsDir = Path.GetDirectoryName(appSettingsFullPath) ?? Directory.GetCurrentDirectory();
+            var projectRoot = FindProjectRoot(appSettingsDir);
+
+            if (!string.IsNullOrWhiteSpace(projectRoot))
+            {
+                return Path.GetFullPath(Path.Combine(projectRoot, normalized));
+            }
+
+            return Path.GetFullPath(Path.Combine(appSettingsDir, normalized));
+        }
+
+        private static string? FindProjectRoot(string startDirectory)
+        {
+            var current = new DirectoryInfo(startDirectory);
+            while (current != null)
+            {
+                if (current.GetFiles("*.csproj").Any())
+                {
+                    return current.FullName;
+                }
+
+                current = current.Parent;
+            }
+
+            return null;
         }
     }
 }
