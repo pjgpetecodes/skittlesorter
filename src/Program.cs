@@ -20,6 +20,7 @@ namespace skittle_sorter
             var iotConfig = ConfigurationLoader.LoadIoTHubConfiguration();
             var chutePositions = ConfigurationLoader.LoadChutePositions();
             var servoPositions = ConfigurationLoader.LoadServoPositions();
+            var servoHardwareConfig = ConfigurationLoader.LoadServoSystemHardwareConfiguration();
 
             Console.WriteLine($"Mock Mode - Color Sensor: {mockConfig.EnableMockColorSensor}, Servos: {mockConfig.EnableMockServos}");
             Console.WriteLine($"IoT Hub Telemetry Enabled: {iotConfig.SendTelemetry}\n");
@@ -30,7 +31,7 @@ namespace skittle_sorter
                 : new TCS3472x();
             Console.WriteLine("Color sensor initialised.");
 
-            var servo = new ServoController(mockConfig.EnableMockServos, chutePositions);
+            using var servo = new ServoController(mockConfig.EnableMockServos, chutePositions, servoHardwareConfig);
             servo.Home();
 
             PrintSection("IoT Hub / DPS Initialization");
@@ -54,11 +55,11 @@ namespace skittle_sorter
                 while (true)
                 {
                     // Step 1: Pick skittle
-                    servo.MoveToAngle(servoPositions.PickAngle);
+                    servo.MoveArmToAngle(servoPositions.PickAngle);
                     Thread.Sleep(1000);
 
                     // Step 2: Move under sensor
-                    servo.MoveToAngle(servoPositions.DetectAngle);
+                    servo.MoveArmToAngle(servoPositions.DetectAngle);
                     Thread.Sleep(500);
 
                     // Step 3: Read sensor
@@ -72,7 +73,7 @@ namespace skittle_sorter
                     if (colour == "None")
                     {
                         Console.WriteLine("No Skittle detected — returning to pick position.\n");
-                        servo.MoveToAngle(servoPositions.PickAngle);
+                        servo.MoveArmToAngle(servoPositions.PickAngle);
                         Thread.Sleep(1000);
                         continue;
                     }
@@ -95,7 +96,7 @@ namespace skittle_sorter
                     // Step 7: Move servo2 only if needed
                     if (targetAngle != currentChuteAngle)
                     {
-                        servo.MoveToAngle(targetAngle);
+                        servo.MoveChuteToAngle(targetAngle);
                         Thread.Sleep(200);
                         currentChuteAngle = targetAngle;
                     }
@@ -105,7 +106,7 @@ namespace skittle_sorter
                     }
 
                     // Step 8: Drop skittle
-                    servo.MoveToAngle(servoPositions.DropAngle);
+                    servo.MoveArmToAngle(servoPositions.DropAngle);
                     Thread.Sleep(1500);
 
                     Console.WriteLine("Sorted.\n");

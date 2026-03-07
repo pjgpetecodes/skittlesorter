@@ -92,9 +92,12 @@ Complete Azure resource setup including:
 See full reference: [docs/Configuration.md](docs/Configuration.md)
 
 Create an `appsettings.json` file in the project root. Configuration includes:
-- **MockMode**: Simulate hardware for development/testing
-- **ServoPositions**: Servo angles for pick/detect/drop operations
-- **ChutePositions**: Servo angles for each color chute
+- **Hardware**: Hardware-related settings grouped under one section
+- **Hardware.MockMode**: Simulate hardware for development/testing
+- **Hardware.ServoPositions**: Arm servo angles for pick/detect/drop operations
+- **Hardware.ChutePositions**: Chute servo angles for each color chute
+- **Hardware.ArmServoHardware**: PWM settings for arm servo (pick/detect/drop)
+- **Hardware.ChuteServoHardware**: PWM settings for chute servo (sorting)
 - **IoTHub**: DPS provisioning (symmetric key or X.509) and telemetry settings
 - **Adr**: Azure Device Registry integration for device queries and updates
 
@@ -113,6 +116,8 @@ skittlesorter/
 │   │   ├── TCS3472x.cs                # Color sensor driver
 │   │   ├── SkittleSorterService.cs    # Main sorting logic
 │   │   ├── ServoController.cs         # Servo motor control
+│   │   ├── ServoHardwareConfig.cs     # Single-servo PWM config model
+│   │   ├── ServoSystemHardwareConfig.cs # Dual-servo PWM config model
 │   │   ├── MockColorSensorConfig.cs   # Mock sensor for testing
 │   │   └── MockServoMotor.cs          # Mock servo for testing
 │   └── comms/                         # Communication services
@@ -194,12 +199,12 @@ Main application implementing the sorting logic, located in `src/`:
 
 **Core files:**
 - **src/Program.cs**: Entry point loading all configurations and running the application
-- **src/configuration/ConfigurationLoader.cs**: Loads all settings from `appsettings.json` (mock mode, IoT Hub, DPS, servo positions, chute positions)
+- **src/configuration/ConfigurationLoader.cs**: Loads settings from `appsettings.json` (`Hardware`, IoT Hub, DPS, ADR) with backward-compatible fallback for legacy root-level hardware keys
 
 **Hardware drivers (src/drivers/):**
 - **TCS3472x.cs**: Color sensor driver
 - **SkittleSorterService.cs**: Main sorting loop orchestration (color detection → servo movement → telemetry)
-- **ServoController.cs**: Manages servo positioning with configuration-driven angle mappings
+- **ServoController.cs**: Manages dual-servo positioning (arm + chute) with configuration-driven angle mappings
 - **MockColorSensorConfig.cs**, **MockServoMotor.cs**: Mock implementations for testing without hardware
 
 **Communication services (src/comms/):**
@@ -242,14 +247,14 @@ Full schema and monitoring guidance: **[docs/Telemetry.md](docs/Telemetry.md)**
 ## Development
 
 **Mock Mode (for PC/laptop testing):**
-- Set `EnableMockColorSensor` and `EnableMockServos` to `true`
+- Set `Hardware.MockMode.EnableMockColorSensor` and `Hardware.MockMode.EnableMockServos` to `true`
 - Customize `MockColorSequence` for different test patterns
 - Full DPS provisioning and telemetry still work
 
 **Hardware Mode (Raspberry Pi):**
 - Set both mock settings to `false`
 - Connect TCS3472x sensor via I2C
-- Connect servos to GPIO pins
+- Configure `Hardware.ArmServoHardware` and `Hardware.ChuteServoHardware` to match your PWM chip/channel or GPIO setup
 
 **Cross-compile for Raspberry Pi:**
 ```bash
