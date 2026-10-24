@@ -1,0 +1,10 @@
+{
+  "markdown": "03-x509-and-csr-workflows.md",
+  "html": "03-x509-and-csr-workflows.html",
+  "state": ".wp-md/03-x509-and-csr-workflows.sync.json",
+  "remoteState": "03-x509-and-csr-workflows.html.remote.json",
+  "wordpress": {
+    "site": "https://www.petecodes.co.uk",
+    "postId": 5023
+  }
+}

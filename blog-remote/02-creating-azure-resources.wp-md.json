@@ -1,0 +1,10 @@
+{
+  "markdown": "02-creating-azure-resources.md",
+  "html": "02-creating-azure-resources.html",
+  "state": ".wp-md/02-creating-azure-resources.sync.json",
+  "remoteState": "02-creating-azure-resources.html.remote.json",
+  "wordpress": {
+    "site": "https://www.petecodes.co.uk",
+    "postId": 4994
+  }
+}

@@ -1,0 +1,489 @@
+<!-- wp:heading -->
+<h2 class="wp-block-heading"><strong>Introduction</strong></h2>
+<!-- /wp:heading -->
+
+<!-- wp:paragraph -->
+<p>Welcome to this comprehensive blog series on building a real-world IoT device using Azure's latest IoT Hub, Azure Device Provisioning Service (DPS) features, along with Microsoft-managed certificate infrastructure.</p>
+<!-- /wp:paragraph -->
+
+<!-- wp:heading {"textColor":"#f6f6f4"} -->
+<h2 class="wp-block-heading has-f-6-f-6-f-4-color has-text-color">Contents:</h2>
+<!-- /wp:heading -->
+
+<!-- wp:list {"ordered":true,"textColor":"#f6f6f4"} -->
+<ol class="wp-block-list has-f-6-f-6-f-4-color has-text-color"><!-- wp:list-item -->
+<li><a href="https://www.petecodes.co.uk/iot-hub-with-adr-and-certificate-management-part-1" target="_blank" rel="noreferrer noopener">Introduction (This post!)</a></li>
+<!-- /wp:list-item -->
+
+<!-- wp:list-item -->
+<li><a href="https://www.petecodes.co.uk/iot-hub-with-adr-and-certificate-management-part-2" target="_blank" rel="noreferrer noopener">A DPS Primer</a></li>
+<!-- /wp:list-item -->
+
+<!-- wp:list-item -->
+<li><a href="https://www.petecodes.co.uk/iot-hub-with-adr-and-certificate-management-part-3" target="_blank" rel="noreferrer noopener">Creating DPS, IoT Hub and ADR Instances</a></li>
+<!-- /wp:list-item -->
+
+<!-- wp:list-item -->
+<li><a href="https://www.petecodes.co.uk/iot-hub-with-adr-and-certificate-management-part-4" target="_blank" rel="noreferrer noopener">Understanding X.509 and CSR Workflows</a></li>
+<!-- /wp:list-item -->
+
+<!-- wp:list-item -->
+<li><a href="https://www.petecodes.co.uk/iot-hub-with-adr-and-certificate-management-part-5" target="_blank" rel="noreferrer noopener">The Device Application</a></li>
+<!-- /wp:list-item --></ol>
+<!-- /wp:list -->
+
+<!-- wp:heading {"level":3} -->
+<h3 class="wp-block-heading" id="what-youll-build">What You'll Build</h3>
+<!-- /wp:heading -->
+
+<!-- wp:paragraph -->
+<p>By the end of this series, you'll have:</p>
+<!-- /wp:paragraph -->
+
+<!-- wp:list -->
+<ul class="wp-block-list"><!-- wp:list-item -->
+<li>✅ A complete IoT device application (Skittle Sorter)</li>
+<!-- /wp:list-item -->
+
+<!-- wp:list-item -->
+<li>✅ Automated device provisioning with DPS</li>
+<!-- /wp:list-item -->
+
+<!-- wp:list-item -->
+<li>✅ Microsoft-managed X.509 certificate issuance</li>
+<!-- /wp:list-item -->
+
+<!-- wp:list-item -->
+<li>✅ Azure Device Registry integration</li>
+<!-- /wp:list-item -->
+
+<!-- wp:list-item -->
+<li>✅ Practical security patterns and considerations</li>
+<!-- /wp:list-item -->
+
+<!-- wp:list-item -->
+<li>✅ Full automation scripts</li>
+<!-- /wp:list-item --></ul>
+<!-- /wp:list -->
+
+<!-- wp:paragraph -->
+<p>The series uses a&nbsp;<strong>3D-printed Skittle sorter</strong>&nbsp;for the physical build, but it’s&nbsp;<strong>optional</strong>&nbsp;— you can run everything with mocked hardware. Still, it’s a fun build if you want the full experience.</p>
+<!-- /wp:paragraph -->
+
+<!-- wp:image {"id":4968,"sizeSlug":"full","linkDestination":"media","align":"center"} -->
+<figure class="wp-block-image aligncenter size-full"><a href="https://www.petecodes.co.uk/wp-content/uploads/2026/01/GIF_20260112_230237_613.gif"><img src="https://www.petecodes.co.uk/wp-content/uploads/2026/01/GIF_20260112_230237_613.gif" alt="" class="wp-image-4968"/></a></figure>
+<!-- /wp:image -->
+
+<!-- wp:quote -->
+<blockquote class="wp-block-quote"><!-- wp:paragraph -->
+<p>⚠️&nbsp;<strong>Warning:</strong>&nbsp;This guide is for&nbsp;<strong>testing and demo purposes only</strong>.&nbsp;<strong>Do not use self-signed X.509 certificates in production.</strong></p>
+<!-- /wp:paragraph --></blockquote>
+<!-- /wp:quote -->
+
+<!-- wp:paragraph -->
+<p>This series focuses on&nbsp;<strong>patterns and principles</strong>. We’ll use self-signed certs to make the learning path simple and reproducible, but the concepts are foundational and transfer directly to production setups. In practice, you’ll replace self-signed certs with&nbsp;<strong>production-grade certificates</strong>&nbsp;issued by a trusted CA (or a managed service).</p>
+<!-- /wp:paragraph -->
+
+<!-- wp:heading {"level":3} -->
+<h3 class="wp-block-heading" id="whats-new-in-2025-2026">What's New in 2025-2026</h3>
+<!-- /wp:heading -->
+
+<!-- wp:paragraph -->
+<p>This series focuses on&nbsp;<strong>preview features</strong>&nbsp;(starting November 2025):</p>
+<!-- /wp:paragraph -->
+
+<!-- wp:paragraph -->
+<p>In November 2025, Microsoft announced the public preview of Azure IoT Hub integration with Azure Device Registry (ADR), bringing IoT devices under the Azure management plane with ARM resource representation. </p>
+<!-- /wp:paragraph -->
+
+<!-- wp:paragraph -->
+<p>ADR includes an optional&nbsp;<strong>certificate management</strong>&nbsp;feature that provides Microsoft-backed X.509 PKI, eliminating the need for custom certificate infrastructure. </p>
+<!-- /wp:paragraph -->
+
+<!-- wp:paragraph -->
+<p>ADR now serves as a unified control plane for managing both IoT Hub devices and Azure IoT Operations assets, with policy-driven certificate lifecycle management that automates issuance and renewal at scale.</p>
+<!-- /wp:paragraph -->
+
+<!-- wp:heading {"level":3} -->
+<h3 class="wp-block-heading">Working with Preview APIs</h3>
+<!-- /wp:heading -->
+
+<!-- wp:paragraph -->
+<p>As of the time of writing (1st February 2026), these are&nbsp;<strong>preview features</strong> and the official Microsoft C# SDK doesn't yet support the new DPS and certificate management capabilities.</p>
+<!-- /wp:paragraph -->
+
+<!-- wp:paragraph -->
+<p>However, I've built a&nbsp;<strong>custom DPS framework</strong>&nbsp;that communicates directly with the preview APIs using&nbsp;<strong>MQTT protocol</strong>. </p>
+<!-- /wp:paragraph -->
+
+<!-- wp:paragraph -->
+<p>It's worth noting that Microsoft does provide SDK support for&nbsp;<strong>Python</strong>&nbsp;and&nbsp;<strong>C/C++</strong>, but C# developers need to wait for official support or use custom implementations like mine in the meantime.</p>
+<!-- /wp:paragraph -->
+
+<!-- wp:heading {"level":4} -->
+<h4 class="wp-block-heading" id="-azure-iot-hub--azure-device-registry-adr-integration-preview">🆕 Azure IoT Hub + Azure Device Registry (ADR) Integration (Preview)</h4>
+<!-- /wp:heading -->
+
+<!-- wp:list -->
+<ul class="wp-block-list"><!-- wp:list-item -->
+<li>IoT Hub integrates with ADR to provide a&nbsp;<strong>unified device registry</strong>&nbsp;across IoT Hub and IoT Operations</li>
+<!-- /wp:list-item -->
+
+<!-- wp:list-item -->
+<li>ADR namespaces enable centralized device metadata and identity management</li>
+<!-- /wp:list-item -->
+
+<!-- wp:list-item -->
+<li>ADR integration is required for the latest provisioning and certificate management features</li>
+<!-- /wp:list-item --></ul>
+<!-- /wp:list -->
+
+<!-- wp:heading {"level":4} -->
+<h4 class="wp-block-heading" id="-microsoft-backed-x509-certificate-management-preview">🆕 Microsoft-Backed X.509 Certificate Management (Preview)</h4>
+<!-- /wp:heading -->
+
+<!-- wp:list -->
+<ul class="wp-block-list"><!-- wp:list-item -->
+<li>ADR offers&nbsp;<strong>certificate management</strong>&nbsp;using Microsoft-managed PKI</li>
+<!-- /wp:list-item -->
+
+<!-- wp:list-item -->
+<li>Issues and renews&nbsp;<strong>operational X.509 certificates</strong>&nbsp;for device authentication to IoT Hub</li>
+<!-- /wp:list-item -->
+
+<!-- wp:list-item -->
+<li>Certificates are chained to Microsoft-managed Certificate Authorities (CAs)</li>
+<!-- /wp:list-item -->
+
+<!-- wp:list-item -->
+<li>Devices onboard through DPS, then receive operational certs via policy-driven certificate issuance</li>
+<!-- /wp:list-item -->
+
+<!-- wp:list-item -->
+<li><strong>DPS is required</strong>&nbsp;for provisioning (DPS must be linked and used for all preview scenarios)</li>
+<!-- /wp:list-item --></ul>
+<!-- /wp:list -->
+
+<!-- wp:quote -->
+<blockquote class="wp-block-quote"><!-- wp:paragraph -->
+<p>⚠️&nbsp;<strong>Preview Notice:</strong>&nbsp;ADR integration and Microsoft-backed certificate management are in public preview and&nbsp;<strong>not recommended for production workloads</strong>.</p>
+<!-- /wp:paragraph --></blockquote>
+<!-- /wp:quote -->
+
+<!-- wp:heading {"level":4} -->
+<h4 class="wp-block-heading" id="supported-regions-preview">Supported Regions (Preview)</h4>
+<!-- /wp:heading -->
+
+<!-- wp:list -->
+<ul class="wp-block-list"><!-- wp:list-item -->
+<li>East US</li>
+<!-- /wp:list-item -->
+
+<!-- wp:list-item -->
+<li>East US 2</li>
+<!-- /wp:list-item -->
+
+<!-- wp:list-item -->
+<li>West US</li>
+<!-- /wp:list-item -->
+
+<!-- wp:list-item -->
+<li>West US 2</li>
+<!-- /wp:list-item -->
+
+<!-- wp:list-item -->
+<li>West Europe</li>
+<!-- /wp:list-item -->
+
+<!-- wp:list-item -->
+<li>North Europe</li>
+<!-- /wp:list-item --></ul>
+<!-- /wp:list -->
+
+<!-- wp:heading {"level":3} -->
+<h3 class="wp-block-heading" id="official-docs--announcements">Official Docs &amp; Announcements</h3>
+<!-- /wp:heading -->
+
+<!-- wp:list -->
+<ul class="wp-block-list"><!-- wp:list-item -->
+<li>Azure IoT Hub + ADR preview announcement:&nbsp;<a href="https://techcommunity.microsoft.com/blog/iotblog/azure-iot-hub-with-adr-preview-extending-azure-capabilities-and-certificate-mana/4465265" target="_blank" rel="noreferrer noopener">https://techcommunity.microsoft.com/blog/iotblog/azure-iot-hub-with-adr-preview-extending-azure-capabilities-and-certificate-mana/4465265</a></li>
+<!-- /wp:list-item -->
+
+<!-- wp:list-item -->
+<li>Azure IoT Hub “What’s New”:&nbsp;<a href="https://learn.microsoft.com/en-us/azure/iot-hub/iot-hub-what-is-new" target="_blank" rel="noreferrer noopener">https://learn.microsoft.com/en-us/azure/iot-hub/iot-hub-what-is-new</a></li>
+<!-- /wp:list-item --></ul>
+<!-- /wp:list -->
+
+<!-- wp:heading {"level":3} -->
+<h3 class="wp-block-heading" id="learning-the-traditional-dps-approach">Learning the Traditional DPS Approach</h3>
+<!-- /wp:heading -->
+
+<!-- wp:paragraph -->
+<p>If you're interested in learning the traditional DPS workflow with self-signed X.509 certificates (without the new ADR and certificate management features), I've written a series of blog posts covering that approach:</p>
+<!-- /wp:paragraph -->
+
+<!-- wp:paragraph -->
+<p><a href="https://www.petecodes.co.uk/using-azure-device-provisioning-service-with-self-signed-x-509-certificates-part-1/" target="_blank" rel="noreferrer noopener">Using Azure Device Provisioning Service with Self-Signed X.509 Certificates</a></p>
+<!-- /wp:paragraph -->
+
+<!-- wp:heading {"level":3} -->
+<h3 class="wp-block-heading" id="two-ways-to-use-this-series">Two Ways to Use This Series</h3>
+<!-- /wp:heading -->
+
+<!-- wp:heading {"level":4} -->
+<h4 class="wp-block-heading" id="option-1-quick-start-clone-and-run">Option 1: Quick Start (Clone and Run)</h4>
+<!-- /wp:heading -->
+
+<!-- wp:kevinbatdorf/code-block-pro {"code":"git clone https://github.com/pjgpetecodes/skittlesorter.git\ncd skittlesorter/scripts\n$env:Path = \u0022C:\u005cProgram Files\u005cOpenSSL-Win64\u005cbin;$env:Path\u0022\n\n# Full ADR + X.509 setup (recommended)\n.\u005csetup-x509-dps-adr.ps1 `\n  -ResourceGroup \u0022my-iot-rg\u0022 `\n  -Location \u0022eastus\u0022 `\n  -IoTHubName \u0022my-hub-001\u0022 `\n  -DPSName \u0022my-dps-001\u0022 `\n  -AdrNamespace \u0022my-adr-001\u0022 `\n  -UserIdentity \u0022my-uami\u0022","codeHTML":"\u003cpre class=\u0022shiki dracula-soft\u0022 style=\u0022background-color: #282A36\u0022 tabindex=\u00220\u0022\u003e\u003ccode\u003e\u003cspan class=\u0022line\u0022\u003e\u003cspan style=\u0022color: #F6F6F4\u0022\u003egit clone https:\u003c/span\u003e\u003cspan style=\u0022color: #F286C4\u0022\u003e//\u003c/span\u003e\u003cspan style=\u0022color: #97E1F1\u0022\u003egithub.com\u003c/span\u003e\u003cspan style=\u0022color: #F286C4\u0022\u003e/\u003c/span\u003e\u003cspan style=\u0022color: #F6F6F4\u0022\u003epjgpetecodes\u003c/span\u003e\u003cspan style=\u0022color: #F286C4\u0022\u003e/\u003c/span\u003e\u003cspan style=\u0022color: #F6F6F4\u0022\u003eskittlesorter.git\u003c/span\u003e\u003c/span\u003e\n\u003cspan class=\u0022line\u0022\u003e\u003cspan style=\u0022color: #F6F6F4\u0022\u003ecd skittlesorter\u003c/span\u003e\u003cspan style=\u0022color: #F286C4\u0022\u003e/\u003c/span\u003e\u003cspan style=\u0022color: #F6F6F4\u0022\u003escripts\u003c/span\u003e\u003c/span\u003e\n\u003cspan class=\u0022line\u0022\u003e\u003cspan style=\u0022color: #F6F6F4\u0022\u003e$\u003c/span\u003e\u003cspan style=\u0022color: #BF9EEE\u0022\u003eenv:\u003c/span\u003e\u003cspan style=\u0022color: #F6F6F4\u0022\u003ePath \u003c/span\u003e\u003cspan style=\u0022color: #F286C4\u0022\u003e=\u003c/span\u003e\u003cspan style=\u0022color: #F6F6F4\u0022\u003e \u003c/span\u003e\u003cspan style=\u0022color: #DEE492\u0022\u003e\u0026quot;\u003c/span\u003e\u003cspan style=\u0022color: #E7EE98\u0022\u003eC:\u005cProgram Files\u005cOpenSSL-Win64\u005cbin;\u003c/span\u003e\u003cspan style=\u0022color: #F6F6F4\u0022\u003e$\u003c/span\u003e\u003cspan style=\u0022color: #BF9EEE\u0022\u003eenv:\u003c/span\u003e\u003cspan style=\u0022color: #F6F6F4\u0022\u003ePath\u003c/span\u003e\u003cspan style=\u0022color: #DEE492\u0022\u003e\u0026quot;\u003c/span\u003e\u003c/span\u003e\n\u003cspan class=\u0022line\u0022\u003e\u003c/span\u003e\n\u003cspan class=\u0022line\u0022\u003e\u003cspan style=\u0022color: #7B7F8B\u0022\u003e# Full ADR + X.509 setup (recommended)\u003c/span\u003e\u003c/span\u003e\n\u003cspan class=\u0022line\u0022\u003e\u003cspan style=\u0022color: #F6F6F4\u0022\u003e.\u005csetup\u003c/span\u003e\u003cspan style=\u0022color: #F286C4\u0022\u003e-\u003c/span\u003e\u003cspan style=\u0022color: #F6F6F4\u0022\u003ex509\u003c/span\u003e\u003cspan style=\u0022color: #F286C4\u0022\u003e-\u003c/span\u003e\u003cspan style=\u0022color: #F6F6F4\u0022\u003edps\u003c/span\u003e\u003cspan style=\u0022color: #F286C4\u0022\u003e-\u003c/span\u003e\u003cspan style=\u0022color: #F6F6F4\u0022\u003eadr.ps1 `\u003c/span\u003e\u003c/span\u003e\n\u003cspan class=\u0022line\u0022\u003e\u003cspan style=\u0022color: #F6F6F4\u0022\u003e  \u003c/span\u003e\u003cspan style=\u0022color: #F286C4\u0022\u003e-\u003c/span\u003e\u003cspan style=\u0022color: #F6F6F4\u0022\u003eResourceGroup \u003c/span\u003e\u003cspan style=\u0022color: #DEE492\u0022\u003e\u0026quot;\u003c/span\u003e\u003cspan style=\u0022color: #E7EE98\u0022\u003emy-iot-rg\u003c/span\u003e\u003cspan style=\u0022color: #DEE492\u0022\u003e\u0026quot;\u003c/span\u003e\u003cspan style=\u0022color: #F6F6F4\u0022\u003e `\u003c/span\u003e\u003c/span\u003e\n\u003cspan class=\u0022line\u0022\u003e\u003cspan style=\u0022color: #F6F6F4\u0022\u003e  \u003c/span\u003e\u003cspan style=\u0022color: #F286C4\u0022\u003e-\u003c/span\u003e\u003cspan style=\u0022color: #F6F6F4\u0022\u003eLocation \u003c/span\u003e\u003cspan style=\u0022color: #DEE492\u0022\u003e\u0026quot;\u003c/span\u003e\u003cspan style=\u0022color: #E7EE98\u0022\u003eeastus\u003c/span\u003e\u003cspan style=\u0022color: #DEE492\u0022\u003e\u0026quot;\u003c/span\u003e\u003cspan style=\u0022color: #F6F6F4\u0022\u003e `\u003c/span\u003e\u003c/span\u003e\n\u003cspan class=\u0022line\u0022\u003e\u003cspan style=\u0022color: #F6F6F4\u0022\u003e  \u003c/span\u003e\u003cspan style=\u0022color: #F286C4\u0022\u003e-\u003c/span\u003e\u003cspan style=\u0022color: #F6F6F4\u0022\u003eIoTHubName \u003c/span\u003e\u003cspan style=\u0022color: #DEE492\u0022\u003e\u0026quot;\u003c/span\u003e\u003cspan style=\u0022color: #E7EE98\u0022\u003emy-hub-001\u003c/span\u003e\u003cspan style=\u0022color: #DEE492\u0022\u003e\u0026quot;\u003c/span\u003e\u003cspan style=\u0022color: #F6F6F4\u0022\u003e `\u003c/span\u003e\u003c/span\u003e\n\u003cspan class=\u0022line\u0022\u003e\u003cspan style=\u0022color: #F6F6F4\u0022\u003e  \u003c/span\u003e\u003cspan style=\u0022color: #F286C4\u0022\u003e-\u003c/span\u003e\u003cspan style=\u0022color: #F6F6F4\u0022\u003eDPSName \u003c/span\u003e\u003cspan style=\u0022color: #DEE492\u0022\u003e\u0026quot;\u003c/span\u003e\u003cspan style=\u0022color: #E7EE98\u0022\u003emy-dps-001\u003c/span\u003e\u003cspan style=\u0022color: #DEE492\u0022\u003e\u0026quot;\u003c/span\u003e\u003cspan style=\u0022color: #F6F6F4\u0022\u003e `\u003c/span\u003e\u003c/span\u003e\n\u003cspan class=\u0022line\u0022\u003e\u003cspan style=\u0022color: #F6F6F4\u0022\u003e  \u003c/span\u003e\u003cspan style=\u0022color: #F286C4\u0022\u003e-\u003c/span\u003e\u003cspan style=\u0022color: #F6F6F4\u0022\u003eAdrNamespace \u003c/span\u003e\u003cspan style=\u0022color: #DEE492\u0022\u003e\u0026quot;\u003c/span\u003e\u003cspan style=\u0022color: #E7EE98\u0022\u003emy-adr-001\u003c/span\u003e\u003cspan style=\u0022color: #DEE492\u0022\u003e\u0026quot;\u003c/span\u003e\u003cspan style=\u0022color: #F6F6F4\u0022\u003e `\u003c/span\u003e\u003c/span\u003e\n\u003cspan class=\u0022line\u0022\u003e\u003cspan style=\u0022color: #F6F6F4\u0022\u003e  \u003c/span\u003e\u003cspan style=\u0022color: #F286C4\u0022\u003e-\u003c/span\u003e\u003cspan style=\u0022color: #F6F6F4\u0022\u003eUserIdentity \u003c/span\u003e\u003cspan style=\u0022color: #DEE492\u0022\u003e\u0026quot;\u003c/span\u003e\u003cspan style=\u0022color: #E7EE98\u0022\u003emy-uami\u003c/span\u003e\u003cspan style=\u0022color: #DEE492\u0022\u003e\u0026quot;\u003c/span\u003e\u003c/span\u003e\u003c/code\u003e\u003c/pre\u003e","language":"powershell","theme":"dracula-soft","bgColor":"#282A36","textColor":"#f6f6f4","fontSize":".875rem","fontFamily":"Code-Pro-JetBrains-Mono","lineHeight":"1.25rem","clampFonts":false,"lineNumbers":false,"headerType":"pillString","disablePadding":false,"footerType":"none","enableMaxHeight":false,"seeMoreType":"","seeMoreString":"","seeMoreAfterLine":"","seeMoreTransition":false,"seeMoreCollapse":false,"seeMoreCollapseString":"","highlightingHover":false,"lineHighlightColor":"rgba(251, 251, 239, 0.2)","copyButton":true,"copyButtonType":"heroicons","copyButtonUseTextarea":true,"useTabs":false} -->
+<div class="wp-block-kevinbatdorf-code-block-pro" data-code-block-pro-font-family="Code-Pro-JetBrains-Mono" style="font-size:.875rem;font-family:Code-Pro-JetBrains-Mono,ui-monospace,SFMono-Regular,Menlo,Monaco,Consolas,monospace;line-height:1.25rem;--cbp-tab-width:2;tab-size:var(--cbp-tab-width, 2)"><span style="display:flex;align-items:center;padding:16px 0 0 16px;width:100%;text-align:left;background-color:#282a36"><span style="background:#ebebe6;padding:0.3rem 0.5rem 0.2rem;border-radius:1rem;font-size:0.8em;line-height:1;height:1.25rem;text-align:center;display:inline-flex;align-items:center;justify-content:center;color:#282a36">PowerShell</span></span><span role="button" tabindex="0" style="color:#f6f6f4;display:none" aria-label="Copy" class="code-block-pro-copy-button"><pre class="code-block-pro-copy-button-pre" aria-hidden="true"><textarea class="code-block-pro-copy-button-textarea" tabindex="-1" aria-hidden="true" readonly>git clone https://github.com/pjgpetecodes/skittlesorter.git
+cd skittlesorter/scripts
+$env:Path = "C:\Program Files\OpenSSL-Win64\bin;$env:Path"
+
+# Full ADR + X.509 setup (recommended)
+.\setup-x509-dps-adr.ps1 `
+  -ResourceGroup "my-iot-rg" `
+  -Location "eastus" `
+  -IoTHubName "my-hub-001" `
+  -DPSName "my-dps-001" `
+  -AdrNamespace "my-adr-001" `
+  -UserIdentity "my-uami"</textarea></pre><svg xmlns="http://www.w3.org/2000/svg" style="width:24px;height:24px" fill="none" viewBox="0 0 24 24" stroke="currentColor" stroke-width="2"><path class="with-check" stroke-linecap="round" stroke-linejoin="round" d="M9 5H7a2 2 0 00-2 2v12a2 2 0 002 2h10a2 2 0 002-2V7a2 2 0 00-2-2h-2M9 5a2 2 0 002 2h2a2 2 0 002-2M9 5a2 2 0 012-2h2a2 2 0 012 2m-6 9l2 2 4-4"></path><path class="without-check" stroke-linecap="round" stroke-linejoin="round" d="M9 5H7a2 2 0 00-2 2v12a2 2 0 002 2h10a2 2 0 002-2V7a2 2 0 00-2-2h-2M9 5a2 2 0 002 2h2a2 2 0 002-2M9 5a2 2 0 012-2h2a2 2 0 012 2"></path></svg></span><pre class="shiki dracula-soft" style="background-color: #282A36" tabindex="0"><code><span class="line"><span style="color: #F6F6F4">git clone https:</span><span style="color: #F286C4">//</span><span style="color: #97E1F1">github.com</span><span style="color: #F286C4">/</span><span style="color: #F6F6F4">pjgpetecodes</span><span style="color: #F286C4">/</span><span style="color: #F6F6F4">skittlesorter.git</span></span>
+<span class="line"><span style="color: #F6F6F4">cd skittlesorter</span><span style="color: #F286C4">/</span><span style="color: #F6F6F4">scripts</span></span>
+<span class="line"><span style="color: #F6F6F4">$</span><span style="color: #BF9EEE">env:</span><span style="color: #F6F6F4">Path </span><span style="color: #F286C4">=</span><span style="color: #F6F6F4"> </span><span style="color: #DEE492">&quot;</span><span style="color: #E7EE98">C:\Program Files\OpenSSL-Win64\bin;</span><span style="color: #F6F6F4">$</span><span style="color: #BF9EEE">env:</span><span style="color: #F6F6F4">Path</span><span style="color: #DEE492">&quot;</span></span>
+<span class="line"></span>
+<span class="line"><span style="color: #7B7F8B"># Full ADR + X.509 setup (recommended)</span></span>
+<span class="line"><span style="color: #F6F6F4">.\setup</span><span style="color: #F286C4">-</span><span style="color: #F6F6F4">x509</span><span style="color: #F286C4">-</span><span style="color: #F6F6F4">dps</span><span style="color: #F286C4">-</span><span style="color: #F6F6F4">adr.ps1 `</span></span>
+<span class="line"><span style="color: #F6F6F4">  </span><span style="color: #F286C4">-</span><span style="color: #F6F6F4">ResourceGroup </span><span style="color: #DEE492">&quot;</span><span style="color: #E7EE98">my-iot-rg</span><span style="color: #DEE492">&quot;</span><span style="color: #F6F6F4"> `</span></span>
+<span class="line"><span style="color: #F6F6F4">  </span><span style="color: #F286C4">-</span><span style="color: #F6F6F4">Location </span><span style="color: #DEE492">&quot;</span><span style="color: #E7EE98">eastus</span><span style="color: #DEE492">&quot;</span><span style="color: #F6F6F4"> `</span></span>
+<span class="line"><span style="color: #F6F6F4">  </span><span style="color: #F286C4">-</span><span style="color: #F6F6F4">IoTHubName </span><span style="color: #DEE492">&quot;</span><span style="color: #E7EE98">my-hub-001</span><span style="color: #DEE492">&quot;</span><span style="color: #F6F6F4"> `</span></span>
+<span class="line"><span style="color: #F6F6F4">  </span><span style="color: #F286C4">-</span><span style="color: #F6F6F4">DPSName </span><span style="color: #DEE492">&quot;</span><span style="color: #E7EE98">my-dps-001</span><span style="color: #DEE492">&quot;</span><span style="color: #F6F6F4"> `</span></span>
+<span class="line"><span style="color: #F6F6F4">  </span><span style="color: #F286C4">-</span><span style="color: #F6F6F4">AdrNamespace </span><span style="color: #DEE492">&quot;</span><span style="color: #E7EE98">my-adr-001</span><span style="color: #DEE492">&quot;</span><span style="color: #F6F6F4"> `</span></span>
+<span class="line"><span style="color: #F6F6F4">  </span><span style="color: #F286C4">-</span><span style="color: #F6F6F4">UserIdentity </span><span style="color: #DEE492">&quot;</span><span style="color: #E7EE98">my-uami</span><span style="color: #DEE492">&quot;</span></span></code></pre></div>
+<!-- /wp:kevinbatdorf/code-block-pro -->
+
+<!-- wp:paragraph -->
+<p>Or, if you have the Azure resources provisioned already, you can also just run the X.509 Setup script;</p>
+<!-- /wp:paragraph -->
+
+<!-- wp:kevinbatdorf/code-block-pro {"code":".\u005csetup-x509-attestation.ps1 `\n  -RegistrationId \u0022my-device\u0022 `\n  -DpsName \u0022my-dps-001\u0022 `\n  -ResourceGroup \u0022my-iot-rg\u0022","codeHTML":"\u003cpre class=\u0022shiki nord\u0022 style=\u0022background-color: #2e3440ff\u0022 tabindex=\u00220\u0022\u003e\u003ccode\u003e\u003cspan class=\u0022line\u0022\u003e\u003cspan style=\u0022color: #D8DEE9FF\u0022\u003e.\u005csetup-x\u003c/span\u003e\u003cspan style=\u0022color: #B48EAD\u0022\u003e509\u003c/span\u003e\u003cspan style=\u0022color: #D8DEE9FF\u0022\u003e-attestation.ps\u003c/span\u003e\u003cspan style=\u0022color: #B48EAD\u0022\u003e1\u003c/span\u003e\u003cspan style=\u0022color: #D8DEE9FF\u0022\u003e `\u003c/span\u003e\u003c/span\u003e\n\u003cspan class=\u0022line\u0022\u003e\u003cspan style=\u0022color: #D8DEE9FF\u0022\u003e  -RegistrationId \u003c/span\u003e\u003cspan style=\u0022color: #ECEFF4\u0022\u003e\u0026quot;\u003c/span\u003e\u003cspan style=\u0022color: #A3BE8C\u0022\u003emy-device\u003c/span\u003e\u003cspan style=\u0022color: #ECEFF4\u0022\u003e\u0026quot;\u003c/span\u003e\u003cspan style=\u0022color: #D8DEE9FF\u0022\u003e `\u003c/span\u003e\u003c/span\u003e\n\u003cspan class=\u0022line\u0022\u003e\u003cspan style=\u0022color: #D8DEE9FF\u0022\u003e  -DpsName \u003c/span\u003e\u003cspan style=\u0022color: #ECEFF4\u0022\u003e\u0026quot;\u003c/span\u003e\u003cspan style=\u0022color: #A3BE8C\u0022\u003emy-dps-001\u003c/span\u003e\u003cspan style=\u0022color: #ECEFF4\u0022\u003e\u0026quot;\u003c/span\u003e\u003cspan style=\u0022color: #D8DEE9FF\u0022\u003e `\u003c/span\u003e\u003c/span\u003e\n\u003cspan class=\u0022line\u0022\u003e\u003cspan style=\u0022color: #D8DEE9FF\u0022\u003e  -ResourceGroup \u003c/span\u003e\u003cspan style=\u0022color: #ECEFF4\u0022\u003e\u0026quot;\u003c/span\u003e\u003cspan style=\u0022color: #A3BE8C\u0022\u003emy-iot-rg\u003c/span\u003e\u003cspan style=\u0022color: #ECEFF4\u0022\u003e\u0026quot;\u003c/span\u003e\u003c/span\u003e\u003c/code\u003e\u003c/pre\u003e","language":"json","theme":"nord","bgColor":"#2e3440ff","textColor":"#d8dee9ff","fontSize":".875rem","fontFamily":"Code-Pro-JetBrains-Mono","lineHeight":"1.25rem","clampFonts":false,"lineNumbers":false,"headerType":"none","disablePadding":false,"footerType":"none","enableMaxHeight":false,"seeMoreType":"","seeMoreString":"","seeMoreAfterLine":"","seeMoreTransition":false,"seeMoreCollapse":false,"seeMoreCollapseString":"","highlightingHover":false,"lineHighlightColor":"rgba(201, 218, 248, 0.2)","copyButton":true,"copyButtonType":"heroicons","copyButtonUseTextarea":true,"useTabs":false} -->
+<div class="wp-block-kevinbatdorf-code-block-pro" data-code-block-pro-font-family="Code-Pro-JetBrains-Mono" style="font-size:.875rem;font-family:Code-Pro-JetBrains-Mono,ui-monospace,SFMono-Regular,Menlo,Monaco,Consolas,monospace;line-height:1.25rem;--cbp-tab-width:2;tab-size:var(--cbp-tab-width, 2)"><span role="button" tabindex="0" style="color:#d8dee9ff;display:none" aria-label="Copy" class="code-block-pro-copy-button"><pre class="code-block-pro-copy-button-pre" aria-hidden="true"><textarea class="code-block-pro-copy-button-textarea" tabindex="-1" aria-hidden="true" readonly>.\setup-x509-attestation.ps1 `
+  -RegistrationId "my-device" `
+  -DpsName "my-dps-001" `
+  -ResourceGroup "my-iot-rg"</textarea></pre><svg xmlns="http://www.w3.org/2000/svg" style="width:24px;height:24px" fill="none" viewBox="0 0 24 24" stroke="currentColor" stroke-width="2"><path class="with-check" stroke-linecap="round" stroke-linejoin="round" d="M9 5H7a2 2 0 00-2 2v12a2 2 0 002 2h10a2 2 0 002-2V7a2 2 0 00-2-2h-2M9 5a2 2 0 002 2h2a2 2 0 002-2M9 5a2 2 0 012-2h2a2 2 0 012 2m-6 9l2 2 4-4"></path><path class="without-check" stroke-linecap="round" stroke-linejoin="round" d="M9 5H7a2 2 0 00-2 2v12a2 2 0 002 2h10a2 2 0 002-2V7a2 2 0 00-2-2h-2M9 5a2 2 0 002 2h2a2 2 0 002-2M9 5a2 2 0 012-2h2a2 2 0 012 2"></path></svg></span><pre class="shiki nord" style="background-color: #2e3440ff" tabindex="0"><code><span class="line"><span style="color: #D8DEE9FF">.\setup-x</span><span style="color: #B48EAD">509</span><span style="color: #D8DEE9FF">-attestation.ps</span><span style="color: #B48EAD">1</span><span style="color: #D8DEE9FF"> `</span></span>
+<span class="line"><span style="color: #D8DEE9FF">  -RegistrationId </span><span style="color: #ECEFF4">&quot;</span><span style="color: #A3BE8C">my-device</span><span style="color: #ECEFF4">&quot;</span><span style="color: #D8DEE9FF"> `</span></span>
+<span class="line"><span style="color: #D8DEE9FF">  -DpsName </span><span style="color: #ECEFF4">&quot;</span><span style="color: #A3BE8C">my-dps-001</span><span style="color: #ECEFF4">&quot;</span><span style="color: #D8DEE9FF"> `</span></span>
+<span class="line"><span style="color: #D8DEE9FF">  -ResourceGroup </span><span style="color: #ECEFF4">&quot;</span><span style="color: #A3BE8C">my-iot-rg</span><span style="color: #ECEFF4">&quot;</span></span></code></pre></div>
+<!-- /wp:kevinbatdorf/code-block-pro -->
+
+<!-- wp:paragraph -->
+<p id="update-device-configuration">Once the script completes, update your device settings:</p>
+<!-- /wp:paragraph -->
+
+<!-- wp:kevinbatdorf/code-block-pro {"code":"{\n  \u0022IoTHub\u0022: {\n    \u0022DpsProvisioning\u0022: {\n      \u0022IdScope\u0022: \u0022\u0026lt;Your ID Scope\u003e\u0022,  // From script output\n      \u0022RegistrationId\u0022: \u0022skittlesorter\u0022,\n      \u0022AttestationMethod\u0022: \u0022X509\u0022,\n      \u0022AttestationCertPath\u0022: \u0022C:\u005c\u005crepos\u005c\u005cskittlesorter\u005c\u005cscripts\u005c\u005ccerts\u005c\u005cdevice\u005c\u005cdevice.pem\u0022,\n      \u0022AttestationKeyPath\u0022: \u0022C:\u005c\u005crepos\u005c\u005cskittlesorter\u005c\u005cscripts\u005c\u005ccerts\u005c\u005cdevice\u005c\u005cdevice.key\u0022,\n      \u0022AttestationCertChainPath\u0022: \u0022C:\u005c\u005crepos\u005c\u005cskittlesorter\u005c\u005cscripts\u005c\u005ccerts\u005c\u005cca\u005c\u005cchain.pem\u0022\n    }\n  },\n  \u0022Adr\u0022: {\n    \u0022Enabled\u0022: true,\n    \u0022SubscriptionId\u0022: \u0022\u0026lt;Your Subscription ID\u003e\u0022,\n    \u0022ResourceGroupName\u0022: \u0022pjgiothubdemo003\u0022,\n    \u0022NamespaceName\u0022: \u0022pjgadrnamespace003\u0022\n  }\n}","codeHTML":"\u003cpre class=\u0022shiki nord\u0022 style=\u0022background-color: #2e3440ff\u0022 tabindex=\u00220\u0022\u003e\u003ccode\u003e\u003cspan class=\u0022line\u0022\u003e\u003cspan style=\u0022color: #ECEFF4\u0022\u003e{\u003c/span\u003e\u003c/span\u003e\n\u003cspan class=\u0022line\u0022\u003e\u003cspan style=\u0022color: #D8DEE9FF\u0022\u003e  \u003c/span\u003e\u003cspan style=\u0022color: #ECEFF4\u0022\u003e\u0026quot;\u003c/span\u003e\u003cspan style=\u0022color: #8FBCBB\u0022\u003eIoTHub\u003c/span\u003e\u003cspan style=\u0022color: #ECEFF4\u0022\u003e\u0026quot;\u003c/span\u003e\u003cspan style=\u0022color: #ECEFF4\u0022\u003e:\u003c/span\u003e\u003cspan style=\u0022color: #D8DEE9FF\u0022\u003e \u003c/span\u003e\u003cspan style=\u0022color: #ECEFF4\u0022\u003e{\u003c/span\u003e\u003c/span\u003e\n\u003cspan class=\u0022line\u0022\u003e\u003cspan style=\u0022color: #D8DEE9FF\u0022\u003e    \u003c/span\u003e\u003cspan style=\u0022color: #ECEFF4\u0022\u003e\u0026quot;\u003c/span\u003e\u003cspan style=\u0022color: #8FBCBB\u0022\u003eDpsProvisioning\u003c/span\u003e\u003cspan style=\u0022color: #ECEFF4\u0022\u003e\u0026quot;\u003c/span\u003e\u003cspan style=\u0022color: #ECEFF4\u0022\u003e:\u003c/span\u003e\u003cspan style=\u0022color: #D8DEE9FF\u0022\u003e \u003c/span\u003e\u003cspan style=\u0022color: #ECEFF4\u0022\u003e{\u003c/span\u003e\u003c/span\u003e\n\u003cspan class=\u0022line\u0022\u003e\u003cspan style=\u0022color: #D8DEE9FF\u0022\u003e      \u003c/span\u003e\u003cspan style=\u0022color: #ECEFF4\u0022\u003e\u0026quot;\u003c/span\u003e\u003cspan style=\u0022color: #8FBCBB\u0022\u003eIdScope\u003c/span\u003e\u003cspan style=\u0022color: #ECEFF4\u0022\u003e\u0026quot;\u003c/span\u003e\u003cspan style=\u0022color: #ECEFF4\u0022\u003e:\u003c/span\u003e\u003cspan style=\u0022color: #D8DEE9FF\u0022\u003e \u003c/span\u003e\u003cspan style=\u0022color: #ECEFF4\u0022\u003e\u0026quot;\u003c/span\u003e\u003cspan style=\u0022color: #A3BE8C\u0022\u003e\u0026lt;Your ID Scope\u0026gt;\u003c/span\u003e\u003cspan style=\u0022color: #ECEFF4\u0022\u003e\u0026quot;\u003c/span\u003e\u003cspan style=\u0022color: #ECEFF4\u0022\u003e,\u003c/span\u003e\u003cspan style=\u0022color: #D8DEE9FF\u0022\u003e  \u003c/span\u003e\u003cspan style=\u0022color: #616E88\u0022\u003e// From script output\u003c/span\u003e\u003c/span\u003e\n\u003cspan class=\u0022line\u0022\u003e\u003cspan style=\u0022color: #D8DEE9FF\u0022\u003e      \u003c/span\u003e\u003cspan style=\u0022color: #ECEFF4\u0022\u003e\u0026quot;\u003c/span\u003e\u003cspan style=\u0022color: #8FBCBB\u0022\u003eRegistrationId\u003c/span\u003e\u003cspan style=\u0022color: #ECEFF4\u0022\u003e\u0026quot;\u003c/span\u003e\u003cspan style=\u0022color: #ECEFF4\u0022\u003e:\u003c/span\u003e\u003cspan style=\u0022color: #D8DEE9FF\u0022\u003e \u003c/span\u003e\u003cspan style=\u0022color: #ECEFF4\u0022\u003e\u0026quot;\u003c/span\u003e\u003cspan style=\u0022color: #A3BE8C\u0022\u003eskittlesorter\u003c/span\u003e\u003cspan style=\u0022color: #ECEFF4\u0022\u003e\u0026quot;\u003c/span\u003e\u003cspan style=\u0022color: #ECEFF4\u0022\u003e,\u003c/span\u003e\u003c/span\u003e\n\u003cspan class=\u0022line\u0022\u003e\u003cspan style=\u0022color: #D8DEE9FF\u0022\u003e      \u003c/span\u003e\u003cspan style=\u0022color: #ECEFF4\u0022\u003e\u0026quot;\u003c/span\u003e\u003cspan style=\u0022color: #8FBCBB\u0022\u003eAttestationMethod\u003c/span\u003e\u003cspan style=\u0022color: #ECEFF4\u0022\u003e\u0026quot;\u003c/span\u003e\u003cspan style=\u0022color: #ECEFF4\u0022\u003e:\u003c/span\u003e\u003cspan style=\u0022color: #D8DEE9FF\u0022\u003e \u003c/span\u003e\u003cspan style=\u0022color: #ECEFF4\u0022\u003e\u0026quot;\u003c/span\u003e\u003cspan style=\u0022color: #A3BE8C\u0022\u003eX509\u003c/span\u003e\u003cspan style=\u0022color: #ECEFF4\u0022\u003e\u0026quot;\u003c/span\u003e\u003cspan style=\u0022color: #ECEFF4\u0022\u003e,\u003c/span\u003e\u003c/span\u003e\n\u003cspan class=\u0022line\u0022\u003e\u003cspan style=\u0022color: #D8DEE9FF\u0022\u003e      \u003c/span\u003e\u003cspan style=\u0022color: #ECEFF4\u0022\u003e\u0026quot;\u003c/span\u003e\u003cspan style=\u0022color: #8FBCBB\u0022\u003eAttestationCertPath\u003c/span\u003e\u003cspan style=\u0022color: #ECEFF4\u0022\u003e\u0026quot;\u003c/span\u003e\u003cspan style=\u0022color: #ECEFF4\u0022\u003e:\u003c/span\u003e\u003cspan style=\u0022color: #D8DEE9FF\u0022\u003e \u003c/span\u003e\u003cspan style=\u0022color: #ECEFF4\u0022\u003e\u0026quot;\u003c/span\u003e\u003cspan style=\u0022color: #A3BE8C\u0022\u003eC:\u003c/span\u003e\u003cspan style=\u0022color: #EBCB8B\u0022\u003e\u005c\u005c\u003c/span\u003e\u003cspan style=\u0022color: #A3BE8C\u0022\u003erepos\u003c/span\u003e\u003cspan style=\u0022color: #EBCB8B\u0022\u003e\u005c\u005c\u003c/span\u003e\u003cspan style=\u0022color: #A3BE8C\u0022\u003eskittlesorter\u003c/span\u003e\u003cspan style=\u0022color: #EBCB8B\u0022\u003e\u005c\u005c\u003c/span\u003e\u003cspan style=\u0022color: #A3BE8C\u0022\u003escripts\u003c/span\u003e\u003cspan style=\u0022color: #EBCB8B\u0022\u003e\u005c\u005c\u003c/span\u003e\u003cspan style=\u0022color: #A3BE8C\u0022\u003ecerts\u003c/span\u003e\u003cspan style=\u0022color: #EBCB8B\u0022\u003e\u005c\u005c\u003c/span\u003e\u003cspan style=\u0022color: #A3BE8C\u0022\u003edevice\u003c/span\u003e\u003cspan style=\u0022color: #EBCB8B\u0022\u003e\u005c\u005c\u003c/span\u003e\u003cspan style=\u0022color: #A3BE8C\u0022\u003edevice.pem\u003c/span\u003e\u003cspan style=\u0022color: #ECEFF4\u0022\u003e\u0026quot;\u003c/span\u003e\u003cspan style=\u0022color: #ECEFF4\u0022\u003e,\u003c/span\u003e\u003c/span\u003e\n\u003cspan class=\u0022line\u0022\u003e\u003cspan style=\u0022color: #D8DEE9FF\u0022\u003e      \u003c/span\u003e\u003cspan style=\u0022color: #ECEFF4\u0022\u003e\u0026quot;\u003c/span\u003e\u003cspan style=\u0022color: #8FBCBB\u0022\u003eAttestationKeyPath\u003c/span\u003e\u003cspan style=\u0022color: #ECEFF4\u0022\u003e\u0026quot;\u003c/span\u003e\u003cspan style=\u0022color: #ECEFF4\u0022\u003e:\u003c/span\u003e\u003cspan style=\u0022color: #D8DEE9FF\u0022\u003e \u003c/span\u003e\u003cspan style=\u0022color: #ECEFF4\u0022\u003e\u0026quot;\u003c/span\u003e\u003cspan style=\u0022color: #A3BE8C\u0022\u003eC:\u003c/span\u003e\u003cspan style=\u0022color: #EBCB8B\u0022\u003e\u005c\u005c\u003c/span\u003e\u003cspan style=\u0022color: #A3BE8C\u0022\u003erepos\u003c/span\u003e\u003cspan style=\u0022color: #EBCB8B\u0022\u003e\u005c\u005c\u003c/span\u003e\u003cspan style=\u0022color: #A3BE8C\u0022\u003eskittlesorter\u003c/span\u003e\u003cspan style=\u0022color: #EBCB8B\u0022\u003e\u005c\u005c\u003c/span\u003e\u003cspan style=\u0022color: #A3BE8C\u0022\u003escripts\u003c/span\u003e\u003cspan style=\u0022color: #EBCB8B\u0022\u003e\u005c\u005c\u003c/span\u003e\u003cspan style=\u0022color: #A3BE8C\u0022\u003ecerts\u003c/span\u003e\u003cspan style=\u0022color: #EBCB8B\u0022\u003e\u005c\u005c\u003c/span\u003e\u003cspan style=\u0022color: #A3BE8C\u0022\u003edevice\u003c/span\u003e\u003cspan style=\u0022color: #EBCB8B\u0022\u003e\u005c\u005c\u003c/span\u003e\u003cspan style=\u0022color: #A3BE8C\u0022\u003edevice.key\u003c/span\u003e\u003cspan style=\u0022color: #ECEFF4\u0022\u003e\u0026quot;\u003c/span\u003e\u003cspan style=\u0022color: #ECEFF4\u0022\u003e,\u003c/span\u003e\u003c/span\u003e\n\u003cspan class=\u0022line\u0022\u003e\u003cspan style=\u0022color: #D8DEE9FF\u0022\u003e      \u003c/span\u003e\u003cspan style=\u0022color: #ECEFF4\u0022\u003e\u0026quot;\u003c/span\u003e\u003cspan style=\u0022color: #8FBCBB\u0022\u003eAttestationCertChainPath\u003c/span\u003e\u003cspan style=\u0022color: #ECEFF4\u0022\u003e\u0026quot;\u003c/span\u003e\u003cspan style=\u0022color: #ECEFF4\u0022\u003e:\u003c/span\u003e\u003cspan style=\u0022color: #D8DEE9FF\u0022\u003e \u003c/span\u003e\u003cspan style=\u0022color: #ECEFF4\u0022\u003e\u0026quot;\u003c/span\u003e\u003cspan style=\u0022color: #A3BE8C\u0022\u003eC:\u003c/span\u003e\u003cspan style=\u0022color: #EBCB8B\u0022\u003e\u005c\u005c\u003c/span\u003e\u003cspan style=\u0022color: #A3BE8C\u0022\u003erepos\u003c/span\u003e\u003cspan style=\u0022color: #EBCB8B\u0022\u003e\u005c\u005c\u003c/span\u003e\u003cspan style=\u0022color: #A3BE8C\u0022\u003eskittlesorter\u003c/span\u003e\u003cspan style=\u0022color: #EBCB8B\u0022\u003e\u005c\u005c\u003c/span\u003e\u003cspan style=\u0022color: #A3BE8C\u0022\u003escripts\u003c/span\u003e\u003cspan style=\u0022color: #EBCB8B\u0022\u003e\u005c\u005c\u003c/span\u003e\u003cspan style=\u0022color: #A3BE8C\u0022\u003ecerts\u003c/span\u003e\u003cspan style=\u0022color: #EBCB8B\u0022\u003e\u005c\u005c\u003c/span\u003e\u003cspan style=\u0022color: #A3BE8C\u0022\u003eca\u003c/span\u003e\u003cspan style=\u0022color: #EBCB8B\u0022\u003e\u005c\u005c\u003c/span\u003e\u003cspan style=\u0022color: #A3BE8C\u0022\u003echain.pem\u003c/span\u003e\u003cspan style=\u0022color: #ECEFF4\u0022\u003e\u0026quot;\u003c/span\u003e\u003c/span\u003e\n\u003cspan class=\u0022line\u0022\u003e\u003cspan style=\u0022color: #D8DEE9FF\u0022\u003e    \u003c/span\u003e\u003cspan style=\u0022color: #ECEFF4\u0022\u003e}\u003c/span\u003e\u003c/span\u003e\n\u003cspan class=\u0022line\u0022\u003e\u003cspan style=\u0022color: #D8DEE9FF\u0022\u003e  \u003c/span\u003e\u003cspan style=\u0022color: #ECEFF4\u0022\u003e},\u003c/span\u003e\u003c/span\u003e\n\u003cspan class=\u0022line\u0022\u003e\u003cspan style=\u0022color: #D8DEE9FF\u0022\u003e  \u003c/span\u003e\u003cspan style=\u0022color: #ECEFF4\u0022\u003e\u0026quot;\u003c/span\u003e\u003cspan style=\u0022color: #8FBCBB\u0022\u003eAdr\u003c/span\u003e\u003cspan style=\u0022color: #ECEFF4\u0022\u003e\u0026quot;\u003c/span\u003e\u003cspan style=\u0022color: #ECEFF4\u0022\u003e:\u003c/span\u003e\u003cspan style=\u0022color: #D8DEE9FF\u0022\u003e \u003c/span\u003e\u003cspan style=\u0022color: #ECEFF4\u0022\u003e{\u003c/span\u003e\u003c/span\u003e\n\u003cspan class=\u0022line\u0022\u003e\u003cspan style=\u0022color: #D8DEE9FF\u0022\u003e    \u003c/span\u003e\u003cspan style=\u0022color: #ECEFF4\u0022\u003e\u0026quot;\u003c/span\u003e\u003cspan style=\u0022color: #8FBCBB\u0022\u003eEnabled\u003c/span\u003e\u003cspan style=\u0022color: #ECEFF4\u0022\u003e\u0026quot;\u003c/span\u003e\u003cspan style=\u0022color: #ECEFF4\u0022\u003e:\u003c/span\u003e\u003cspan style=\u0022color: #D8DEE9FF\u0022\u003e \u003c/span\u003e\u003cspan style=\u0022color: #81A1C1\u0022\u003etrue\u003c/span\u003e\u003cspan style=\u0022color: #ECEFF4\u0022\u003e,\u003c/span\u003e\u003c/span\u003e\n\u003cspan class=\u0022line\u0022\u003e\u003cspan style=\u0022color: #D8DEE9FF\u0022\u003e    \u003c/span\u003e\u003cspan style=\u0022color: #ECEFF4\u0022\u003e\u0026quot;\u003c/span\u003e\u003cspan style=\u0022color: #8FBCBB\u0022\u003eSubscriptionId\u003c/span\u003e\u003cspan style=\u0022color: #ECEFF4\u0022\u003e\u0026quot;\u003c/span\u003e\u003cspan style=\u0022color: #ECEFF4\u0022\u003e:\u003c/span\u003e\u003cspan style=\u0022color: #D8DEE9FF\u0022\u003e \u003c/span\u003e\u003cspan style=\u0022color: #ECEFF4\u0022\u003e\u0026quot;\u003c/span\u003e\u003cspan style=\u0022color: #A3BE8C\u0022\u003e\u0026lt;Your Subscription ID\u0026gt;\u003c/span\u003e\u003cspan style=\u0022color: #ECEFF4\u0022\u003e\u0026quot;\u003c/span\u003e\u003cspan style=\u0022color: #ECEFF4\u0022\u003e,\u003c/span\u003e\u003c/span\u003e\n\u003cspan class=\u0022line\u0022\u003e\u003cspan style=\u0022color: #D8DEE9FF\u0022\u003e    \u003c/span\u003e\u003cspan style=\u0022color: #ECEFF4\u0022\u003e\u0026quot;\u003c/span\u003e\u003cspan style=\u0022color: #8FBCBB\u0022\u003eResourceGroupName\u003c/span\u003e\u003cspan style=\u0022color: #ECEFF4\u0022\u003e\u0026quot;\u003c/span\u003e\u003cspan style=\u0022color: #ECEFF4\u0022\u003e:\u003c/span\u003e\u003cspan style=\u0022color: #D8DEE9FF\u0022\u003e \u003c/span\u003e\u003cspan style=\u0022color: #ECEFF4\u0022\u003e\u0026quot;\u003c/span\u003e\u003cspan style=\u0022color: #A3BE8C\u0022\u003epjgiothubdemo003\u003c/span\u003e\u003cspan style=\u0022color: #ECEFF4\u0022\u003e\u0026quot;\u003c/span\u003e\u003cspan style=\u0022color: #ECEFF4\u0022\u003e,\u003c/span\u003e\u003c/span\u003e\n\u003cspan class=\u0022line\u0022\u003e\u003cspan style=\u0022color: #D8DEE9FF\u0022\u003e    \u003c/span\u003e\u003cspan style=\u0022color: #ECEFF4\u0022\u003e\u0026quot;\u003c/span\u003e\u003cspan style=\u0022color: #8FBCBB\u0022\u003eNamespaceName\u003c/span\u003e\u003cspan style=\u0022color: #ECEFF4\u0022\u003e\u0026quot;\u003c/span\u003e\u003cspan style=\u0022color: #ECEFF4\u0022\u003e:\u003c/span\u003e\u003cspan style=\u0022color: #D8DEE9FF\u0022\u003e \u003c/span\u003e\u003cspan style=\u0022color: #ECEFF4\u0022\u003e\u0026quot;\u003c/span\u003e\u003cspan style=\u0022color: #A3BE8C\u0022\u003epjgadrnamespace003\u003c/span\u003e\u003cspan style=\u0022color: #ECEFF4\u0022\u003e\u0026quot;\u003c/span\u003e\u003c/span\u003e\n\u003cspan class=\u0022line\u0022\u003e\u003cspan style=\u0022color: #D8DEE9FF\u0022\u003e  \u003c/span\u003e\u003cspan style=\u0022color: #ECEFF4\u0022\u003e}\u003c/span\u003e\u003c/span\u003e\n\u003cspan class=\u0022line\u0022\u003e\u003cspan style=\u0022color: #ECEFF4\u0022\u003e}\u003c/span\u003e\u003c/span\u003e\u003c/code\u003e\u003c/pre\u003e","language":"json","theme":"nord","bgColor":"#2e3440ff","textColor":"#d8dee9ff","fontSize":".875rem","fontFamily":"Code-Pro-JetBrains-Mono","lineHeight":"1.25rem","clampFonts":false,"lineNumbers":false,"headerType":"none","disablePadding":false,"footerType":"none","enableMaxHeight":false,"seeMoreType":"","seeMoreString":"","seeMoreAfterLine":"","seeMoreTransition":false,"seeMoreCollapse":false,"seeMoreCollapseString":"","highlightingHover":false,"lineHighlightColor":"rgba(201, 218, 248, 0.2)","copyButton":true,"copyButtonType":"heroicons","copyButtonUseTextarea":true,"useTabs":false} -->
+<div class="wp-block-kevinbatdorf-code-block-pro" data-code-block-pro-font-family="Code-Pro-JetBrains-Mono" style="font-size:.875rem;font-family:Code-Pro-JetBrains-Mono,ui-monospace,SFMono-Regular,Menlo,Monaco,Consolas,monospace;line-height:1.25rem;--cbp-tab-width:2;tab-size:var(--cbp-tab-width, 2)"><span role="button" tabindex="0" style="color:#d8dee9ff;display:none" aria-label="Copy" class="code-block-pro-copy-button"><pre class="code-block-pro-copy-button-pre" aria-hidden="true"><textarea class="code-block-pro-copy-button-textarea" tabindex="-1" aria-hidden="true" readonly>{
+  "IoTHub": {
+    "DpsProvisioning": {
+      "IdScope": "&lt;Your ID Scope>",  // From script output
+      "RegistrationId": "skittlesorter",
+      "AttestationMethod": "X509",
+      "AttestationCertPath": "C:\\repos\\skittlesorter\\scripts\\certs\\device\\device.pem",
+      "AttestationKeyPath": "C:\\repos\\skittlesorter\\scripts\\certs\\device\\device.key",
+      "AttestationCertChainPath": "C:\\repos\\skittlesorter\\scripts\\certs\\ca\\chain.pem"
+    }
+  },
+  "Adr": {
+    "Enabled": true,
+    "SubscriptionId": "&lt;Your Subscription ID>",
+    "ResourceGroupName": "pjgiothubdemo003",
+    "NamespaceName": "pjgadrnamespace003"
+  }
+}</textarea></pre><svg xmlns="http://www.w3.org/2000/svg" style="width:24px;height:24px" fill="none" viewBox="0 0 24 24" stroke="currentColor" stroke-width="2"><path class="with-check" stroke-linecap="round" stroke-linejoin="round" d="M9 5H7a2 2 0 00-2 2v12a2 2 0 002 2h10a2 2 0 002-2V7a2 2 0 00-2-2h-2M9 5a2 2 0 002 2h2a2 2 0 002-2M9 5a2 2 0 012-2h2a2 2 0 012 2m-6 9l2 2 4-4"></path><path class="without-check" stroke-linecap="round" stroke-linejoin="round" d="M9 5H7a2 2 0 00-2 2v12a2 2 0 002 2h10a2 2 0 002-2V7a2 2 0 00-2-2h-2M9 5a2 2 0 002 2h2a2 2 0 002-2M9 5a2 2 0 012-2h2a2 2 0 012 2"></path></svg></span><pre class="shiki nord" style="background-color: #2e3440ff" tabindex="0"><code><span class="line"><span style="color: #ECEFF4">{</span></span>
+<span class="line"><span style="color: #D8DEE9FF">  </span><span style="color: #ECEFF4">&quot;</span><span style="color: #8FBCBB">IoTHub</span><span style="color: #ECEFF4">&quot;</span><span style="color: #ECEFF4">:</span><span style="color: #D8DEE9FF"> </span><span style="color: #ECEFF4">{</span></span>
+<span class="line"><span style="color: #D8DEE9FF">    </span><span style="color: #ECEFF4">&quot;</span><span style="color: #8FBCBB">DpsProvisioning</span><span style="color: #ECEFF4">&quot;</span><span style="color: #ECEFF4">:</span><span style="color: #D8DEE9FF"> </span><span style="color: #ECEFF4">{</span></span>
+<span class="line"><span style="color: #D8DEE9FF">      </span><span style="color: #ECEFF4">&quot;</span><span style="color: #8FBCBB">IdScope</span><span style="color: #ECEFF4">&quot;</span><span style="color: #ECEFF4">:</span><span style="color: #D8DEE9FF"> </span><span style="color: #ECEFF4">&quot;</span><span style="color: #A3BE8C">&lt;Your ID Scope&gt;</span><span style="color: #ECEFF4">&quot;</span><span style="color: #ECEFF4">,</span><span style="color: #D8DEE9FF">  </span><span style="color: #616E88">// From script output</span></span>
+<span class="line"><span style="color: #D8DEE9FF">      </span><span style="color: #ECEFF4">&quot;</span><span style="color: #8FBCBB">RegistrationId</span><span style="color: #ECEFF4">&quot;</span><span style="color: #ECEFF4">:</span><span style="color: #D8DEE9FF"> </span><span style="color: #ECEFF4">&quot;</span><span style="color: #A3BE8C">skittlesorter</span><span style="color: #ECEFF4">&quot;</span><span style="color: #ECEFF4">,</span></span>
+<span class="line"><span style="color: #D8DEE9FF">      </span><span style="color: #ECEFF4">&quot;</span><span style="color: #8FBCBB">AttestationMethod</span><span style="color: #ECEFF4">&quot;</span><span style="color: #ECEFF4">:</span><span style="color: #D8DEE9FF"> </span><span style="color: #ECEFF4">&quot;</span><span style="color: #A3BE8C">X509</span><span style="color: #ECEFF4">&quot;</span><span style="color: #ECEFF4">,</span></span>
+<span class="line"><span style="color: #D8DEE9FF">      </span><span style="color: #ECEFF4">&quot;</span><span style="color: #8FBCBB">AttestationCertPath</span><span style="color: #ECEFF4">&quot;</span><span style="color: #ECEFF4">:</span><span style="color: #D8DEE9FF"> </span><span style="color: #ECEFF4">&quot;</span><span style="color: #A3BE8C">C:</span><span style="color: #EBCB8B">\\</span><span style="color: #A3BE8C">repos</span><span style="color: #EBCB8B">\\</span><span style="color: #A3BE8C">skittlesorter</span><span style="color: #EBCB8B">\\</span><span style="color: #A3BE8C">scripts</span><span style="color: #EBCB8B">\\</span><span style="color: #A3BE8C">certs</span><span style="color: #EBCB8B">\\</span><span style="color: #A3BE8C">device</span><span style="color: #EBCB8B">\\</span><span style="color: #A3BE8C">device.pem</span><span style="color: #ECEFF4">&quot;</span><span style="color: #ECEFF4">,</span></span>
+<span class="line"><span style="color: #D8DEE9FF">      </span><span style="color: #ECEFF4">&quot;</span><span style="color: #8FBCBB">AttestationKeyPath</span><span style="color: #ECEFF4">&quot;</span><span style="color: #ECEFF4">:</span><span style="color: #D8DEE9FF"> </span><span style="color: #ECEFF4">&quot;</span><span style="color: #A3BE8C">C:</span><span style="color: #EBCB8B">\\</span><span style="color: #A3BE8C">repos</span><span style="color: #EBCB8B">\\</span><span style="color: #A3BE8C">skittlesorter</span><span style="color: #EBCB8B">\\</span><span style="color: #A3BE8C">scripts</span><span style="color: #EBCB8B">\\</span><span style="color: #A3BE8C">certs</span><span style="color: #EBCB8B">\\</span><span style="color: #A3BE8C">device</span><span style="color: #EBCB8B">\\</span><span style="color: #A3BE8C">device.key</span><span style="color: #ECEFF4">&quot;</span><span style="color: #ECEFF4">,</span></span>
+<span class="line"><span style="color: #D8DEE9FF">      </span><span style="color: #ECEFF4">&quot;</span><span style="color: #8FBCBB">AttestationCertChainPath</span><span style="color: #ECEFF4">&quot;</span><span style="color: #ECEFF4">:</span><span style="color: #D8DEE9FF"> </span><span style="color: #ECEFF4">&quot;</span><span style="color: #A3BE8C">C:</span><span style="color: #EBCB8B">\\</span><span style="color: #A3BE8C">repos</span><span style="color: #EBCB8B">\\</span><span style="color: #A3BE8C">skittlesorter</span><span style="color: #EBCB8B">\\</span><span style="color: #A3BE8C">scripts</span><span style="color: #EBCB8B">\\</span><span style="color: #A3BE8C">certs</span><span style="color: #EBCB8B">\\</span><span style="color: #A3BE8C">ca</span><span style="color: #EBCB8B">\\</span><span style="color: #A3BE8C">chain.pem</span><span style="color: #ECEFF4">&quot;</span></span>
+<span class="line"><span style="color: #D8DEE9FF">    </span><span style="color: #ECEFF4">}</span></span>
+<span class="line"><span style="color: #D8DEE9FF">  </span><span style="color: #ECEFF4">},</span></span>
+<span class="line"><span style="color: #D8DEE9FF">  </span><span style="color: #ECEFF4">&quot;</span><span style="color: #8FBCBB">Adr</span><span style="color: #ECEFF4">&quot;</span><span style="color: #ECEFF4">:</span><span style="color: #D8DEE9FF"> </span><span style="color: #ECEFF4">{</span></span>
+<span class="line"><span style="color: #D8DEE9FF">    </span><span style="color: #ECEFF4">&quot;</span><span style="color: #8FBCBB">Enabled</span><span style="color: #ECEFF4">&quot;</span><span style="color: #ECEFF4">:</span><span style="color: #D8DEE9FF"> </span><span style="color: #81A1C1">true</span><span style="color: #ECEFF4">,</span></span>
+<span class="line"><span style="color: #D8DEE9FF">    </span><span style="color: #ECEFF4">&quot;</span><span style="color: #8FBCBB">SubscriptionId</span><span style="color: #ECEFF4">&quot;</span><span style="color: #ECEFF4">:</span><span style="color: #D8DEE9FF"> </span><span style="color: #ECEFF4">&quot;</span><span style="color: #A3BE8C">&lt;Your Subscription ID&gt;</span><span style="color: #ECEFF4">&quot;</span><span style="color: #ECEFF4">,</span></span>
+<span class="line"><span style="color: #D8DEE9FF">    </span><span style="color: #ECEFF4">&quot;</span><span style="color: #8FBCBB">ResourceGroupName</span><span style="color: #ECEFF4">&quot;</span><span style="color: #ECEFF4">:</span><span style="color: #D8DEE9FF"> </span><span style="color: #ECEFF4">&quot;</span><span style="color: #A3BE8C">pjgiothubdemo003</span><span style="color: #ECEFF4">&quot;</span><span style="color: #ECEFF4">,</span></span>
+<span class="line"><span style="color: #D8DEE9FF">    </span><span style="color: #ECEFF4">&quot;</span><span style="color: #8FBCBB">NamespaceName</span><span style="color: #ECEFF4">&quot;</span><span style="color: #ECEFF4">:</span><span style="color: #D8DEE9FF"> </span><span style="color: #ECEFF4">&quot;</span><span style="color: #A3BE8C">pjgadrnamespace003</span><span style="color: #ECEFF4">&quot;</span></span>
+<span class="line"><span style="color: #D8DEE9FF">  </span><span style="color: #ECEFF4">}</span></span>
+<span class="line"><span style="color: #ECEFF4">}</span></span></code></pre></div>
+<!-- /wp:kevinbatdorf/code-block-pro -->
+
+<!-- wp:heading {"level":3} -->
+<h3 class="wp-block-heading" id="run-the-device-application">Run the Device Application</h3>
+<!-- /wp:heading -->
+
+<!-- wp:paragraph -->
+<p>Once you've run one of the above two commands, you'll need to update your appsettings.json file with the results printed out at the end of the script execution.</p>
+<!-- /wp:paragraph -->
+
+<!-- wp:paragraph -->
+<p>You can then run the skittle sorter with;</p>
+<!-- /wp:paragraph -->
+
+<!-- wp:kevinbatdorf/code-block-pro {"code":"cd ..      # You should be in the skittlesorter directory\ndotnet run \u002d\u002dproject src/skittlesorter.csproj","codeHTML":"\u003cpre class=\u0022shiki dracula-soft\u0022 style=\u0022background-color: #282A36\u0022 tabindex=\u00220\u0022\u003e\u003ccode\u003e\u003cspan class=\u0022line\u0022\u003e\u003cspan style=\u0022color: #F6F6F4\u0022\u003ecd ..      \u003c/span\u003e\u003cspan style=\u0022color: #7B7F8B\u0022\u003e# You should be in the skittlesorter directory\u003c/span\u003e\u003c/span\u003e\n\u003cspan class=\u0022line\u0022\u003e\u003cspan style=\u0022color: #F6F6F4\u0022\u003edotnet run \u003c/span\u003e\u003cspan style=\u0022color: #F286C4\u0022\u003e\u002d\u002d\u003c/span\u003e\u003cspan style=\u0022color: #F6F6F4\u0022\u003eproject src\u003c/span\u003e\u003cspan style=\u0022color: #F286C4\u0022\u003e/\u003c/span\u003e\u003cspan style=\u0022color: #F6F6F4\u0022\u003eskittlesorter.csproj\u003c/span\u003e\u003c/span\u003e\u003c/code\u003e\u003c/pre\u003e","language":"powershell","theme":"dracula-soft","bgColor":"#282A36","textColor":"#f6f6f4","fontSize":".875rem","fontFamily":"Code-Pro-JetBrains-Mono","lineHeight":"1.25rem","clampFonts":false,"lineNumbers":false,"headerType":"none","disablePadding":false,"footerType":"none","enableMaxHeight":false,"seeMoreType":"","seeMoreString":"","seeMoreAfterLine":"","seeMoreTransition":false,"seeMoreCollapse":false,"seeMoreCollapseString":"","highlightingHover":false,"lineHighlightColor":"rgba(251, 251, 239, 0.2)","copyButton":true,"copyButtonType":"heroicons","copyButtonUseTextarea":true,"useTabs":false} -->
+<div class="wp-block-kevinbatdorf-code-block-pro" data-code-block-pro-font-family="Code-Pro-JetBrains-Mono" style="font-size:.875rem;font-family:Code-Pro-JetBrains-Mono,ui-monospace,SFMono-Regular,Menlo,Monaco,Consolas,monospace;line-height:1.25rem;--cbp-tab-width:2;tab-size:var(--cbp-tab-width, 2)"><span role="button" tabindex="0" style="color:#f6f6f4;display:none" aria-label="Copy" class="code-block-pro-copy-button"><pre class="code-block-pro-copy-button-pre" aria-hidden="true"><textarea class="code-block-pro-copy-button-textarea" tabindex="-1" aria-hidden="true" readonly>cd ..      # You should be in the skittlesorter directory
+dotnet run --project src/skittlesorter.csproj</textarea></pre><svg xmlns="http://www.w3.org/2000/svg" style="width:24px;height:24px" fill="none" viewBox="0 0 24 24" stroke="currentColor" stroke-width="2"><path class="with-check" stroke-linecap="round" stroke-linejoin="round" d="M9 5H7a2 2 0 00-2 2v12a2 2 0 002 2h10a2 2 0 002-2V7a2 2 0 00-2-2h-2M9 5a2 2 0 002 2h2a2 2 0 002-2M9 5a2 2 0 012-2h2a2 2 0 012 2m-6 9l2 2 4-4"></path><path class="without-check" stroke-linecap="round" stroke-linejoin="round" d="M9 5H7a2 2 0 00-2 2v12a2 2 0 002 2h10a2 2 0 002-2V7a2 2 0 00-2-2h-2M9 5a2 2 0 002 2h2a2 2 0 002-2M9 5a2 2 0 012-2h2a2 2 0 012 2"></path></svg></span><pre class="shiki dracula-soft" style="background-color: #282A36" tabindex="0"><code><span class="line"><span style="color: #F6F6F4">cd ..      </span><span style="color: #7B7F8B"># You should be in the skittlesorter directory</span></span>
+<span class="line"><span style="color: #F6F6F4">dotnet run </span><span style="color: #F286C4">--</span><span style="color: #F6F6F4">project src</span><span style="color: #F286C4">/</span><span style="color: #F6F6F4">skittlesorter.csproj</span></span></code></pre></div>
+<!-- /wp:kevinbatdorf/code-block-pro -->
+
+<!-- wp:heading {"level":4} -->
+<h4 class="wp-block-heading" id="option-2-step-by-step-tutorial-this-series">Option 2: Step-by-Step Tutorial (This Series)</h4>
+<!-- /wp:heading -->
+
+<!-- wp:paragraph -->
+<p>Follow along post-by-post to understand&nbsp;<strong>why</strong>&nbsp;and&nbsp;<strong>how</strong>&nbsp;everything works. You'll learn:</p>
+<!-- /wp:paragraph -->
+
+<!-- wp:list -->
+<ul class="wp-block-list"><!-- wp:list-item -->
+<li>DPS concepts and architecture</li>
+<!-- /wp:list-item -->
+
+<!-- wp:list-item -->
+<li>Azure resource setup</li>
+<!-- /wp:list-item -->
+
+<!-- wp:list-item -->
+<li>X.509 certificate workflows</li>
+<!-- /wp:list-item -->
+
+<!-- wp:list-item -->
+<li>.NET implementation details</li>
+<!-- /wp:list-item --></ul>
+<!-- /wp:list -->
+
+<!-- wp:heading {"level":3} -->
+<h3 class="wp-block-heading" id="prerequisites">Prerequisites</h3>
+<!-- /wp:heading -->
+
+<!-- wp:list -->
+<ul class="wp-block-list"><!-- wp:list-item -->
+<li><strong>Azure Subscription</strong>&nbsp;(<a href="https://azure.microsoft.com/free/" target="_blank" rel="noreferrer noopener">free trial available</a>)</li>
+<!-- /wp:list-item -->
+
+<!-- wp:list-item -->
+<li><strong>Azure CLI</strong>&nbsp;with IoT extension (<a href="https://learn.microsoft.com/cli/azure/install-azure-cli" target="_blank" rel="noreferrer noopener">install guide</a>)</li>
+<!-- /wp:list-item -->
+
+<!-- wp:list-item -->
+<li><strong>PowerShell</strong>&nbsp;7+ (<a href="https://learn.microsoft.com/powershell/scripting/install/installing-powershell" target="_blank" rel="noreferrer noopener">install guide</a>)</li>
+<!-- /wp:list-item -->
+
+<!-- wp:list-item -->
+<li><strong>.NET 10</strong>&nbsp;SDK (<a href="https://dotnet.microsoft.com/download" target="_blank" rel="noreferrer noopener">download</a>)</li>
+<!-- /wp:list-item -->
+
+<!-- wp:list-item -->
+<li>Basic C# and IoT concepts understanding</li>
+<!-- /wp:list-item --></ul>
+<!-- /wp:list -->
+
+<!-- wp:heading {"level":3} -->
+<h3 class="wp-block-heading" id="series-outline">Series Outline</h3>
+<!-- /wp:heading -->
+
+<!-- wp:list {"ordered":true} -->
+<ol class="wp-block-list"><!-- wp:list-item -->
+<li><strong>A Primer on DPS</strong>&nbsp;- Understanding Device Provisioning Service</li>
+<!-- /wp:list-item -->
+
+<!-- wp:list-item -->
+<li><strong>Creating DPS and IoT Hub</strong>&nbsp;- Azure resource setup</li>
+<!-- /wp:list-item -->
+
+<!-- wp:list-item -->
+<li><strong>X.509 Certificate Hierarchy</strong>&nbsp;- Certificate workflows</li>
+<!-- /wp:list-item -->
+
+<!-- wp:list-item -->
+<li><strong>DPS Configuration &amp; Enrollment</strong>&nbsp;- Connecting devices</li>
+<!-- /wp:list-item -->
+
+<!-- wp:list-item -->
+<li><strong>Building the Device Application</strong>&nbsp;- .NET implementation</li>
+<!-- /wp:list-item -->
+
+<!-- wp:list-item -->
+<li><strong>ADR Integration</strong>&nbsp;- Device Registry features</li>
+<!-- /wp:list-item -->
+
+<!-- wp:list-item -->
+<li><strong>Testing &amp; Troubleshooting</strong>&nbsp;- Production readiness</li>
+<!-- /wp:list-item --></ol>
+<!-- /wp:list -->
+
+<!-- wp:heading {"level":3} -->
+<h3 class="wp-block-heading" id="why-this-series">Why This Series?</h3>
+<!-- /wp:heading -->
+
+<!-- wp:paragraph -->
+<p>Most IoT tutorials use&nbsp;<strong>symmetric keys</strong>&nbsp;or&nbsp;<strong>manual X.509 certificate generation</strong>. This series shows you:</p>
+<!-- /wp:paragraph -->
+
+<!-- wp:list -->
+<ul class="wp-block-list"><!-- wp:list-item -->
+<li>How to use Microsoft's&nbsp;<strong>new certificate management</strong>&nbsp;features</li>
+<!-- /wp:list-item -->
+
+<!-- wp:list-item -->
+<li>How to build a&nbsp;<strong>custom DPS framework</strong>&nbsp;to access preview APIs</li>
+<!-- /wp:list-item -->
+
+<!-- wp:list-item -->
+<li>How to integrate&nbsp;<strong>ADR</strong>&nbsp;for advanced device management</li>
+<!-- /wp:list-item -->
+
+<!-- wp:list-item -->
+<li>How to apply&nbsp;<strong>production-minded</strong>&nbsp;IoT patterns that carry over to trusted, CA-issued certificates</li>
+<!-- /wp:list-item --></ul>
+<!-- /wp:list -->
+
+<!-- wp:heading {"level":3} -->
+<h3 class="wp-block-heading" id="next-steps">Next Steps</h3>
+<!-- /wp:heading -->
+
+<!-- wp:paragraph -->
+<p>In the following sections, we'll:</p>
+<!-- /wp:paragraph -->
+
+<!-- wp:list {"ordered":true} -->
+<ol class="wp-block-list"><!-- wp:list-item -->
+<li>Learn about DPS with a Primer</li>
+<!-- /wp:list-item -->
+
+<!-- wp:list-item -->
+<li>Create DPS, IoT Hub, and ADR instances</li>
+<!-- /wp:list-item -->
+
+<!-- wp:list-item -->
+<li>Configure credential policies for certificate issuance</li>
+<!-- /wp:list-item -->
+
+<!-- wp:list-item -->
+<li>Set up enrollment groups (symmetric key and X.509)</li>
+<!-- /wp:list-item -->
+
+<!-- wp:list-item -->
+<li>Build a .NET device application with custom DPS framework</li>
+<!-- /wp:list-item -->
+
+<!-- wp:list-item -->
+<li>Implement CSR generation and certificate management</li>
+<!-- /wp:list-item -->
+
+<!-- wp:list-item -->
+<li>Integrate with ADR for device management</li>
+<!-- /wp:list-item --></ol>
+<!-- /wp:list -->
+
+<!-- wp:paragraph -->
+<p><a href="https://www.petecodes.co.uk/iot-hub-with-adr-and-certificate-management-part-2">Next: A DPS Primer &gt;</a></p>
+<!-- /wp:paragraph -->
