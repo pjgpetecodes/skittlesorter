@@ -1,12 +1,20 @@
 # Building the Device Application
 
+> **Release baseline:** This series uses the latest Azure IoT CLI preview
+> extension, `azure-iot` **1.0.0b2**, released **6 October 2026**. Last
+> reviewed **29 October 2026**. [Release notes](https://github.com/Azure/azure-iot-cli-extension/releases/tag/v1.0.0b2).
+
 [← Previous: Building the Custom DPS Framework](05-building-dps-framework.md) | [Back to Introduction](00-introduction.md)
 
 ---
 
 In this post, we'll walk through the complete IoT device application that uses DPS provisioning with CSR-based certificate issuance. Rather than building from scratch, we'll clone the repository, run the setup automation, configure the application, and explore how the major components work together.
 
-> **Why a Custom DPS Framework?** Microsoft's official C# SDK doesn't yet support the `2025-07-01-preview` API required for CSR-based certificate issuance. I've built a custom MQTT-based DPS framework that handles the preview API features.
+> **Sample implementation:** This repository uses a custom MQTT-based DPS
+> framework for its CSR provisioning flow. This is an implementation choice
+> for the sample, not a general requirement for IoT Hub or ADR deployments.
+> IoT Hub integration with ADR and certificate management remain in public
+> preview; see [What's Changed since the Previous Preview](07-whats-changed-since-previous-preview.md).
 
 ## Application Architecture
 
@@ -59,10 +67,10 @@ If you haven't already run the Azure setup automation from [Post 02](02-creating
 
 ```powershell
 $resourceGroup = "my-iot-rg"
-$location = "eastus"
+$location = "uksouth" # Or australiaeast, japaneast, or centralus
 $iotHubName = "my-iothub-001"
 $dpsName = "my-dps-001"
-$adrNamespace = "my-adrnamespace-001"
+$adrNamespace = "my-adrnamespace-uniquesuffix"
 $userIdentity = "my-uami"
 $registrationId = "my-device"
 ```
@@ -125,7 +133,7 @@ Update `appsettings.json` with your values from the setup script:
     "Enabled": true,
     "SubscriptionId": "xxxxxxxx-xxxx-xxxx-xxxx-xxxxxxxxxxxx",
     "ResourceGroupName": "my-iot-rg",
-    "NamespaceName": "my-adrnamespace-001"
+    "NamespaceName": "my-adrnamespace-uniquesuffix"
   },
   "Mock": {
     "EnableMockColorSensor": true,
@@ -503,7 +511,9 @@ var deviceClient = DeviceClient.Create(
 
 **Why we built it:**
 
-Microsoft's official C# Device Provisioning SDK doesn't support the `2025-07-01-preview` API version required for CSR-based certificate issuance. The preview features include:
+This sample's custom framework implements the `2025-07-01-preview` API path
+using MQTT. This describes the repository's implementation, not a general
+limitation of the official SDKs. The sample features include:
 
 - Certificate Signing Request (CSR) submission during registration
 - Receiving issued certificates in the registration response
@@ -718,7 +728,7 @@ var adrClient = new AdrDeviceRegistryClient();
 var devices = await adrClient.ListDevicesAsync(
     subscriptionId: "your-subscription-id",
     resourceGroupName: "my-iot-rg",
-    namespaceName: "my-adrnamespace-001"
+    namespaceName: "my-adrnamespace-uniquesuffix"
 );
 
 Console.WriteLine($"Found {devices.Count} devices:");
@@ -731,7 +741,7 @@ foreach (var device in devices)
 var deviceDetails = await adrClient.GetDeviceAsync(
     subscriptionId: "your-subscription-id",
     resourceGroupName: "my-iot-rg",
-    namespaceName: "my-adrnamespace-001",
+    namespaceName: "my-adrnamespace-uniquesuffix",
     deviceName: "my-device"
 );
 
@@ -763,7 +773,7 @@ Enable automatic device metadata updates in `appsettings.json`:
     "Enabled": true,
     "SubscriptionId": "your-subscription-id",
     "ResourceGroupName": "my-iot-rg",
-    "NamespaceName": "my-adrnamespace-001",
+    "NamespaceName": "my-adrnamespace-uniquesuffix",
     "DeviceUpdate": {
       "Enabled": true,
       "Attributes": {
@@ -841,7 +851,7 @@ az iot hub monitor-events `
 
 ```powershell
 az iot ops asset endpoint device list `
-  --namespace "my-adrnamespace-001" `
+  --namespace "my-adrnamespace-uniquesuffix" `
   --resource-group "my-iot-rg" `
   --output table
 ```
@@ -936,7 +946,7 @@ This ensures clean provisioning from scratch every time.
 
 ## Key Takeaways
 
-✅ **Custom DPS Framework Required** - Official SDK doesn't support preview API  
+✅ **Custom DPS Framework** - Used by this sample's CSR provisioning flow
 ✅ **Two-Phase Authentication** - Bootstrap cert for DPS, operational cert for IoT Hub  
 ✅ **CSR-Based Issuance** - Private key never leaves device  
 ✅ **MQTT Protocol** - Direct protocol implementation for preview features  

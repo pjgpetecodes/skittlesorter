@@ -27,7 +27,8 @@ param(
     [string]$RegistrationId,
     [string]$DpsName,
     [string]$ResourceGroup,
-    [string]$CredentialPolicy = "default",
+    # Keep the default aligned with the policy created by setup-x509-dps-adr.ps1.
+    [string]$CredentialPolicy = "cert-policy",
     [string]$EnrollmentGroupId,
     [switch]$SkipEnrollment,
     [switch]$SkipVerification,

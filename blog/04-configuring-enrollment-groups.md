@@ -1,10 +1,19 @@
 # Configuring Enrollment Groups
 
+> **Release baseline:** This series uses the latest Azure IoT CLI preview
+> extension, `azure-iot` **1.0.0b2**, released **6 October 2026**. Last
+> reviewed **29 October 2026**. [Release notes](https://github.com/Azure/azure-iot-cli-extension/releases/tag/v1.0.0b2).
+
 [← Previous: Understanding X.509 and CSR Workflows](03-x509-and-csr-workflows.md) | [Next: Building the Custom DPS Framework →](05-building-dps-framework.md)
 
 ---
 
 In this post, we'll configure Device Provisioning Service (DPS) enrollment groups that use Azure Device Registry (ADR) credential policies for certificate issuance. We'll focus on **X.509 attestation**, while still noting **symmetric key** as an option.
+
+IoT Hub integration with ADR remains in public preview. A new IoT Hub and DPS
+are required for every preview scenario; certificate management is optional.
+See [What's Changed since the Previous Preview](07-whats-changed-since-previous-preview.md)
+for current region, lifecycle, and deployment guidance.
 
 ## What Are Enrollment Groups?
 
@@ -32,7 +41,7 @@ This post covers **X.509** with CSR-based certificate issuance. Symmetric key is
 Before proceeding, ensure you've completed:
 - [Creating Azure Resources](02-creating-azure-resources.md) - DPS, IoT Hub, and ADR setup
 - ADR credential policy created (`cert-policy`)
-- DPS linked to IoT Hub and ADR namespace
+- DPS linked to the new IoT Hub and ADR namespace
 
 ## X.509 Certificate Attestation with CSR
 
@@ -169,7 +178,7 @@ The device will:
 
 ## Next Steps
 
-Now that enrollment groups are configured, we'll build the **custom DPS framework** that implements:
+Now that enrollment groups are configured, we'll use this repository's **custom DPS framework** for its sample CSR flow:
 - MQTT protocol communication with DPS
 - CSR generation and submission
 - Certificate issuance workflow

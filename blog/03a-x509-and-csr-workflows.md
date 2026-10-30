@@ -1,12 +1,21 @@
 # Understanding X.509 and CSR Workflows
 
+> **Release baseline:** This series uses the latest Azure IoT CLI preview
+> extension, `azure-iot` **1.0.0b2**, released **6 October 2026**. Last
+> reviewed **29 October 2026**. [Release notes](https://github.com/Azure/azure-iot-cli-extension/releases/tag/v1.0.0b2).
+
 [← Previous: Creating Azure Resources](02-creating-azure-resources.md) | [Next: Configuring Enrollment Groups →](04-configuring-enrollment-groups.md)
 
 ---
 
-In this post, we'll explore the differences between traditional X.509 certificate management and the **new Certificate Signing Request (CSR) workflow** introduced in the `2025-07-01-preview` API. Understanding both approaches will help you choose the right strategy for your IoT deployment.
+In this post, we'll explore traditional X.509 certificate management and the
+CSR workflow used by this repository's DPS sample. Check current Microsoft
+documentation for preview status and supported client libraries before using
+the workflow.
 
-> **🆕 Preview Feature:** The CSR-based certificate issuance with Microsoft-managed CA is currently in preview (announced November 2025). This feature enables devices to generate their own keys and receive signed certificates from Azure Device Registry during provisioning.
+> **Preview:** IoT Hub integration with ADR and certificate management remain
+> in public preview and aren't recommended for production. See [What's Changed
+> since the Previous Preview](07-whats-changed-since-previous-preview.md).
 
 ---
 
@@ -23,10 +32,10 @@ cd scripts
 
 .\setup-x509-dps-adr.ps1 `
   -ResourceGroup "my-iot-rg" `
-  -Location "eastus" `
+  -Location "uksouth" `
   -IoTHubName "my-iothub-001" `
   -DPSName "my-dps-001" `
-  -AdrNamespace "my-adrnamespace-001" `
+  -AdrNamespace "my-adrnamespace-uniquesuffix" `
   -UserIdentity "my-uami" `
   -RegistrationId "my-device" `
   -EnrollmentGroupId "my-device-group" `
@@ -126,10 +135,10 @@ Before starting, define your environment:
 
 ```powershell
 $resourceGroup = "my-iot-rg"
-$location = "eastus"
+$location = "uksouth" # Or australiaeast, japaneast, or centralus
 $dpsName = "my-dps-001"
 $iotHubName = "my-iothub-001"
-$adrNamespace = "my-adrnamespace-001"
+$adrNamespace = "my-adrnamespace-uniquesuffix"
 $userIdentity = "my-uami"
 $registrationId = "my-device"
 $enrollmentGroupId = "my-device-group"
@@ -457,7 +466,7 @@ This series uses a **two-phase certificate approach**:
 - **Official Term:** "End-entity operational certificate" (leaf certificate)
 - **Purpose:** Authenticate device to **IoT Hub** for all ongoing operations
 - **Created by:** ADR issuing CA automatically during provisioning (via CSR workflow)
-- **Lifespan:** Short-lived (1-90 days), auto-renewed, used for day-to-day IoT Hub connections
+- **Lifespan:** Controlled by the assigned policy (1–30 days in the current setup guide); renewal is supported
 - **Storage:** Generated on device, never leaves device
 
 **The Flow:**
@@ -496,7 +505,11 @@ If you used bootstrap certificates for **both** DPS and IoT Hub (the old way, be
 
 ## 🆕 New CSR-Based Workflow (Phase 2: Operational Certificates)
 
-> **Preview Feature (2025-07-01-preview API):** Certificate management for ADR was announced in November 2025 and is currently in public preview. This is **Phase 2** - operational certificate issuance happens automatically during provisioning, after the device authenticates with its onboarding credential. **Not recommended for production workloads during preview.**
+> **Preview:** IoT Hub integration with ADR and certificate management remain
+> in public preview and aren't recommended for production. Operational
+> certificate issuance happens during provisioning after DPS validates the
+> device's separate onboarding credential. See [What's Changed since the
+> Previous Preview](07-whats-changed-since-previous-preview.md).
 
 Phase 2 flips the model: instead of pre-deploying operational certificates, devices generate their own keys and request certificates during provisioning.
 
@@ -504,7 +517,7 @@ Phase 2 flips the model: instead of pre-deploying operational certificates, devi
 
 **Microsoft-Managed PKI Hierarchy:**
 - **Root CA (Credential):** One unique root CA per ADR namespace, managed by Microsoft using Azure Managed HSM
-- **Issuing CA (Policy):** One issuing CA per policy, signed by root CA, defines validity period (1-90 days)
+- **Issuing CA (Policy):** The certificate policy controls validity (1–30 days in the current setup guide)
 - **Leaf Certificate (Operational):** End-entity certificate issued to device, signed by issuing CA
 
 The issuing CA (policy) is linked to your DPS enrollment group and automatically signs certificates for devices provisioning through that enrollment.
@@ -645,12 +658,16 @@ Now we flip to the CSR model: the device makes its own key, asks DPS/ADR to sign
 ✅ **Private Key Security:** Keys generated on device, never transmitted  
 ✅ **Automated:** Certificates issued during provisioning via DPS registration call  
 ✅ **Scalable:** Works for millions of devices  
-✅ **Short-Lived Certificates:** 1-90 day validity, reduces risk exposure  
-✅ **Lifecycle Management:** ADR credential policies handle renewal (preview)  
+✅ **Short-Lived Certificates:** The current setup guide supports policy validity from 1–30 days
+✅ **Lifecycle Management:** ADR credential policies support operational-certificate renewal
 ✅ **Supported Protocols:** HTTP and MQTT during provisioning  
 ✅ **Zero-Touch:** Device provisions itself on first boot
 
-> **Note:** This workflow requires the `2025-07-01-preview` API and is not yet supported by official Microsoft SDKs, which is why this project includes a custom DPS framework. During preview, certificate revocation is not supported - disable the device in IoT Hub instead.  
+> **Note:** This repository's sample uses the `2025-07-01-preview` API and a
+> custom DPS framework for its MQTT-based CSR flow. That is an implementation
+> choice for this sample, not a general SDK limitation or deployment
+> requirement. Individual device certificates can be revoked; revocation of
+> intermediate CAs signed by an external CA has limitations.
 
 ## Comparing the Two Phases
 
@@ -662,7 +679,7 @@ Now we flip to the CSR model: the device makes its own key, asks DPS/ADR to sign
 | **Issued By** | You (third-party CA) | Microsoft ADR issuing CA (auto) |
 | **Generated On** | Host machine (pre-deployed) | Device itself (on-demand) |
 | **Private Key** | Pre-deployed to device | Never leaves device |
-| **Lifecycle** | Manual renewal (or long-lived) | Automatic renewal (1-90 day validity) |
+| **Lifecycle** | Manual renewal (or long-lived) | Renewal supported (1–30 day validity in current setup guide) |
 | **PKI Infrastructure** | You manage | Microsoft manages (Azure Managed HSM) |
 | **Risk** | Keys must be securely deployed | Minimal (no key transport) |
 | **Status** | Required (GA) | Optional/Preview |
@@ -751,7 +768,7 @@ When DPS returns the operational certificate after provisioning, it includes a *
 ┌─────────────────────────────┐
 │  Issuing CA (Policy)        │  (Microsoft-managed)
 │  Linked to DPS enrollment   │  (One per policy)
-│  Defines validity (1-90d)   │
+│  Defines validity (1-30d)   │
 └──────────┬──────────────────┘
            │ Signs
            ▼
@@ -793,13 +810,14 @@ The issuing CA (policy) certificates are automatically synced from ADR to all li
 
 ## Certificate Lifecycle with ADR
 
-ADR credential policies automate certificate management. During preview, the validity period must be between 1-90 days:
+ADR credential policies control operational-certificate issuance. The current
+setup guide allows validity periods from 1 to 30 days:
 
 ```json
 {
   "name": "cert-policy",
   "type": "x509CA",
-  "validity": "P30D",        // 30 days (min: 1 day, max: 90 days)
+  "validity": "P30D",        // 30 days (min: 1 day, max: 30 days)
   "renewalWindow": "P7D"     // Renew 7 days before expiry
 }
 ```

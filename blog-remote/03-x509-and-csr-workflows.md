@@ -1,12 +1,16 @@
 ## **Understanding X.509 and CSR Workflows**
 
+> **Release baseline:** This series uses the latest Azure IoT CLI preview
+> extension, `azure-iot` **1.0.0b2**, released **6 October 2026**. Last
+> reviewed **29 October 2026**. [Release notes](https://github.com/Azure/azure-iot-cli-extension/releases/tag/v1.0.0b2).
+
 ---
 
 This series uses Microsoft's **new** certificate management (preview) that enables devices to receive X.509 certificates automatically during provisioning. This post provides a high-level overview and points you to resources for implementation.
 
-> **🆕 Preview Feature:** Microsoft-backed X.509 certificate management was announced in November 2025 and is currently in public preview. 
-> 
-> **Not recommended for production workloads.** For details, see [Certificate Management Overview](https://learn.microsoft.com/en-us/azure/iot-hub/iot-hub-certificate-management-overview)
+> **Preview status:** Microsoft-backed X.509 certificate management is in
+> public preview and isn't recommended for production workloads. For details,
+> see the [Certificate Management Overview](https://learn.microsoft.com/en-us/azure/iot/iot-certificate-management-overview).
 
 ---
 
@@ -54,9 +58,11 @@ The new certificate management service makes use of a **two-phase approach**:
 ### Phase 2: Operational Certificates (Microsoft-Managed)
 
 -   **Purpose:** Device authenticates to IoT Hub for ongoing operations
--   **How it works:** Automatically issued by DPS during provisioning via CSR
+-   **How it works:** DPS validates the onboarding credential and coordinates
+    issuance by the namespace's ADR issuing CA when the device submits a CSR
 -   **Generated on:** Device itself (private key never leaves device)
--   **Lifespan:** Short-lived (1-90 days), automatically renewed
+-   **Lifespan:** Set by the assigned certificate policy (1–30 days in the
+    current setup guide); renewal is supported
 -   **Security:** Higher security, no key transport
 
 ## How It Works
@@ -121,13 +127,16 @@ The following diagram shows the complete provisioning flow:
 
 ## Microsoft-Managed PKI Architecture
 
-Azure Device Registry (ADR) manages a dedicated PKI for your namespace:
+Azure Device Registry (ADR) provides a private cloud PKI for each namespace.
+Certificate management supports one root CA and up to three intermediate CAs
+per namespace. Each intermediate CA has a certificate policy that controls
+the validity of issued device certificates. The default policy issues
+30-day certificates; the current setup guide allows a custom validity of
+1–30 days. The CA signing keys are hardware-protected by Azure Managed HSM.
 
--   **Root CA (Credential):** One unique root CA per ADR namespace, managed by Microsoft using Azure Managed HSM
--   **Issuing CA (Policy):** One issuing CA per policy, defines certificate validity (1-90 days)
--   **Leaf Certificate (Operational):** End-entity certificate issued to device by issuing CA
-
-The issuing CA certificates are automatically synced from ADR to all linked IoT Hubs, enabling Hub to authenticate devices.
+ADR synchronizes CA certificates with linked IoT Hubs so the hubs can trust
+operational device certificates. You can use a Microsoft cloud root CA or bring
+your own external root CA and have ADR manage an intermediate CA.
 
 ## Key Features
 
@@ -135,10 +144,11 @@ The issuing CA certificates are automatically synced from ADR to all linked IoT 
 | :-- | :-- |
 | **Algorithms** | ECC (ECDSA) with NIST P-384 curve, SHA-384 hashing |
 | **HSM Keys** | Azure Managed HSM (no additional subscription required) |
-| **Certificate Validity** | 1-90 days (configurable per policy) |
+| **Certificate Validity** | 1–30 days in the current setup guide (configurable per policy) |
 | **Protocols** | HTTP and MQTT during provisioning |
-| **Renewal** | Device-initiated via DPS registration call |
-| **CA Sync** | Automatic sync from ADR to linked IoT Hubs |
+| **Renewal** | Operational certificates can be renewed without reprovisioning |
+| **Revocation** | Device certificate revocation is supported; intermediate CA revocation has limits |
+| **CA lifecycle** | CA rotation and certificate synchronization are managed through ADR |
 
 ## What You'll Be Doing
 
@@ -269,7 +279,7 @@ openssl x509 -req `
   -CAcreateserial `
   -out "$certDir\ca\intermediate-ca.pem" `
   -days 1825 -sha256 `
-  -extfile "$certDir\ca\intermediate-ext.cnf" 
+  -extfile "$certDir\ca\intermediate-ext.cnf" `
   -extensions v3_intermediate
 ```
 
@@ -400,7 +410,7 @@ Write-Host "✓ Device bootstrap certificate created" -ForegroundColor Green
 **7) Create DPS enrollment group:**
 
 ```powershell
-az iot dps enrollment-group create --dps-name $dpsName --resource-group $resourceGroup --enrollment-id $enrollmentGroupName --ca-name "$registrationId-intermediate" --credential-policy "default" --provisioning-status enabled
+az iot dps enrollment-group create --dps-name $dpsName --resource-group $resourceGroup --enrollment-id $enrollmentGroupName --ca-name "$registrationId-intermediate" --credential-policy "cert-policy" --provisioning-status enabled
 
 Write-Host "✓ Enrollment group created with CSR-based certificate issuance" -ForegroundColor Green
 ```
@@ -452,30 +462,35 @@ You've now completed all manual setup steps:
 
 **For Detailed Explanations:** See [Understanding X.509 and CSR Workflows (Deep Dive)](https://www.petecodes.co.uk/iot-hub-with-adr-and-certificate-management-part-4a) for complete technical details, certificate architecture, and advanced scenarios.
 
-## Certificate Renewal
+## Certificate Renewal and Revocation
 
-Devices are responsible for monitoring operational certificate expiration:
+The current IoT Hub certificate-management workflow supports operational
+certificate renewal without requiring the device to reprovision. This differs
+from the sample implementation's renewal logic; review the current
+[certificate-management overview](https://learn.microsoft.com/en-us/azure/iot/iot-certificate-management-overview)
+and device workflow before relying on a fixed renewal interval.
 
--   Check `Valid until` date periodically
--   Initiate renewal before expiration (recommended: 7 days before)
--   Generate new CSR and submit to DPS (same as initial provisioning)
--   Receive renewed certificate from ADR
-
-**Best Practice:** Use Device Twin reported properties to track certificate issuance/expiration dates for monitoring.
+Certificate management also supports revoking individual device certificates.
+Revocation blocks the affected certificate from connecting until the device
+receives a replacement. Intermediate CA revocation is not supported when that
+intermediate is signed by an external CA. ADR automatically rotates CAs before
+expiry; devices that don't migrate to replacement certificates during the
+transition can lose connectivity.
 
 ## Preview Limitations
 
-⚠️ **Certificate Revocation:** Not supported in preview - disable device in IoT Hub instead  
-⚠️ **Production Use:** Not recommended during preview  
-⚠️ **SDK Support:** Official Microsoft C# SDKs don't yet support `2025-07-01-preview` API
+⚠️ **Production Use:** IoT Hub integration and certificate management remain in public preview and aren't recommended for production workloads.
+⚠️ **Existing hubs:** There is no upgrade path to add ADR integration; use a new IoT Hub.
+⚠️ **DPS:** Required for all IoT Hub preview scenarios, even if certificate management is disabled.
 
 ## Learn More
 
 **Official Microsoft Documentation:**
 
 -   [What's New in IoT Hub](https://learn.microsoft.com/en-us/azure/iot-hub/iot-hub-what-is-new)
--   [Certificate Management Overview](https://learn.microsoft.com/en-us/azure/iot-hub/iot-hub-certificate-management-overview)
--   [Certificate Management Concepts](https://learn.microsoft.com/en-us/azure/iot-hub/iot-hub-certificate-management-concepts)
+-   [Certificate Management Overview](https://learn.microsoft.com/en-us/azure/iot/iot-certificate-management-overview)
+-   [Certificate Management Concepts](https://learn.microsoft.com/en-us/azure/iot/iot-certificate-management-concepts)
+-   [Azure IoT Hub Device Registry setup](https://learn.microsoft.com/en-us/azure/iot-hub/iot-hub-device-registry-setup)
 
 **Deep Dive:**
 

@@ -1,9 +1,17 @@
-<!-- wp:heading -->
+<!-- wp:heading {"level":2} -->
 <h2 class="wp-block-heading"><strong>A DPS Primer</strong></h2>
 <!-- /wp:heading -->
 
+<!-- wp:quote -->
+<blockquote class="wp-block-quote"><!-- wp:paragraph -->
+<p><strong>Release baseline:</strong> This series uses the latest Azure IoT CLI preview
+extension, <code>azure-iot</code> <strong>1.0.0b2</strong>, released <strong>6 October 2026</strong>. Last
+reviewed <strong>29 October 2026</strong>. <a href="https://github.com/Azure/azure-iot-cli-extension/releases/tag/v1.0.0b2">Release notes</a>.</p>
+<!-- /wp:paragraph --></blockquote>
+<!-- /wp:quote -->
+
 <!-- wp:paragraph -->
-<p>Welcome back to this series of posts exploring the latest features of Azure IoT Hub, Device Provisioning Service (DPS), and Azure Device Registration (ADR). </p>
+<p>Welcome back to this series of posts exploring the latest features of Azure IoT Hub, Device Provisioning Service (DPS), and Azure Device Registration (ADR).</p>
 <!-- /wp:paragraph -->
 
 <!-- wp:paragraph -->
@@ -20,7 +28,7 @@
 
 <!-- wp:quote -->
 <blockquote class="wp-block-quote"><!-- wp:paragraph -->
-<p><strong>Note:</strong>&nbsp;This guide uses&nbsp;<strong>PowerShell</strong>&nbsp;for all commands and scripts. While Azure CLI commands work identically in bash/zsh, PowerShell is recommended for Windows environments and provides consistent cross-platform support. If you're using Linux/macOS, you can install&nbsp;<a href="https://learn.microsoft.com/powershell/scripting/install/installing-powershell">PowerShell Core</a>&nbsp;or adapt the commands to bash syntax.</p>
+<p><strong>Note:</strong> This guide uses <strong>PowerShell</strong> for all commands and scripts. While Azure CLI commands work identically in bash/zsh, PowerShell is recommended for Windows environments and provides consistent cross-platform support. If you're using Linux/macOS, you can install <a href="https://learn.microsoft.com/powershell/scripting/install/installing-powershell">PowerShell Core</a> or adapt the commands to bash syntax.</p>
 <!-- /wp:paragraph --></blockquote>
 <!-- /wp:quote -->
 
@@ -55,7 +63,7 @@
 <!-- /wp:list -->
 
 <!-- wp:heading {"level":3} -->
-<h3 class="wp-block-heading" id="what-is-device-provisioning-service">What is Device Provisioning Service?</h3>
+<h3 class="wp-block-heading">What is Device Provisioning Service?</h3>
 <!-- /wp:heading -->
 
 <!-- wp:paragraph -->
@@ -67,67 +75,61 @@
 <!-- /wp:paragraph -->
 
 <!-- wp:heading {"level":3} -->
-<h3 class="wp-block-heading" id="why-use-dps">Why Use DPS?</h3>
+<h3 class="wp-block-heading">Why Use DPS?</h3>
 <!-- /wp:heading -->
 
 <!-- wp:paragraph -->
-<p>You might be wondering: "Can't I just register devices manually in IoT Hub?" You can, but let's see why that doesn't scale:</p>
+<p>You might be wondering: &quot;Can't I just register devices manually in IoT Hub?&quot; You can, but let's see why that doesn't scale:</p>
 <!-- /wp:paragraph -->
 
 <!-- wp:heading {"level":4} -->
-<h4 class="wp-block-heading" id="traditional-approach-manual-registration">Traditional Approach (Manual Registration)</h4>
+<h4 class="wp-block-heading">Traditional Approach (Manual Registration)</h4>
 <!-- /wp:heading -->
 
 <!-- wp:list -->
 <ul class="wp-block-list"><!-- wp:list-item -->
 <li>Register each device manually in IoT Hub</li>
 <!-- /wp:list-item -->
-
 <!-- wp:list-item -->
 <li>Hardcode connection strings in device firmware</li>
 <!-- /wp:list-item -->
-
 <!-- wp:list-item -->
 <li>Difficult to reassign devices to different hubs</li>
 <!-- /wp:list-item -->
-
 <!-- wp:list-item -->
 <li>Doesn't scale beyond a few devices</li>
 <!-- /wp:list-item -->
-
 <!-- wp:list-item -->
 <li>Manual certificate management and rotation</li>
-<!-- /wp:list-item --></ul>
+<!-- /wp:list-item -->
+</ul>
 <!-- /wp:list -->
 
 <!-- wp:heading {"level":4} -->
-<h4 class="wp-block-heading" id="dps-approach-zero-touch-provisioning">DPS Approach (Zero-Touch Provisioning)</h4>
+<h4 class="wp-block-heading">DPS Approach (Zero-Touch Provisioning)</h4>
 <!-- /wp:heading -->
 
 <!-- wp:list -->
 <ul class="wp-block-list"><!-- wp:list-item -->
 <li>Devices automatically register themselves</li>
 <!-- /wp:list-item -->
-
 <!-- wp:list-item -->
 <li>No connection strings hardcoded</li>
 <!-- /wp:list-item -->
-
 <!-- wp:list-item -->
 <li>Devices can be reassigned dynamically</li>
 <!-- /wp:list-item -->
-
 <!-- wp:list-item -->
 <li>Scales to millions of devices</li>
 <!-- /wp:list-item -->
-
 <!-- wp:list-item -->
 <li>Automated certificate issuance and lifecycle management</li>
-<!-- /wp:list-item --></ul>
+<!-- /wp:list-item -->
+</ul>
 <!-- /wp:list -->
 
 <!-- wp:heading {"level":3} -->
-<h3 class="wp-block-heading" id="key-benefits">Key Benefits</h3>
+<h3 class="wp-block-heading">Key Benefits</h3>
 <!-- /wp:heading -->
 
 <!-- wp:paragraph -->
@@ -138,26 +140,23 @@
 <ul class="wp-block-list"><!-- wp:list-item -->
 <li><strong>Scale:</strong> Provision thousands or millions of devices without manual intervention. Devices can self-register when they first come online.</li>
 <!-- /wp:list-item -->
-
 <!-- wp:list-item -->
 <li><strong>Security:</strong> No connection strings hardcoded in device firmware. Devices use cryptographic attestation (symmetric keys, TPM, or X.509 certificates) to prove identity.</li>
 <!-- /wp:list-item -->
-
 <!-- wp:list-item -->
 <li><strong>Flexibility:</strong> Devices can be reassigned to different IoT Hubs based on business logic, geolocation, or load balancing.</li>
 <!-- /wp:list-item -->
-
 <!-- wp:list-item -->
 <li><strong>Multi-tenancy:</strong> Different devices can automatically be directed to different IoT Hubs based on enrollment configuration.</li>
 <!-- /wp:list-item -->
-
 <!-- wp:list-item -->
 <li><strong>Separation:</strong> Separation between bootstrap and operational credentials for devices.</li>
-<!-- /wp:list-item --></ul>
+<!-- /wp:list-item -->
+</ul>
 <!-- /wp:list -->
 
 <!-- wp:heading {"level":4} -->
-<h4 class="wp-block-heading" id="-automated-certificate-management-2025-feature">🆕 Automated Certificate Management (2025 Feature)</h4>
+<h4 class="wp-block-heading">🆕 Automated Certificate Management (2025 Feature)</h4>
 <!-- /wp:heading -->
 
 <!-- wp:paragraph -->
@@ -165,19 +164,22 @@
 <!-- /wp:paragraph -->
 
 <!-- wp:heading {"level":3} -->
-<h3 class="wp-block-heading" id="whats-new-microsoft-certificate-management">What's New: Microsoft Certificate Management</h3>
+<h3 class="wp-block-heading">What's New: Microsoft Certificate Management</h3>
 <!-- /wp:heading -->
 
 <!-- wp:paragraph -->
-<p>Starting with the&nbsp;<code>2025-07-01-preview</code>&nbsp;API, DPS introduces&nbsp;<strong>certificate issuance</strong>&nbsp;capabilities:</p>
+<p>The custom device code in this repository uses the <code>2025-07-01-preview</code> API
+for its CSR provisioning example. The current service workflow is that DPS
+validates the device's onboarding credential and coordinates issuance of an
+<strong>operational certificate</strong> from the ADR namespace's issuing CA:</p>
 <!-- /wp:paragraph -->
 
 <!-- wp:heading {"level":4} -->
-<h4 class="wp-block-heading" id="traditional-x509-workflow">Traditional X.509 Workflow</h4>
+<h4 class="wp-block-heading">Traditional X.509 Workflow</h4>
 <!-- /wp:heading -->
 
-<!-- wp:kevinbatdorf/code-block-pro {"code":"┌─────────────────────────────┐\n│       Your CA (PKI)         │\n└──────────────┬──────────────┘\n               │ create\n               ▼\n┌─────────────────────────────┐\n│ Root \u0026amp; Intermediate Certs   │\n└──────────────┬──────────────┘\n               │ trust\n               ▼\n┌─────────────────────────────┐\n│            DPS              │\n└──────────────┬──────────────┘\n               │ pre-provision\n               ▼\n┌─────────────────────────────┐\n│  Device Certificates (per   │\n│  device, generated upfront) │\n└──────────────┬──────────────┘\n               │ install\n               ▼\n┌─────────────────────────────┐\n│           Devices           │\n└──────────────┬──────────────┘\n               │ connect using X.509\n               ▼\n┌─────────────────────────────┐\n│           IoT Hub           │\n└─────────────────────────────┘\n\nNotes:\n- Certs are created ahead of time and installed on devices.\n- Rotation is manual: generate, distribute, and update per device.","codeHTML":"\u003cpre class=\u0022shiki dracula-soft\u0022 style=\u0022background-color: #282A36\u0022 tabindex=\u00220\u0022\u003e\u003ccode\u003e\u003cspan class=\u0022line\u0022\u003e\u003cspan style=\u0022color: #f6f6f4\u0022\u003e┌─────────────────────────────┐\u003c/span\u003e\u003c/span\u003e\n\u003cspan class=\u0022line\u0022\u003e\u003cspan style=\u0022color: #f6f6f4\u0022\u003e│       Your CA (PKI)         │\u003c/span\u003e\u003c/span\u003e\n\u003cspan class=\u0022line\u0022\u003e\u003cspan style=\u0022color: #f6f6f4\u0022\u003e└──────────────┬──────────────┘\u003c/span\u003e\u003c/span\u003e\n\u003cspan class=\u0022line\u0022\u003e\u003cspan style=\u0022color: #f6f6f4\u0022\u003e               │ create\u003c/span\u003e\u003c/span\u003e\n\u003cspan class=\u0022line\u0022\u003e\u003cspan style=\u0022color: #f6f6f4\u0022\u003e               ▼\u003c/span\u003e\u003c/span\u003e\n\u003cspan class=\u0022line\u0022\u003e\u003cspan style=\u0022color: #f6f6f4\u0022\u003e┌─────────────────────────────┐\u003c/span\u003e\u003c/span\u003e\n\u003cspan class=\u0022line\u0022\u003e\u003cspan style=\u0022color: #f6f6f4\u0022\u003e│ Root \u0026amp; Intermediate Certs   │\u003c/span\u003e\u003c/span\u003e\n\u003cspan class=\u0022line\u0022\u003e\u003cspan style=\u0022color: #f6f6f4\u0022\u003e└──────────────┬──────────────┘\u003c/span\u003e\u003c/span\u003e\n\u003cspan class=\u0022line\u0022\u003e\u003cspan style=\u0022color: #f6f6f4\u0022\u003e               │ trust\u003c/span\u003e\u003c/span\u003e\n\u003cspan class=\u0022line\u0022\u003e\u003cspan style=\u0022color: #f6f6f4\u0022\u003e               ▼\u003c/span\u003e\u003c/span\u003e\n\u003cspan class=\u0022line\u0022\u003e\u003cspan style=\u0022color: #f6f6f4\u0022\u003e┌─────────────────────────────┐\u003c/span\u003e\u003c/span\u003e\n\u003cspan class=\u0022line\u0022\u003e\u003cspan style=\u0022color: #f6f6f4\u0022\u003e│            DPS              │\u003c/span\u003e\u003c/span\u003e\n\u003cspan class=\u0022line\u0022\u003e\u003cspan style=\u0022color: #f6f6f4\u0022\u003e└──────────────┬──────────────┘\u003c/span\u003e\u003c/span\u003e\n\u003cspan class=\u0022line\u0022\u003e\u003cspan style=\u0022color: #f6f6f4\u0022\u003e               │ pre-provision\u003c/span\u003e\u003c/span\u003e\n\u003cspan class=\u0022line\u0022\u003e\u003cspan style=\u0022color: #f6f6f4\u0022\u003e               ▼\u003c/span\u003e\u003c/span\u003e\n\u003cspan class=\u0022line\u0022\u003e\u003cspan style=\u0022color: #f6f6f4\u0022\u003e┌─────────────────────────────┐\u003c/span\u003e\u003c/span\u003e\n\u003cspan class=\u0022line\u0022\u003e\u003cspan style=\u0022color: #f6f6f4\u0022\u003e│  Device Certificates (per   │\u003c/span\u003e\u003c/span\u003e\n\u003cspan class=\u0022line\u0022\u003e\u003cspan style=\u0022color: #f6f6f4\u0022\u003e│  device, generated upfront) │\u003c/span\u003e\u003c/span\u003e\n\u003cspan class=\u0022line\u0022\u003e\u003cspan style=\u0022color: #f6f6f4\u0022\u003e└──────────────┬──────────────┘\u003c/span\u003e\u003c/span\u003e\n\u003cspan class=\u0022line\u0022\u003e\u003cspan style=\u0022color: #f6f6f4\u0022\u003e               │ install\u003c/span\u003e\u003c/span\u003e\n\u003cspan class=\u0022line\u0022\u003e\u003cspan style=\u0022color: #f6f6f4\u0022\u003e               ▼\u003c/span\u003e\u003c/span\u003e\n\u003cspan class=\u0022line\u0022\u003e\u003cspan style=\u0022color: #f6f6f4\u0022\u003e┌─────────────────────────────┐\u003c/span\u003e\u003c/span\u003e\n\u003cspan class=\u0022line\u0022\u003e\u003cspan style=\u0022color: #f6f6f4\u0022\u003e│           Devices           │\u003c/span\u003e\u003c/span\u003e\n\u003cspan class=\u0022line\u0022\u003e\u003cspan style=\u0022color: #f6f6f4\u0022\u003e└──────────────┬──────────────┘\u003c/span\u003e\u003c/span\u003e\n\u003cspan class=\u0022line\u0022\u003e\u003cspan style=\u0022color: #f6f6f4\u0022\u003e               │ connect using X.509\u003c/span\u003e\u003c/span\u003e\n\u003cspan class=\u0022line\u0022\u003e\u003cspan style=\u0022color: #f6f6f4\u0022\u003e               ▼\u003c/span\u003e\u003c/span\u003e\n\u003cspan class=\u0022line\u0022\u003e\u003cspan style=\u0022color: #f6f6f4\u0022\u003e┌─────────────────────────────┐\u003c/span\u003e\u003c/span\u003e\n\u003cspan class=\u0022line\u0022\u003e\u003cspan style=\u0022color: #f6f6f4\u0022\u003e│           IoT Hub           │\u003c/span\u003e\u003c/span\u003e\n\u003cspan class=\u0022line\u0022\u003e\u003cspan style=\u0022color: #f6f6f4\u0022\u003e└─────────────────────────────┘\u003c/span\u003e\u003c/span\u003e\n\u003cspan class=\u0022line\u0022\u003e\u003cspan style=\u0022color: #f6f6f4\u0022\u003e\u003c/span\u003e\u003c/span\u003e\n\u003cspan class=\u0022line\u0022\u003e\u003cspan style=\u0022color: #f6f6f4\u0022\u003eNotes:\u003c/span\u003e\u003c/span\u003e\n\u003cspan class=\u0022line\u0022\u003e\u003cspan style=\u0022color: #f6f6f4\u0022\u003e- Certs are created ahead of time and installed on devices.\u003c/span\u003e\u003c/span\u003e\n\u003cspan class=\u0022line\u0022\u003e\u003cspan style=\u0022color: #f6f6f4\u0022\u003e- Rotation is manual: generate, distribute, and update per device.\u003c/span\u003e\u003c/span\u003e\u003c/code\u003e\u003c/pre\u003e","language":"plaintext","theme":"dracula-soft","bgColor":"#282A36","textColor":"#f6f6f4","fontSize":".875rem","fontFamily":"Code-Pro-JetBrains-Mono","lineHeight":"1.25rem","clampFonts":false,"lineNumbers":false,"headerType":"none","disablePadding":false,"footerType":"none","enableMaxHeight":false,"seeMoreType":"","seeMoreString":"","seeMoreAfterLine":"","seeMoreTransition":false,"seeMoreCollapse":false,"seeMoreCollapseString":"","highlightingHover":false,"lineHighlightColor":"rgba(251, 251, 239, 0.2)","copyButton":true,"copyButtonType":"heroicons","copyButtonUseTextarea":true,"useTabs":false} -->
-<div class="wp-block-kevinbatdorf-code-block-pro" data-code-block-pro-font-family="Code-Pro-JetBrains-Mono" style="font-size:.875rem;font-family:Code-Pro-JetBrains-Mono,ui-monospace,SFMono-Regular,Menlo,Monaco,Consolas,monospace;line-height:1.25rem;--cbp-tab-width:2;tab-size:var(--cbp-tab-width, 2)"><span role="button" tabindex="0" style="color:#f6f6f4;display:none" aria-label="Copy" class="code-block-pro-copy-button"><pre class="code-block-pro-copy-button-pre" aria-hidden="true"><textarea class="code-block-pro-copy-button-textarea" tabindex="-1" aria-hidden="true" readonly>┌─────────────────────────────┐
+<!-- wp:code {"className":"language-plaintext"} -->
+<pre class="wp-block-code language-plaintext"><code>┌─────────────────────────────┐
 │       Your CA (PKI)         │
 └──────────────┬──────────────┘
                │ create
@@ -209,47 +211,16 @@
 
 Notes:
 - Certs are created ahead of time and installed on devices.
-- Rotation is manual: generate, distribute, and update per device.</textarea></pre><svg xmlns="http://www.w3.org/2000/svg" style="width:24px;height:24px" fill="none" viewBox="0 0 24 24" stroke="currentColor" stroke-width="2"><path class="with-check" stroke-linecap="round" stroke-linejoin="round" d="M9 5H7a2 2 0 00-2 2v12a2 2 0 002 2h10a2 2 0 002-2V7a2 2 0 00-2-2h-2M9 5a2 2 0 002 2h2a2 2 0 002-2M9 5a2 2 0 012-2h2a2 2 0 012 2m-6 9l2 2 4-4"></path><path class="without-check" stroke-linecap="round" stroke-linejoin="round" d="M9 5H7a2 2 0 00-2 2v12a2 2 0 002 2h10a2 2 0 002-2V7a2 2 0 00-2-2h-2M9 5a2 2 0 002 2h2a2 2 0 002-2M9 5a2 2 0 012-2h2a2 2 0 012 2"></path></svg></span><pre class="shiki dracula-soft" style="background-color: #282A36" tabindex="0"><code><span class="line"><span style="color: #f6f6f4">┌─────────────────────────────┐</span></span>
-<span class="line"><span style="color: #f6f6f4">│       Your CA (PKI)         │</span></span>
-<span class="line"><span style="color: #f6f6f4">└──────────────┬──────────────┘</span></span>
-<span class="line"><span style="color: #f6f6f4">               │ create</span></span>
-<span class="line"><span style="color: #f6f6f4">               ▼</span></span>
-<span class="line"><span style="color: #f6f6f4">┌─────────────────────────────┐</span></span>
-<span class="line"><span style="color: #f6f6f4">│ Root &amp; Intermediate Certs   │</span></span>
-<span class="line"><span style="color: #f6f6f4">└──────────────┬──────────────┘</span></span>
-<span class="line"><span style="color: #f6f6f4">               │ trust</span></span>
-<span class="line"><span style="color: #f6f6f4">               ▼</span></span>
-<span class="line"><span style="color: #f6f6f4">┌─────────────────────────────┐</span></span>
-<span class="line"><span style="color: #f6f6f4">│            DPS              │</span></span>
-<span class="line"><span style="color: #f6f6f4">└──────────────┬──────────────┘</span></span>
-<span class="line"><span style="color: #f6f6f4">               │ pre-provision</span></span>
-<span class="line"><span style="color: #f6f6f4">               ▼</span></span>
-<span class="line"><span style="color: #f6f6f4">┌─────────────────────────────┐</span></span>
-<span class="line"><span style="color: #f6f6f4">│  Device Certificates (per   │</span></span>
-<span class="line"><span style="color: #f6f6f4">│  device, generated upfront) │</span></span>
-<span class="line"><span style="color: #f6f6f4">└──────────────┬──────────────┘</span></span>
-<span class="line"><span style="color: #f6f6f4">               │ install</span></span>
-<span class="line"><span style="color: #f6f6f4">               ▼</span></span>
-<span class="line"><span style="color: #f6f6f4">┌─────────────────────────────┐</span></span>
-<span class="line"><span style="color: #f6f6f4">│           Devices           │</span></span>
-<span class="line"><span style="color: #f6f6f4">└──────────────┬──────────────┘</span></span>
-<span class="line"><span style="color: #f6f6f4">               │ connect using X.509</span></span>
-<span class="line"><span style="color: #f6f6f4">               ▼</span></span>
-<span class="line"><span style="color: #f6f6f4">┌─────────────────────────────┐</span></span>
-<span class="line"><span style="color: #f6f6f4">│           IoT Hub           │</span></span>
-<span class="line"><span style="color: #f6f6f4">└─────────────────────────────┘</span></span>
-<span class="line"><span style="color: #f6f6f4"></span></span>
-<span class="line"><span style="color: #f6f6f4">Notes:</span></span>
-<span class="line"><span style="color: #f6f6f4">- Certs are created ahead of time and installed on devices.</span></span>
-<span class="line"><span style="color: #f6f6f4">- Rotation is manual: generate, distribute, and update per device.</span></span></code></pre></div>
-<!-- /wp:kevinbatdorf/code-block-pro -->
+- Rotation is manual: generate, distribute, and update per device.
+</code></pre>
+<!-- /wp:code -->
 
 <!-- wp:heading {"level":4} -->
-<h4 class="wp-block-heading" id="-new-csr-based-workflow">🆕 New CSR-Based Workflow</h4>
+<h4 class="wp-block-heading">🆕 New CSR-Based Workflow</h4>
 <!-- /wp:heading -->
 
-<!-- wp:kevinbatdorf/code-block-pro {"code":"┌─────────────────────────────┐          ┌─────────────────────────────┐\n│     Azure Device Registry   │          │            DPS              │\n│ (Credential Policy: x509CA) │◄─────────┤   Enrollment Group exists   │\n└──────────────┬──────────────┘  query   └──────────────┬──────────────┘\n               │                                        ▲ validate\n               │                                        │\n               │                    CSR + attestation   │\n┌──────────────▼──────────────┐    (symmetric/X.509)    │\n│           Device            │ ────────────────────────┘\n│ 1) Generate keypair + CSR   │\n└──────────────┬──────────────┘\n               │ submit CSR\n               ▼                 use\n┌─────────────────────────────┐ policy   ┌─────────────────────────────┐\n│            ADR              │─────────►│  Microsoft-managed CA       │\n│ 2) Sign CSR per policy      │          │  3) Issue certificate chain │\n└──────────────┬──────────────┘          └──────────────┬──────────────┘\n               │ return cert chain                      │\n               └────────────────────────────────────────┘\n               │            to DPS → to Device\n               │\n┌──────────────▼──────────────┐\n│           Device            │\n│ 4) Install cert chain       │\n│ 5) Connect to IoT Hub       │\n└──────────────┬──────────────┘\n               │\n               ▼\n┌─────────────────────────────┐\n│           IoT Hub           │\n└─────────────────────────────┘\n\nNotes:\n- Private key never leaves the device.\n- Certificates auto-renew based on ADR policy.","codeHTML":"\u003cpre class=\u0022shiki dracula-soft\u0022 style=\u0022background-color: #282A36\u0022 tabindex=\u00220\u0022\u003e\u003ccode\u003e\u003cspan class=\u0022line\u0022\u003e\u003cspan style=\u0022color: #f6f6f4\u0022\u003e┌─────────────────────────────┐          ┌─────────────────────────────┐\u003c/span\u003e\u003c/span\u003e\n\u003cspan class=\u0022line\u0022\u003e\u003cspan style=\u0022color: #f6f6f4\u0022\u003e│     Azure Device Registry   │          │            DPS              │\u003c/span\u003e\u003c/span\u003e\n\u003cspan class=\u0022line\u0022\u003e\u003cspan style=\u0022color: #f6f6f4\u0022\u003e│ (Credential Policy: x509CA) │◄─────────┤   Enrollment Group exists   │\u003c/span\u003e\u003c/span\u003e\n\u003cspan class=\u0022line\u0022\u003e\u003cspan style=\u0022color: #f6f6f4\u0022\u003e└──────────────┬──────────────┘  query   └──────────────┬──────────────┘\u003c/span\u003e\u003c/span\u003e\n\u003cspan class=\u0022line\u0022\u003e\u003cspan style=\u0022color: #f6f6f4\u0022\u003e               │                                        ▲ validate\u003c/span\u003e\u003c/span\u003e\n\u003cspan class=\u0022line\u0022\u003e\u003cspan style=\u0022color: #f6f6f4\u0022\u003e               │                                        │\u003c/span\u003e\u003c/span\u003e\n\u003cspan class=\u0022line\u0022\u003e\u003cspan style=\u0022color: #f6f6f4\u0022\u003e               │                    CSR + attestation   │\u003c/span\u003e\u003c/span\u003e\n\u003cspan class=\u0022line\u0022\u003e\u003cspan style=\u0022color: #f6f6f4\u0022\u003e┌──────────────▼──────────────┐    (symmetric/X.509)    │\u003c/span\u003e\u003c/span\u003e\n\u003cspan class=\u0022line\u0022\u003e\u003cspan style=\u0022color: #f6f6f4\u0022\u003e│           Device            │ ────────────────────────┘\u003c/span\u003e\u003c/span\u003e\n\u003cspan class=\u0022line\u0022\u003e\u003cspan style=\u0022color: #f6f6f4\u0022\u003e│ 1) Generate keypair + CSR   │\u003c/span\u003e\u003c/span\u003e\n\u003cspan class=\u0022line\u0022\u003e\u003cspan style=\u0022color: #f6f6f4\u0022\u003e└──────────────┬──────────────┘\u003c/span\u003e\u003c/span\u003e\n\u003cspan class=\u0022line\u0022\u003e\u003cspan style=\u0022color: #f6f6f4\u0022\u003e               │ submit CSR\u003c/span\u003e\u003c/span\u003e\n\u003cspan class=\u0022line\u0022\u003e\u003cspan style=\u0022color: #f6f6f4\u0022\u003e               ▼                 use\u003c/span\u003e\u003c/span\u003e\n\u003cspan class=\u0022line\u0022\u003e\u003cspan style=\u0022color: #f6f6f4\u0022\u003e┌─────────────────────────────┐ policy   ┌─────────────────────────────┐\u003c/span\u003e\u003c/span\u003e\n\u003cspan class=\u0022line\u0022\u003e\u003cspan style=\u0022color: #f6f6f4\u0022\u003e│            ADR              │─────────►│  Microsoft-managed CA       │\u003c/span\u003e\u003c/span\u003e\n\u003cspan class=\u0022line\u0022\u003e\u003cspan style=\u0022color: #f6f6f4\u0022\u003e│ 2) Sign CSR per policy      │          │  3) Issue certificate chain │\u003c/span\u003e\u003c/span\u003e\n\u003cspan class=\u0022line\u0022\u003e\u003cspan style=\u0022color: #f6f6f4\u0022\u003e└──────────────┬──────────────┘          └──────────────┬──────────────┘\u003c/span\u003e\u003c/span\u003e\n\u003cspan class=\u0022line\u0022\u003e\u003cspan style=\u0022color: #f6f6f4\u0022\u003e               │ return cert chain                      │\u003c/span\u003e\u003c/span\u003e\n\u003cspan class=\u0022line\u0022\u003e\u003cspan style=\u0022color: #f6f6f4\u0022\u003e               └────────────────────────────────────────┘\u003c/span\u003e\u003c/span\u003e\n\u003cspan class=\u0022line\u0022\u003e\u003cspan style=\u0022color: #f6f6f4\u0022\u003e               │            to DPS → to Device\u003c/span\u003e\u003c/span\u003e\n\u003cspan class=\u0022line\u0022\u003e\u003cspan style=\u0022color: #f6f6f4\u0022\u003e               │\u003c/span\u003e\u003c/span\u003e\n\u003cspan class=\u0022line\u0022\u003e\u003cspan style=\u0022color: #f6f6f4\u0022\u003e┌──────────────▼──────────────┐\u003c/span\u003e\u003c/span\u003e\n\u003cspan class=\u0022line\u0022\u003e\u003cspan style=\u0022color: #f6f6f4\u0022\u003e│           Device            │\u003c/span\u003e\u003c/span\u003e\n\u003cspan class=\u0022line\u0022\u003e\u003cspan style=\u0022color: #f6f6f4\u0022\u003e│ 4) Install cert chain       │\u003c/span\u003e\u003c/span\u003e\n\u003cspan class=\u0022line\u0022\u003e\u003cspan style=\u0022color: #f6f6f4\u0022\u003e│ 5) Connect to IoT Hub       │\u003c/span\u003e\u003c/span\u003e\n\u003cspan class=\u0022line\u0022\u003e\u003cspan style=\u0022color: #f6f6f4\u0022\u003e└──────────────┬──────────────┘\u003c/span\u003e\u003c/span\u003e\n\u003cspan class=\u0022line\u0022\u003e\u003cspan style=\u0022color: #f6f6f4\u0022\u003e               │\u003c/span\u003e\u003c/span\u003e\n\u003cspan class=\u0022line\u0022\u003e\u003cspan style=\u0022color: #f6f6f4\u0022\u003e               ▼\u003c/span\u003e\u003c/span\u003e\n\u003cspan class=\u0022line\u0022\u003e\u003cspan style=\u0022color: #f6f6f4\u0022\u003e┌─────────────────────────────┐\u003c/span\u003e\u003c/span\u003e\n\u003cspan class=\u0022line\u0022\u003e\u003cspan style=\u0022color: #f6f6f4\u0022\u003e│           IoT Hub           │\u003c/span\u003e\u003c/span\u003e\n\u003cspan class=\u0022line\u0022\u003e\u003cspan style=\u0022color: #f6f6f4\u0022\u003e└─────────────────────────────┘\u003c/span\u003e\u003c/span\u003e\n\u003cspan class=\u0022line\u0022\u003e\u003cspan style=\u0022color: #f6f6f4\u0022\u003e\u003c/span\u003e\u003c/span\u003e\n\u003cspan class=\u0022line\u0022\u003e\u003cspan style=\u0022color: #f6f6f4\u0022\u003eNotes:\u003c/span\u003e\u003c/span\u003e\n\u003cspan class=\u0022line\u0022\u003e\u003cspan style=\u0022color: #f6f6f4\u0022\u003e- Private key never leaves the device.\u003c/span\u003e\u003c/span\u003e\n\u003cspan class=\u0022line\u0022\u003e\u003cspan style=\u0022color: #f6f6f4\u0022\u003e- Certificates auto-renew based on ADR policy.\u003c/span\u003e\u003c/span\u003e\u003c/code\u003e\u003c/pre\u003e","language":"plaintext","theme":"dracula-soft","bgColor":"#282A36","textColor":"#f6f6f4","fontSize":".875rem","fontFamily":"Code-Pro-JetBrains-Mono","lineHeight":"1.25rem","clampFonts":false,"lineNumbers":false,"headerType":"none","disablePadding":false,"footerType":"none","enableMaxHeight":false,"seeMoreType":"","seeMoreString":"","seeMoreAfterLine":"","seeMoreTransition":false,"seeMoreCollapse":false,"seeMoreCollapseString":"","highlightingHover":false,"lineHighlightColor":"rgba(251, 251, 239, 0.2)","copyButton":true,"copyButtonType":"heroicons","copyButtonUseTextarea":true,"useTabs":false} -->
-<div class="wp-block-kevinbatdorf-code-block-pro" data-code-block-pro-font-family="Code-Pro-JetBrains-Mono" style="font-size:.875rem;font-family:Code-Pro-JetBrains-Mono,ui-monospace,SFMono-Regular,Menlo,Monaco,Consolas,monospace;line-height:1.25rem;--cbp-tab-width:2;tab-size:var(--cbp-tab-width, 2)"><span role="button" tabindex="0" style="color:#f6f6f4;display:none" aria-label="Copy" class="code-block-pro-copy-button"><pre class="code-block-pro-copy-button-pre" aria-hidden="true"><textarea class="code-block-pro-copy-button-textarea" tabindex="-1" aria-hidden="true" readonly>┌─────────────────────────────┐          ┌─────────────────────────────┐
+<!-- wp:code {"className":"language-plaintext"} -->
+<pre class="wp-block-code language-plaintext"><code>┌─────────────────────────────┐          ┌─────────────────────────────┐
 │     Azure Device Registry   │          │            DPS              │
 │ (Credential Policy: x509CA) │◄─────────┤   Enrollment Group exists   │
 └──────────────┬──────────────┘  query   └──────────────┬──────────────┘
@@ -283,42 +254,11 @@ Notes:
 
 Notes:
 - Private key never leaves the device.
-- Certificates auto-renew based on ADR policy.</textarea></pre><svg xmlns="http://www.w3.org/2000/svg" style="width:24px;height:24px" fill="none" viewBox="0 0 24 24" stroke="currentColor" stroke-width="2"><path class="with-check" stroke-linecap="round" stroke-linejoin="round" d="M9 5H7a2 2 0 00-2 2v12a2 2 0 002 2h10a2 2 0 002-2V7a2 2 0 00-2-2h-2M9 5a2 2 0 002 2h2a2 2 0 002-2M9 5a2 2 0 012-2h2a2 2 0 012 2m-6 9l2 2 4-4"></path><path class="without-check" stroke-linecap="round" stroke-linejoin="round" d="M9 5H7a2 2 0 00-2 2v12a2 2 0 002 2h10a2 2 0 002-2V7a2 2 0 00-2-2h-2M9 5a2 2 0 002 2h2a2 2 0 002-2M9 5a2 2 0 012-2h2a2 2 0 012 2"></path></svg></span><pre class="shiki dracula-soft" style="background-color: #282A36" tabindex="0"><code><span class="line"><span style="color: #f6f6f4">┌─────────────────────────────┐          ┌─────────────────────────────┐</span></span>
-<span class="line"><span style="color: #f6f6f4">│     Azure Device Registry   │          │            DPS              │</span></span>
-<span class="line"><span style="color: #f6f6f4">│ (Credential Policy: x509CA) │◄─────────┤   Enrollment Group exists   │</span></span>
-<span class="line"><span style="color: #f6f6f4">└──────────────┬──────────────┘  query   └──────────────┬──────────────┘</span></span>
-<span class="line"><span style="color: #f6f6f4">               │                                        ▲ validate</span></span>
-<span class="line"><span style="color: #f6f6f4">               │                                        │</span></span>
-<span class="line"><span style="color: #f6f6f4">               │                    CSR + attestation   │</span></span>
-<span class="line"><span style="color: #f6f6f4">┌──────────────▼──────────────┐    (symmetric/X.509)    │</span></span>
-<span class="line"><span style="color: #f6f6f4">│           Device            │ ────────────────────────┘</span></span>
-<span class="line"><span style="color: #f6f6f4">│ 1) Generate keypair + CSR   │</span></span>
-<span class="line"><span style="color: #f6f6f4">└──────────────┬──────────────┘</span></span>
-<span class="line"><span style="color: #f6f6f4">               │ submit CSR</span></span>
-<span class="line"><span style="color: #f6f6f4">               ▼                 use</span></span>
-<span class="line"><span style="color: #f6f6f4">┌─────────────────────────────┐ policy   ┌─────────────────────────────┐</span></span>
-<span class="line"><span style="color: #f6f6f4">│            ADR              │─────────►│  Microsoft-managed CA       │</span></span>
-<span class="line"><span style="color: #f6f6f4">│ 2) Sign CSR per policy      │          │  3) Issue certificate chain │</span></span>
-<span class="line"><span style="color: #f6f6f4">└──────────────┬──────────────┘          └──────────────┬──────────────┘</span></span>
-<span class="line"><span style="color: #f6f6f4">               │ return cert chain                      │</span></span>
-<span class="line"><span style="color: #f6f6f4">               └────────────────────────────────────────┘</span></span>
-<span class="line"><span style="color: #f6f6f4">               │            to DPS → to Device</span></span>
-<span class="line"><span style="color: #f6f6f4">               │</span></span>
-<span class="line"><span style="color: #f6f6f4">┌──────────────▼──────────────┐</span></span>
-<span class="line"><span style="color: #f6f6f4">│           Device            │</span></span>
-<span class="line"><span style="color: #f6f6f4">│ 4) Install cert chain       │</span></span>
-<span class="line"><span style="color: #f6f6f4">│ 5) Connect to IoT Hub       │</span></span>
-<span class="line"><span style="color: #f6f6f4">└──────────────┬──────────────┘</span></span>
-<span class="line"><span style="color: #f6f6f4">               │</span></span>
-<span class="line"><span style="color: #f6f6f4">               ▼</span></span>
-<span class="line"><span style="color: #f6f6f4">┌─────────────────────────────┐</span></span>
-<span class="line"><span style="color: #f6f6f4">│           IoT Hub           │</span></span>
-<span class="line"><span style="color: #f6f6f4">└─────────────────────────────┘</span></span>
-<span class="line"><span style="color: #f6f6f4"></span></span>
-<span class="line"><span style="color: #f6f6f4">Notes:</span></span>
-<span class="line"><span style="color: #f6f6f4">- Private key never leaves the device.</span></span>
-<span class="line"><span style="color: #f6f6f4">- Certificates auto-renew based on ADR policy.</span></span></code></pre></div>
-<!-- /wp:kevinbatdorf/code-block-pro -->
+- The certificate policy controls certificate validity.
+- Current IoT Hub workflows support operational-certificate renewal without
+  reprovisioning; follow the current service documentation for the device flow.
+</code></pre>
+<!-- /wp:code -->
 
 <!-- wp:paragraph -->
 <p><strong>Key advantages:</strong></p>
@@ -328,64 +268,64 @@ Notes:
 <ul class="wp-block-list"><!-- wp:list-item -->
 <li>No need to manage your own CA infrastructure</li>
 <!-- /wp:list-item -->
-
 <!-- wp:list-item -->
 <li>Private keys never leave the device</li>
 <!-- /wp:list-item -->
-
 <!-- wp:list-item -->
 <li>Certificates issued just-in-time</li>
 <!-- /wp:list-item -->
-
 <!-- wp:list-item -->
 <li>Automated lifecycle management</li>
 <!-- /wp:list-item -->
-
 <!-- wp:list-item -->
 <li>Reduced operational complexity</li>
-<!-- /wp:list-item --></ul>
+<!-- /wp:list-item -->
+</ul>
 <!-- /wp:list -->
 
 <!-- wp:heading {"level":3} -->
-<h3 class="wp-block-heading" id="azure-device-registry-adr-integration">Azure Device Registry (ADR) Integration</h3>
+<h3 class="wp-block-heading">Azure Device Registry (ADR) Integration</h3>
 <!-- /wp:heading -->
 
 <!-- wp:paragraph -->
-<p>Azure Device Registry (ADR) is Microsoft's&nbsp;<strong>centralized device management layer</strong>&nbsp;— it provides a unified registry for managing device identities, metadata, attributes, and policies independent of any single IoT platform.</p>
+<p>Azure Device Registry (ADR) is Microsoft's <strong>centralized device registry and
+management plane</strong>. It represents IoT Hub devices as Azure Resource Manager
+resources, enabling governance through RBAC, tags, resource groups, and
+cross-hub queries with Azure Resource Graph.</p>
 <!-- /wp:paragraph -->
 
 <!-- wp:paragraph -->
-<p><strong>ADR now integrates directly with Azure IoT Hub</strong>, allowing IoT Hub devices to be managed through ADR and DPS.</p>
+<p>ADR is generally available for Azure IoT Operations. Its integration with
+Azure IoT Hub is a separate <strong>public preview</strong>. Each IoT Hub links to one ADR
+namespace, while multiple hubs can share a namespace. An existing IoT Hub
+can't be upgraded to add ADR integration; create a new hub for the preview.</p>
 <!-- /wp:paragraph -->
 
 <!-- wp:heading {"level":4} -->
-<h4 class="wp-block-heading" id="what-is-adr">What is ADR?</h4>
+<h4 class="wp-block-heading">What is ADR?</h4>
 <!-- /wp:heading -->
 
 <!-- wp:paragraph -->
-<p>ADR is a&nbsp;<strong>device identity and management layer</strong>&nbsp;that:</p>
+<p>ADR is a <strong>device identity and management layer</strong> that:</p>
 <!-- /wp:paragraph -->
 
 <!-- wp:list -->
 <ul class="wp-block-list"><!-- wp:list-item -->
 <li>Stores device metadata, attributes, and tags</li>
 <!-- /wp:list-item -->
-
 <!-- wp:list-item -->
 <li>Manages credential policies for certificate issuance</li>
 <!-- /wp:list-item -->
-
 <!-- wp:list-item -->
 <li>Decouples device identity from IoT Hub</li>
 <!-- /wp:list-item -->
-
 <!-- wp:list-item -->
 <li>Enables multi-hub scenarios</li>
 <!-- /wp:list-item -->
-
 <!-- wp:list-item -->
 <li>Provides query and update APIs</li>
-<!-- /wp:list-item --></ul>
+<!-- /wp:list-item -->
+</ul>
 <!-- /wp:list -->
 
 <!-- wp:heading {"level":3} -->
@@ -393,7 +333,7 @@ Notes:
 <!-- /wp:heading -->
 
 <!-- wp:paragraph -->
-<p>An ADR namespace establishes a management and security boundary for devices represented in ADR. </p>
+<p>An ADR namespace establishes a management and security boundary for devices represented in ADR.</p>
 <!-- /wp:paragraph -->
 
 <!-- wp:paragraph -->
@@ -401,7 +341,7 @@ Notes:
 <!-- /wp:paragraph -->
 
 <!-- wp:heading {"level":4} -->
-<h4 class="wp-block-heading" id="why-adr-matters">Why ADR Matters</h4>
+<h4 class="wp-block-heading">Why ADR Matters</h4>
 <!-- /wp:heading -->
 
 <!-- wp:paragraph -->
@@ -412,18 +352,16 @@ Notes:
 <ul class="wp-block-list"><!-- wp:list-item -->
 <li>Device identity is tightly coupled to a specific IoT Hub</li>
 <!-- /wp:list-item -->
-
 <!-- wp:list-item -->
 <li>Moving devices between hubs is complex</li>
 <!-- /wp:list-item -->
-
 <!-- wp:list-item -->
 <li>Credential management is manual</li>
 <!-- /wp:list-item -->
-
 <!-- wp:list-item -->
 <li>Metadata is limited</li>
-<!-- /wp:list-item --></ul>
+<!-- /wp:list-item -->
+</ul>
 <!-- /wp:list -->
 
 <!-- wp:paragraph -->
@@ -432,138 +370,145 @@ Notes:
 
 <!-- wp:list -->
 <ul class="wp-block-list"><!-- wp:list-item -->
-<li>✅ Device identity is hub-independent</li>
+<li>✅ Devices are represented and governed as Azure resources</li>
 <!-- /wp:list-item -->
-
 <!-- wp:list-item -->
-<li>✅ Credential policies automate certificate management</li>
+<li>✅ Namespaces provide a shared registry and security boundary</li>
 <!-- /wp:list-item -->
-
 <!-- wp:list-item -->
-<li>✅ Rich metadata and tagging support</li>
+<li>✅ Credential policies support certificate issuance</li>
 <!-- /wp:list-item -->
-
 <!-- wp:list-item -->
-<li>✅ Query devices across multiple hubs</li>
+<li>✅ Query and manage devices across hubs sharing a namespace</li>
 <!-- /wp:list-item -->
-
-<!-- wp:list-item -->
-<li>✅ Update device properties programmatically</li>
-<!-- /wp:list-item --></ul>
+</ul>
 <!-- /wp:list -->
 
 <!-- wp:heading {"level":3} -->
-<h3 class="wp-block-heading" id="attestation-methods">Attestation Methods</h3>
+<h3 class="wp-block-heading">Certificate Management: Onboarding and Operational Credentials</h3>
 <!-- /wp:heading -->
 
 <!-- wp:paragraph -->
-<p>Attestation is how devices prove their identity to DPS. Think of it like showing ID before boarding a flight. DPS supports three different "ID types":</p>
+<p>Certificate management handles <strong>operational X.509 certificates</strong> used by a
+device to authenticate to IoT Hub after provisioning. It does not issue or
+manage the device's onboarding credential. A device first authenticates to DPS
+with an onboarding method such as a symmetric key, TPM, or an existing X.509
+certificate, then submits a CSR as part of the provisioning transaction.
+DPS validates the onboarding credential and selects the policy associated
+with the enrollment; the namespace's ADR issuing CA signs the operational
+certificate. The device private key remains on the device.</p>
+<!-- /wp:paragraph -->
+
+<!-- wp:paragraph -->
+<p>Certificate management is optional, but <strong>DPS is required for all IoT Hub
+preview scenarios</strong>, even when certificate management isn't enabled.
+Operational certificates can be renewed and revoked, and ADR manages CA
+rotation. IoT Hub integration remains in public preview and isn't recommended
+for production workloads.</p>
+<!-- /wp:paragraph -->
+
+<!-- wp:heading {"level":3} -->
+<h3 class="wp-block-heading">Attestation Methods</h3>
+<!-- /wp:heading -->
+
+<!-- wp:paragraph -->
+<p>Attestation is how devices prove their identity to DPS. Think of it like showing ID before boarding a flight. DPS supports three different &quot;ID types&quot;:</p>
 <!-- /wp:paragraph -->
 
 <!-- wp:heading {"level":4} -->
-<h4 class="wp-block-heading" id="1-symmetric-key">1. Symmetric Key</h4>
+<h4 class="wp-block-heading">1. Symmetric Key</h4>
 <!-- /wp:heading -->
 
 <!-- wp:list -->
 <ul class="wp-block-list"><!-- wp:list-item -->
 <li><strong>Simplest method</strong></li>
 <!-- /wp:list-item -->
-
 <!-- wp:list-item -->
 <li>Uses shared secret (enrollment group key)</li>
 <!-- /wp:list-item -->
-
 <!-- wp:list-item -->
-<li>Device derives individual key:&nbsp;<code>HMACSHA256(groupKey, registrationId)</code></li>
+<li>Device derives individual key: <code>HMACSHA256(groupKey, registrationId)</code></li>
 <!-- /wp:list-item -->
-
 <!-- wp:list-item -->
 <li>Good for development and testing</li>
 <!-- /wp:list-item -->
-
 <!-- wp:list-item -->
 <li>Less secure than certificate-based methods</li>
 <!-- /wp:list-item -->
-
 <!-- wp:list-item -->
-<li>🆕&nbsp;<strong>Can be combined with CSR</strong>&nbsp;- authenticate with symmetric key, receive X.509 certificate</li>
-<!-- /wp:list-item --></ul>
+<li>🆕 <strong>Can be combined with CSR</strong> - authenticate with symmetric key, receive X.509 certificate</li>
+<!-- /wp:list-item -->
+</ul>
 <!-- /wp:list -->
 
 <!-- wp:heading {"level":4} -->
-<h4 class="wp-block-heading" id="2-tpm-trusted-platform-module">2. TPM (Trusted Platform Module)</h4>
+<h4 class="wp-block-heading">2. TPM (Trusted Platform Module)</h4>
 <!-- /wp:heading -->
 
 <!-- wp:list -->
 <ul class="wp-block-list"><!-- wp:list-item -->
 <li>Uses hardware security module</li>
 <!-- /wp:list-item -->
-
 <!-- wp:list-item -->
 <li>Very secure</li>
 <!-- /wp:list-item -->
-
 <!-- wp:list-item -->
 <li>Requires TPM chip on device</li>
 <!-- /wp:list-item -->
-
 <!-- wp:list-item -->
 <li>Unique per device</li>
 <!-- /wp:list-item -->
-
 <!-- wp:list-item -->
 <li>Not covered in this series</li>
-<!-- /wp:list-item --></ul>
+<!-- /wp:list-item -->
+</ul>
 <!-- /wp:list -->
 
 <!-- wp:heading {"level":4} -->
-<h4 class="wp-block-heading" id="3-x509-certificate">3. X.509 Certificate</h4>
+<h4 class="wp-block-heading">3. X.509 Certificate</h4>
 <!-- /wp:heading -->
 
 <!-- wp:list -->
 <ul class="wp-block-list"><!-- wp:list-item -->
 <li><strong>Industry standard for security</strong></li>
 <!-- /wp:list-item -->
-
 <!-- wp:list-item -->
 <li>Uses public key infrastructure (PKI)</li>
 <!-- /wp:list-item -->
-
 <!-- wp:list-item -->
 <li>Supports certificate rotation</li>
 <!-- /wp:list-item -->
-
 <!-- wp:list-item -->
 <li>Scalable with enrollment groups</li>
 <!-- /wp:list-item -->
-
 <!-- wp:list-item -->
 <li><strong>Two approaches:</strong><!-- wp:list -->
 <ul class="wp-block-list"><!-- wp:list-item -->
-<li><strong>Traditional:</strong>&nbsp;Pre-provisioned certificates</li>
+<li><strong>Traditional:</strong> Pre-provisioned certificates</li>
 <!-- /wp:list-item -->
-
 <!-- wp:list-item -->
-<li><strong>🆕 CSR-based:</strong>&nbsp;Certificates issued during provisioning</li>
-<!-- /wp:list-item --></ul>
-<!-- /wp:list --></li>
+<li><strong>🆕 CSR-based:</strong> Certificates issued during provisioning</li>
 <!-- /wp:list-item -->
-
+</ul>
+<!-- /wp:list -->
+</li>
+<!-- /wp:list-item -->
 <!-- wp:list-item -->
 <li><strong>This is what we'll focus on</strong></li>
-<!-- /wp:list-item --></ul>
+<!-- /wp:list-item -->
+</ul>
 <!-- /wp:list -->
 
 <!-- wp:heading {"level":3} -->
-<h3 class="wp-block-heading" id="high-level-provisioning-flow-with-adr">High-Level Provisioning Flow with ADR</h3>
+<h3 class="wp-block-heading">High-Level Provisioning Flow with ADR</h3>
 <!-- /wp:heading -->
 
 <!-- wp:paragraph -->
 <p>Here's how the complete flow works with the new features:</p>
 <!-- /wp:paragraph -->
 
-<!-- wp:kevinbatdorf/code-block-pro {"code":"┌──────────┐\n│  Device  │  1. Generate CSR + private key\n└────┬─────┘\n     │\n     │ 2. Connect to DPS with attestation\n     │    (symmetric key OR X.509 bootstrap cert)\n     │\n     ▼\n┌─────────────────┐\n│       DPS       │  3. Validate attestation\n│                 │  4. Check enrollment group\n└────┬────────────┘  5. Query ADR for credential policy\n     │\n     │ 6. Submit CSR to ADR for signing\n     │\n     ▼\n┌─────────────────┐\n│       ADR       │  7. Sign CSR using credential policy\n│                 │  8. Return certificate chain\n└────┬────────────┘\n     │\n     │ 9. Return to DPS\n     │\n     ▼\n┌─────────────────┐\n│       DPS       │  10. Determine target IoT Hub\n│                 │  11. Return assignment + certificate\n└────┬────────────┘\n     │\n     │ 12. Return to device\n     │\n     ▼\n┌──────────┐\n│  Device  │  13. Install certificate\n└────┬─────┘  14. Connect to assigned IoT Hub with X.509\n     │\n     ▼\n┌─────────────┐\n│  IoT Hub    │  15. Device registered and authenticated\n└─────────────┘  16. Device can send telemetry\n","codeHTML":"\u003cpre class=\u0022shiki dracula-soft\u0022 style=\u0022background-color: #282A36\u0022 tabindex=\u00220\u0022\u003e\u003ccode\u003e\u003cspan class=\u0022line\u0022\u003e\u003cspan style=\u0022color: #f6f6f4\u0022\u003e┌──────────┐\u003c/span\u003e\u003c/span\u003e\n\u003cspan class=\u0022line\u0022\u003e\u003cspan style=\u0022color: #f6f6f4\u0022\u003e│  Device  │  1. Generate CSR + private key\u003c/span\u003e\u003c/span\u003e\n\u003cspan class=\u0022line\u0022\u003e\u003cspan style=\u0022color: #f6f6f4\u0022\u003e└────┬─────┘\u003c/span\u003e\u003c/span\u003e\n\u003cspan class=\u0022line\u0022\u003e\u003cspan style=\u0022color: #f6f6f4\u0022\u003e     │\u003c/span\u003e\u003c/span\u003e\n\u003cspan class=\u0022line\u0022\u003e\u003cspan style=\u0022color: #f6f6f4\u0022\u003e     │ 2. Connect to DPS with attestation\u003c/span\u003e\u003c/span\u003e\n\u003cspan class=\u0022line\u0022\u003e\u003cspan style=\u0022color: #f6f6f4\u0022\u003e     │    (symmetric key OR X.509 bootstrap cert)\u003c/span\u003e\u003c/span\u003e\n\u003cspan class=\u0022line\u0022\u003e\u003cspan style=\u0022color: #f6f6f4\u0022\u003e     │\u003c/span\u003e\u003c/span\u003e\n\u003cspan class=\u0022line\u0022\u003e\u003cspan style=\u0022color: #f6f6f4\u0022\u003e     ▼\u003c/span\u003e\u003c/span\u003e\n\u003cspan class=\u0022line\u0022\u003e\u003cspan style=\u0022color: #f6f6f4\u0022\u003e┌─────────────────┐\u003c/span\u003e\u003c/span\u003e\n\u003cspan class=\u0022line\u0022\u003e\u003cspan style=\u0022color: #f6f6f4\u0022\u003e│       DPS       │  3. Validate attestation\u003c/span\u003e\u003c/span\u003e\n\u003cspan class=\u0022line\u0022\u003e\u003cspan style=\u0022color: #f6f6f4\u0022\u003e│                 │  4. Check enrollment group\u003c/span\u003e\u003c/span\u003e\n\u003cspan class=\u0022line\u0022\u003e\u003cspan style=\u0022color: #f6f6f4\u0022\u003e└────┬────────────┘  5. Query ADR for credential policy\u003c/span\u003e\u003c/span\u003e\n\u003cspan class=\u0022line\u0022\u003e\u003cspan style=\u0022color: #f6f6f4\u0022\u003e     │\u003c/span\u003e\u003c/span\u003e\n\u003cspan class=\u0022line\u0022\u003e\u003cspan style=\u0022color: #f6f6f4\u0022\u003e     │ 6. Submit CSR to ADR for signing\u003c/span\u003e\u003c/span\u003e\n\u003cspan class=\u0022line\u0022\u003e\u003cspan style=\u0022color: #f6f6f4\u0022\u003e     │\u003c/span\u003e\u003c/span\u003e\n\u003cspan class=\u0022line\u0022\u003e\u003cspan style=\u0022color: #f6f6f4\u0022\u003e     ▼\u003c/span\u003e\u003c/span\u003e\n\u003cspan class=\u0022line\u0022\u003e\u003cspan style=\u0022color: #f6f6f4\u0022\u003e┌─────────────────┐\u003c/span\u003e\u003c/span\u003e\n\u003cspan class=\u0022line\u0022\u003e\u003cspan style=\u0022color: #f6f6f4\u0022\u003e│       ADR       │  7. Sign CSR using credential policy\u003c/span\u003e\u003c/span\u003e\n\u003cspan class=\u0022line\u0022\u003e\u003cspan style=\u0022color: #f6f6f4\u0022\u003e│                 │  8. Return certificate chain\u003c/span\u003e\u003c/span\u003e\n\u003cspan class=\u0022line\u0022\u003e\u003cspan style=\u0022color: #f6f6f4\u0022\u003e└────┬────────────┘\u003c/span\u003e\u003c/span\u003e\n\u003cspan class=\u0022line\u0022\u003e\u003cspan style=\u0022color: #f6f6f4\u0022\u003e     │\u003c/span\u003e\u003c/span\u003e\n\u003cspan class=\u0022line\u0022\u003e\u003cspan style=\u0022color: #f6f6f4\u0022\u003e     │ 9. Return to DPS\u003c/span\u003e\u003c/span\u003e\n\u003cspan class=\u0022line\u0022\u003e\u003cspan style=\u0022color: #f6f6f4\u0022\u003e     │\u003c/span\u003e\u003c/span\u003e\n\u003cspan class=\u0022line\u0022\u003e\u003cspan style=\u0022color: #f6f6f4\u0022\u003e     ▼\u003c/span\u003e\u003c/span\u003e\n\u003cspan class=\u0022line\u0022\u003e\u003cspan style=\u0022color: #f6f6f4\u0022\u003e┌─────────────────┐\u003c/span\u003e\u003c/span\u003e\n\u003cspan class=\u0022line\u0022\u003e\u003cspan style=\u0022color: #f6f6f4\u0022\u003e│       DPS       │  10. Determine target IoT Hub\u003c/span\u003e\u003c/span\u003e\n\u003cspan class=\u0022line\u0022\u003e\u003cspan style=\u0022color: #f6f6f4\u0022\u003e│                 │  11. Return assignment + certificate\u003c/span\u003e\u003c/span\u003e\n\u003cspan class=\u0022line\u0022\u003e\u003cspan style=\u0022color: #f6f6f4\u0022\u003e└────┬────────────┘\u003c/span\u003e\u003c/span\u003e\n\u003cspan class=\u0022line\u0022\u003e\u003cspan style=\u0022color: #f6f6f4\u0022\u003e     │\u003c/span\u003e\u003c/span\u003e\n\u003cspan class=\u0022line\u0022\u003e\u003cspan style=\u0022color: #f6f6f4\u0022\u003e     │ 12. Return to device\u003c/span\u003e\u003c/span\u003e\n\u003cspan class=\u0022line\u0022\u003e\u003cspan style=\u0022color: #f6f6f4\u0022\u003e     │\u003c/span\u003e\u003c/span\u003e\n\u003cspan class=\u0022line\u0022\u003e\u003cspan style=\u0022color: #f6f6f4\u0022\u003e     ▼\u003c/span\u003e\u003c/span\u003e\n\u003cspan class=\u0022line\u0022\u003e\u003cspan style=\u0022color: #f6f6f4\u0022\u003e┌──────────┐\u003c/span\u003e\u003c/span\u003e\n\u003cspan class=\u0022line\u0022\u003e\u003cspan style=\u0022color: #f6f6f4\u0022\u003e│  Device  │  13. Install certificate\u003c/span\u003e\u003c/span\u003e\n\u003cspan class=\u0022line\u0022\u003e\u003cspan style=\u0022color: #f6f6f4\u0022\u003e└────┬─────┘  14. Connect to assigned IoT Hub with X.509\u003c/span\u003e\u003c/span\u003e\n\u003cspan class=\u0022line\u0022\u003e\u003cspan style=\u0022color: #f6f6f4\u0022\u003e     │\u003c/span\u003e\u003c/span\u003e\n\u003cspan class=\u0022line\u0022\u003e\u003cspan style=\u0022color: #f6f6f4\u0022\u003e     ▼\u003c/span\u003e\u003c/span\u003e\n\u003cspan class=\u0022line\u0022\u003e\u003cspan style=\u0022color: #f6f6f4\u0022\u003e┌─────────────┐\u003c/span\u003e\u003c/span\u003e\n\u003cspan class=\u0022line\u0022\u003e\u003cspan style=\u0022color: #f6f6f4\u0022\u003e│  IoT Hub    │  15. Device registered and authenticated\u003c/span\u003e\u003c/span\u003e\n\u003cspan class=\u0022line\u0022\u003e\u003cspan style=\u0022color: #f6f6f4\u0022\u003e└─────────────┘  16. Device can send telemetry\u003c/span\u003e\u003c/span\u003e\n\u003cspan class=\u0022line\u0022\u003e\u003cspan style=\u0022color: #f6f6f4\u0022\u003e\u003c/span\u003e\u003c/span\u003e\u003c/code\u003e\u003c/pre\u003e","language":"plaintext","theme":"dracula-soft","bgColor":"#282A36","textColor":"#f6f6f4","fontSize":".875rem","fontFamily":"Code-Pro-JetBrains-Mono","lineHeight":"1.25rem","clampFonts":false,"lineNumbers":false,"headerType":"none","disablePadding":false,"footerType":"none","enableMaxHeight":false,"seeMoreType":"","seeMoreString":"","seeMoreAfterLine":"","seeMoreTransition":false,"seeMoreCollapse":false,"seeMoreCollapseString":"","highlightingHover":false,"lineHighlightColor":"rgba(251, 251, 239, 0.2)","copyButton":true,"copyButtonType":"heroicons","copyButtonUseTextarea":true,"useTabs":false} -->
-<div class="wp-block-kevinbatdorf-code-block-pro" data-code-block-pro-font-family="Code-Pro-JetBrains-Mono" style="font-size:.875rem;font-family:Code-Pro-JetBrains-Mono,ui-monospace,SFMono-Regular,Menlo,Monaco,Consolas,monospace;line-height:1.25rem;--cbp-tab-width:2;tab-size:var(--cbp-tab-width, 2)"><span role="button" tabindex="0" style="color:#f6f6f4;display:none" aria-label="Copy" class="code-block-pro-copy-button"><pre class="code-block-pro-copy-button-pre" aria-hidden="true"><textarea class="code-block-pro-copy-button-textarea" tabindex="-1" aria-hidden="true" readonly>┌──────────┐
+<!-- wp:code {"className":"language-plaintext"} -->
+<pre class="wp-block-code language-plaintext"><code>┌──────────┐
 │  Device  │  1. Generate CSR + private key
 └────┬─────┘
      │
@@ -603,51 +548,12 @@ Notes:
 ┌─────────────┐
 │  IoT Hub    │  15. Device registered and authenticated
 └─────────────┘  16. Device can send telemetry
-</textarea></pre><svg xmlns="http://www.w3.org/2000/svg" style="width:24px;height:24px" fill="none" viewBox="0 0 24 24" stroke="currentColor" stroke-width="2"><path class="with-check" stroke-linecap="round" stroke-linejoin="round" d="M9 5H7a2 2 0 00-2 2v12a2 2 0 002 2h10a2 2 0 002-2V7a2 2 0 00-2-2h-2M9 5a2 2 0 002 2h2a2 2 0 002-2M9 5a2 2 0 012-2h2a2 2 0 012 2m-6 9l2 2 4-4"></path><path class="without-check" stroke-linecap="round" stroke-linejoin="round" d="M9 5H7a2 2 0 00-2 2v12a2 2 0 002 2h10a2 2 0 002-2V7a2 2 0 00-2-2h-2M9 5a2 2 0 002 2h2a2 2 0 002-2M9 5a2 2 0 012-2h2a2 2 0 012 2"></path></svg></span><pre class="shiki dracula-soft" style="background-color: #282A36" tabindex="0"><code><span class="line"><span style="color: #f6f6f4">┌──────────┐</span></span>
-<span class="line"><span style="color: #f6f6f4">│  Device  │  1. Generate CSR + private key</span></span>
-<span class="line"><span style="color: #f6f6f4">└────┬─────┘</span></span>
-<span class="line"><span style="color: #f6f6f4">     │</span></span>
-<span class="line"><span style="color: #f6f6f4">     │ 2. Connect to DPS with attestation</span></span>
-<span class="line"><span style="color: #f6f6f4">     │    (symmetric key OR X.509 bootstrap cert)</span></span>
-<span class="line"><span style="color: #f6f6f4">     │</span></span>
-<span class="line"><span style="color: #f6f6f4">     ▼</span></span>
-<span class="line"><span style="color: #f6f6f4">┌─────────────────┐</span></span>
-<span class="line"><span style="color: #f6f6f4">│       DPS       │  3. Validate attestation</span></span>
-<span class="line"><span style="color: #f6f6f4">│                 │  4. Check enrollment group</span></span>
-<span class="line"><span style="color: #f6f6f4">└────┬────────────┘  5. Query ADR for credential policy</span></span>
-<span class="line"><span style="color: #f6f6f4">     │</span></span>
-<span class="line"><span style="color: #f6f6f4">     │ 6. Submit CSR to ADR for signing</span></span>
-<span class="line"><span style="color: #f6f6f4">     │</span></span>
-<span class="line"><span style="color: #f6f6f4">     ▼</span></span>
-<span class="line"><span style="color: #f6f6f4">┌─────────────────┐</span></span>
-<span class="line"><span style="color: #f6f6f4">│       ADR       │  7. Sign CSR using credential policy</span></span>
-<span class="line"><span style="color: #f6f6f4">│                 │  8. Return certificate chain</span></span>
-<span class="line"><span style="color: #f6f6f4">└────┬────────────┘</span></span>
-<span class="line"><span style="color: #f6f6f4">     │</span></span>
-<span class="line"><span style="color: #f6f6f4">     │ 9. Return to DPS</span></span>
-<span class="line"><span style="color: #f6f6f4">     │</span></span>
-<span class="line"><span style="color: #f6f6f4">     ▼</span></span>
-<span class="line"><span style="color: #f6f6f4">┌─────────────────┐</span></span>
-<span class="line"><span style="color: #f6f6f4">│       DPS       │  10. Determine target IoT Hub</span></span>
-<span class="line"><span style="color: #f6f6f4">│                 │  11. Return assignment + certificate</span></span>
-<span class="line"><span style="color: #f6f6f4">└────┬────────────┘</span></span>
-<span class="line"><span style="color: #f6f6f4">     │</span></span>
-<span class="line"><span style="color: #f6f6f4">     │ 12. Return to device</span></span>
-<span class="line"><span style="color: #f6f6f4">     │</span></span>
-<span class="line"><span style="color: #f6f6f4">     ▼</span></span>
-<span class="line"><span style="color: #f6f6f4">┌──────────┐</span></span>
-<span class="line"><span style="color: #f6f6f4">│  Device  │  13. Install certificate</span></span>
-<span class="line"><span style="color: #f6f6f4">└────┬─────┘  14. Connect to assigned IoT Hub with X.509</span></span>
-<span class="line"><span style="color: #f6f6f4">     │</span></span>
-<span class="line"><span style="color: #f6f6f4">     ▼</span></span>
-<span class="line"><span style="color: #f6f6f4">┌─────────────┐</span></span>
-<span class="line"><span style="color: #f6f6f4">│  IoT Hub    │  15. Device registered and authenticated</span></span>
-<span class="line"><span style="color: #f6f6f4">└─────────────┘  16. Device can send telemetry</span></span>
-<span class="line"><span style="color: #f6f6f4"></span></span></code></pre></div>
-<!-- /wp:kevinbatdorf/code-block-pro -->
+
+</code></pre>
+<!-- /wp:code -->
 
 <!-- wp:heading {"level":3} -->
-<h3 class="wp-block-heading" id="dual-attestation-symmetric-key--x509">Dual Attestation: Symmetric Key + X.509</h3>
+<h3 class="wp-block-heading">Dual Attestation: Symmetric Key + X.509</h3>
 <!-- /wp:heading -->
 
 <!-- wp:paragraph -->
@@ -656,12 +562,12 @@ Notes:
 
 <!-- wp:list {"ordered":true} -->
 <ol class="wp-block-list"><!-- wp:list-item -->
-<li><strong>Phase 1 - Provisioning:</strong>&nbsp;Device authenticates to DPS using&nbsp;<strong>symmetric key</strong>&nbsp;(simple, pre-shared)</li>
+<li><strong>Phase 1 - Provisioning:</strong> Device authenticates to DPS using <strong>symmetric key</strong> (simple, pre-shared)</li>
 <!-- /wp:list-item -->
-
 <!-- wp:list-item -->
-<li><strong>Phase 2 - Operation:</strong>&nbsp;Device connects to IoT Hub using&nbsp;<strong>X.509 certificate</strong>&nbsp;(secure, Microsoft-issued)</li>
-<!-- /wp:list-item --></ol>
+<li><strong>Phase 2 - Operation:</strong> Device connects to IoT Hub using <strong>X.509 certificate</strong> (secure, Microsoft-issued)</li>
+<!-- /wp:list-item -->
+</ol>
 <!-- /wp:list -->
 
 <!-- wp:paragraph -->
@@ -672,114 +578,107 @@ Notes:
 <ul class="wp-block-list"><!-- wp:list-item -->
 <li>Easy initial provisioning (no pre-generated certificates)</li>
 <!-- /wp:list-item -->
-
 <!-- wp:list-item -->
 <li>Secure operational communication (X.509)</li>
 <!-- /wp:list-item -->
-
 <!-- wp:list-item -->
 <li>No need to distribute device certificates ahead of time</li>
 <!-- /wp:list-item -->
-
 <!-- wp:list-item -->
 <li>Best of both worlds</li>
-<!-- /wp:list-item --></ul>
+<!-- /wp:list-item -->
+</ul>
 <!-- /wp:list -->
 
 <!-- wp:heading {"level":3} -->
-<h3 class="wp-block-heading" id="when-to-use-dps">When to Use DPS</h3>
+<h3 class="wp-block-heading">When to Use DPS</h3>
 <!-- /wp:heading -->
 
 <!-- wp:paragraph -->
-<p>✅&nbsp;<strong>Use DPS when:</strong></p>
+<p>✅ <strong>Use DPS when:</strong></p>
 <!-- /wp:paragraph -->
 
 <!-- wp:list -->
 <ul class="wp-block-list"><!-- wp:list-item -->
 <li>Deploying many devices (10+)</li>
 <!-- /wp:list-item -->
-
 <!-- wp:list-item -->
 <li>Devices need to be reassigned between hubs</li>
 <!-- /wp:list-item -->
-
 <!-- wp:list-item -->
 <li>You want zero-touch provisioning</li>
 <!-- /wp:list-item -->
-
 <!-- wp:list-item -->
 <li>Security is important (no hardcoded secrets)</li>
 <!-- /wp:list-item -->
-
 <!-- wp:list-item -->
 <li>You need multi-tenancy support</li>
 <!-- /wp:list-item -->
-
 <!-- wp:list-item -->
 <li>You want automated certificate management</li>
 <!-- /wp:list-item -->
-
 <!-- wp:list-item -->
 <li>🆕 You want Microsoft-managed certificate issuance</li>
-<!-- /wp:list-item --></ul>
+<!-- /wp:list-item -->
+</ul>
 <!-- /wp:list -->
 
 <!-- wp:paragraph -->
-<p>🤔&nbsp;<strong>Consider if DPS is right for you if:</strong></p>
+<p>🤔 <strong>Consider if DPS is right for you if:</strong></p>
 <!-- /wp:paragraph -->
 
 <!-- wp:list -->
 <ul class="wp-block-list"><!-- wp:list-item -->
 <li>Only a few devices (&lt; 10)</li>
 <!-- /wp:list-item -->
-
 <!-- wp:list-item -->
 <li>Devices never move between hubs</li>
 <!-- /wp:list-item -->
-
 <!-- wp:list-item -->
 <li>Prototyping with connection strings is acceptable</li>
-<!-- /wp:list-item --></ul>
+<!-- /wp:list-item -->
+</ul>
 <!-- /wp:list -->
 
 <!-- wp:heading {"level":3} -->
-<h3 class="wp-block-heading" id="preview-api-status">Preview API Status</h3>
+<h3 class="wp-block-heading">Preview API Status</h3>
 <!-- /wp:heading -->
 
 <!-- wp:paragraph -->
-<p>The features covered in this series use the&nbsp;<strong><code>2025-07-01-preview</code>&nbsp;API</strong>:</p>
+<p>The sample application in this series uses the <strong><code>2025-07-01-preview</code> API</strong>:</p>
 <!-- /wp:paragraph -->
 
 <!-- wp:list -->
 <ul class="wp-block-list"><!-- wp:list-item -->
 <li>✅ CSR-based certificate issuance</li>
 <!-- /wp:list-item -->
-
 <!-- wp:list-item -->
 <li>✅ ADR credential policies</li>
 <!-- /wp:list-item -->
-
 <!-- wp:list-item -->
 <li>✅ DPS MQTT protocol support</li>
 <!-- /wp:list-item -->
-
 <!-- wp:list-item -->
 <li>✅ Microsoft-managed CA</li>
-<!-- /wp:list-item --></ul>
+<!-- /wp:list-item -->
+</ul>
 <!-- /wp:list -->
 
 <!-- wp:paragraph -->
-<p>As of January 2026, these features are in&nbsp;<strong>preview</strong>. The official Microsoft SDKs don't yet support them, which is why this project includes a&nbsp;<strong>custom DPS framework</strong>&nbsp;that implements the MQTT protocol directly.</p>
+<p>IoT Hub integration with ADR and certificate management is still in <strong>public
+preview</strong> and isn't recommended for production workloads. The custom DPS
+framework is this project's implementation choice; don't treat its API version
+or client-library assumptions as a general Microsoft SDK support statement.</p>
 <!-- /wp:paragraph -->
 
 <!-- wp:quote -->
 <blockquote class="wp-block-quote"><!-- wp:paragraph -->
-<p><strong>Note:</strong>&nbsp;Always check&nbsp;<a href="https://learn.microsoft.com/azure/iot-dps/">Microsoft's documentation</a>&nbsp;for the latest API status and general availability dates.</p>
+<p><strong>Note:</strong> Check <a href="https://learn.microsoft.com/en-us/azure/iot-hub/iot-hub-what-is-new">Microsoft's current IoT Hub preview guidance</a> before deployment.</p>
 <!-- /wp:paragraph --></blockquote>
 <!-- /wp:quote -->
 
 <!-- wp:heading {"level":3} -->
-<h3 class="wp-block-heading" id="next-steps">Next Steps</h3>
+<h3 class="wp-block-heading">Next Steps</h3>
 <!-- /wp:heading -->
 
 <!-- wp:paragraph -->
@@ -790,26 +689,22 @@ Notes:
 <ol class="wp-block-list"><!-- wp:list-item -->
 <li>Create DPS, IoT Hub, and ADR instances</li>
 <!-- /wp:list-item -->
-
 <!-- wp:list-item -->
 <li>Configure credential policies for certificate issuance</li>
 <!-- /wp:list-item -->
-
 <!-- wp:list-item -->
 <li>Set up enrollment groups (symmetric key and X.509)</li>
 <!-- /wp:list-item -->
-
 <!-- wp:list-item -->
 <li>Build a .NET device application with custom DPS framework</li>
 <!-- /wp:list-item -->
-
 <!-- wp:list-item -->
 <li>Implement CSR generation and certificate management</li>
 <!-- /wp:list-item -->
-
 <!-- wp:list-item -->
 <li>Integrate with ADR for device management</li>
-<!-- /wp:list-item --></ol>
+<!-- /wp:list-item -->
+</ol>
 <!-- /wp:list -->
 
 <!-- wp:paragraph -->

@@ -1,0 +1,661 @@
+<!-- wp:heading {"level":2} -->
+<h2 class="wp-block-heading"><strong>Creating DPS, IoT Hub and ADR Instances</strong></h2>
+<!-- /wp:heading -->
+
+<!-- wp:paragraph -->
+<p>Welcome back to this series of posts exploring the latest features of Azure IoT Hub, Device Provisioning Service (DPS), and Azure Device Registry (ADR).</p>
+<!-- /wp:paragraph -->
+
+<!-- wp:paragraph -->
+<p>In the previous post we dove deeper into DPS and what's new.</p>
+<!-- /wp:paragraph -->
+
+<!-- wp:heading {"textColor":"#f6f6f4"} -->
+<h2 class="wp-block-heading has-f-6-f-6-f-4-color has-text-color">Contents:</h2>
+<!-- /wp:heading -->
+
+<!-- wp:list {"ordered":true,"textColor":"#f6f6f4"} -->
+<ol class="wp-block-list has-f-6-f-6-f-4-color has-text-color"><!-- wp:list-item -->
+<li><a href="https://www.petecodes.co.uk/iot-hub-with-adr-and-certificate-management-part-1" target="_blank" rel="noreferrer noopener">Introduction </a></li>
+<!-- /wp:list-item -->
+
+<!-- wp:list-item -->
+<li><a href="https://www.petecodes.co.uk/iot-hub-with-adr-and-certificate-management-part-2" target="_blank" rel="noreferrer noopener">A DPS Primer</a></li>
+<!-- /wp:list-item -->
+
+<!-- wp:list-item -->
+<li><a href="https://www.petecodes.co.uk/iot-hub-with-adr-and-certificate-management-part-3" target="_blank" rel="noreferrer noopener">Creating DPS, IoT Hub and ADR Instances</a> (This Post)</li>
+<!-- /wp:list-item -->
+
+<!-- wp:list-item -->
+<li><a href="https://www.petecodes.co.uk/iot-hub-with-adr-and-certificate-management-part-4" target="_blank" rel="noreferrer noopener">Understanding X.509 and CSR Workflows</a></li>
+<!-- /wp:list-item -->
+
+<!-- wp:list-item -->
+<li><a href="https://www.petecodes.co.uk/iot-hub-with-adr-and-certificate-management-part-5" target="_blank" rel="noreferrer noopener">The Device Application</a></li>
+<!-- /wp:list-item --></ol>
+<!-- /wp:list -->
+
+<!-- wp:heading {"level":3} -->
+<h3 class="wp-block-heading">Time to Build!</h3>
+<!-- /wp:heading -->
+
+<!-- wp:paragraph -->
+<p>Now that you know what DPS does, let's stand up the Azure resources. We'll
+create a resource group, a user-assigned managed identity, an ADR namespace, a
+new IoT Hub, and DPS. The walkthrough below retains our Azure CLI approach,
+updated to match the current Microsoft Learn
+<a href="https://learn.microsoft.com/en-us/azure/iot-hub/iot-hub-device-registry-setup?pivots=azure-cli">Azure CLI deployment method</a>.
+We'll run the commands in PowerShell 7, using backticks for line continuation.
+The Learn guide is the reference for the commands, not a replacement for the
+steps here.</p>
+<!-- /wp:paragraph -->
+
+<!-- wp:separator -->
+<hr class="wp-block-separator has-alpha-channel-opacity"/>
+<!-- /wp:separator -->
+
+<!-- wp:heading {"level":3} -->
+<h3 class="wp-block-heading">Step-by-Step Azure CLI Tutorial</h3>
+<!-- /wp:heading -->
+
+<!-- wp:paragraph -->
+<p>Follow along post-by-post to understand <strong>why</strong> and <strong>how</strong> everything works. You'll learn:</p>
+<!-- /wp:paragraph -->
+
+<!-- wp:list -->
+<ul class="wp-block-list"><!-- wp:list-item -->
+<li>DPS concepts and architecture</li>
+<!-- /wp:list-item -->
+<!-- wp:list-item -->
+<li>Azure resource setup</li>
+<!-- /wp:list-item -->
+<!-- wp:list-item -->
+<li>X.509 certificate workflows</li>
+<!-- /wp:list-item -->
+<!-- wp:list-item -->
+<li>.NET implementation details</li>
+<!-- /wp:list-item -->
+</ul>
+<!-- /wp:list -->
+
+<!-- wp:heading {"level":3} -->
+<h3 class="wp-block-heading">Prerequisites</h3>
+<!-- /wp:heading -->
+
+<!-- wp:list -->
+<ul class="wp-block-list"><!-- wp:list-item -->
+<li>Azure subscription</li>
+<!-- /wp:list-item -->
+<!-- wp:list-item -->
+<li>Azure CLI and <code>azure-iot</code> extension version 0.30.0b2 or later, installed
+with preview support (<code>az extension add --name azure-iot --allow-preview</code>)</li>
+<!-- /wp:list-item -->
+<!-- wp:list-item -->
+<li>PowerShell 7+</li>
+<!-- /wp:list-item -->
+<!-- wp:list-item -->
+<li>Rights to create resources and assign roles at the required scopes, such
+as Owner, or Contributor together with User Access Administrator</li>
+<!-- /wp:list-item -->
+<!-- wp:list-item -->
+<li>A supported region: Australia East, Japan East, Central US, or UK South</li>
+<!-- /wp:list-item -->
+</ul>
+<!-- /wp:list -->
+
+<!-- wp:heading {"level":3} -->
+<h3 class="wp-block-heading">What We're Building</h3>
+<!-- /wp:heading -->
+
+<!-- wp:list {"ordered":true} -->
+<ol class="wp-block-list"><!-- wp:list-item -->
+<li>Resource group and user-assigned managed identity</li>
+<!-- /wp:list-item -->
+<!-- wp:list-item -->
+<li>ADR namespace with certificate management and a policy</li>
+<!-- /wp:list-item -->
+<!-- wp:list-item -->
+<li>New IoT Hub linked to the namespace</li>
+<!-- /wp:list-item -->
+<!-- wp:list-item -->
+<li>DPS linked to both the namespace and IoT Hub</li>
+<!-- /wp:list-item -->
+<!-- wp:list-item -->
+<li>Role assignments, policy synchronization, and enrollment configuration</li>
+<!-- /wp:list-item -->
+</ol>
+<!-- /wp:list -->
+
+<!-- wp:quote -->
+<blockquote class="wp-block-quote"><!-- wp:paragraph -->
+<p><strong>Preview warning:</strong> These features are in public preview and aren't
+recommended for production. Existing IoT Hubs can't be upgraded to ADR
+integration; create a new hub. DPS is required for every IoT Hub preview
+scenario. Starting October 2026, ADR integration and certificate management
+are free during preview, while IoT Hub and DPS are billed at standard rates.</p>
+<!-- /wp:paragraph --></blockquote>
+<!-- /wp:quote -->
+
+<!-- wp:separator -->
+<hr class="wp-block-separator has-alpha-channel-opacity"/>
+<!-- /wp:separator -->
+
+<!-- wp:heading {"level":3} -->
+<h3 class="wp-block-heading">Prepare the CLI Environment</h3>
+<!-- /wp:heading -->
+
+<!-- wp:paragraph -->
+<p>First, sign in and select the subscription where you want to create the
+preview resources:</p>
+<!-- /wp:paragraph -->
+
+<!-- wp:code {"className":"language-powershell"} -->
+<pre class="wp-block-code language-powershell"><code>az login
+az account list --output table
+az account set --subscription &quot;&lt;your-subscription-name-or-id&gt;&quot;
+az account show --output table
+</code></pre>
+<!-- /wp:code -->
+
+<!-- wp:paragraph -->
+<p>Check the installed extensions:</p>
+<!-- /wp:paragraph -->
+
+<!-- wp:code {"className":"language-powershell"} -->
+<pre class="wp-block-code language-powershell"><code>az extension list --output table
+</code></pre>
+<!-- /wp:code -->
+
+<!-- wp:paragraph -->
+<p>If <code>azure-iot</code> is already installed, remove it before installing the
+preview-enabled version, as directed by the current Learn guide:</p>
+<!-- /wp:paragraph -->
+
+<!-- wp:code {"className":"language-powershell"} -->
+<pre class="wp-block-code language-powershell"><code>az extension remove --name azure-iot
+</code></pre>
+<!-- /wp:code -->
+
+<!-- wp:paragraph -->
+<p>If it isn't installed, skip the removal. Install it with preview support and
+check that the installed version is <strong>0.30.0b2 or later</strong>:</p>
+<!-- /wp:paragraph -->
+
+<!-- wp:code {"className":"language-powershell"} -->
+<pre class="wp-block-code language-powershell"><code>az extension add --name azure-iot --allow-preview
+az extension list --output table
+</code></pre>
+<!-- /wp:code -->
+
+<!-- wp:heading {"level":3} -->
+<h3 class="wp-block-heading">Step 1: Set Variables and Create the Resource Group</h3>
+<!-- /wp:heading -->
+
+<!-- wp:paragraph -->
+<p>Declare names once so the commands use the same resources throughout. Choose
+unique names before running the creation commands; this is a new-environment
+walkthrough, not an in-place upgrade of an existing hub.</p>
+<!-- /wp:paragraph -->
+
+<!-- wp:code {"className":"language-powershell"} -->
+<pre class="wp-block-code language-powershell"><code>$subscriptionId = az account show --query id -o tsv
+$location = &quot;uksouth&quot; # Or australiaeast, japaneast, or centralus
+$unique = &quot;dev001&quot;             # make it unique
+
+$resourceGroup = &quot;$unique-skittlesorter-rg&quot;
+$iotHubName = &quot;$unique-skittlesorter-hub&quot;   # must be globally unique
+$dpsName = &quot;$unique-skittlesorter-dps&quot;      # must be globally unique
+$adrNamespace = &quot;skittlesorter-preview&quot; # choose a unique lowercase, letters-and-hyphens name
+$credentialPolicyName = &quot;cert-policy&quot;
+$userIdentity = &quot;$unique-skittlesorter-uami&quot;
+$enrollmentGroupName = &quot;$unique-skittlesorter-group&quot;
+$registrationId = &quot;$unique-skittlesorter&quot;
+</code></pre>
+<!-- /wp:code -->
+
+<!-- wp:paragraph -->
+<p>The namespace name must contain only lowercase letters and internal hyphens,
+not digits or leading/trailing hyphens. Keep personal or sensitive information
+out of the publicly discoverable IoT Hub name.</p>
+<!-- /wp:paragraph -->
+
+<!-- wp:paragraph -->
+<p>Now we create the container for everything.</p>
+<!-- /wp:paragraph -->
+
+<!-- wp:code {"className":"language-powershell"} -->
+<pre class="wp-block-code language-powershell"><code>az group create --name $resourceGroup --location $location
+</code></pre>
+<!-- /wp:code -->
+
+<!-- wp:heading {"level":3} -->
+<h3 class="wp-block-heading">Step 2: Configure App Privileges</h3>
+<!-- /wp:heading -->
+
+<!-- wp:paragraph -->
+<p>Now we configure the IoT Hub service principal permissions at the resource
+group scope, as required by the current deployment guide.</p>
+<!-- /wp:paragraph -->
+
+<!-- wp:code {"className":"language-powershell"} -->
+<pre class="wp-block-code language-powershell"><code>az role assignment create `
+        --assignee &quot;89d10474-74af-4874-99a7-c23c2f643083&quot; `
+        --role &quot;Contributor&quot; `
+        --scope &quot;/subscriptions/$subscriptionId/resourceGroups/$resourceGroup&quot; `
+        --output none
+</code></pre>
+<!-- /wp:code -->
+
+<!-- wp:heading {"level":3} -->
+<h3 class="wp-block-heading">Step 3: Create a User-Assigned Managed Identity</h3>
+<!-- /wp:heading -->
+
+<!-- wp:paragraph -->
+<p>First we create a reusable Azure managed identity so IoT Hub and DPS can securely access ADR without storing secrets.</p>
+<!-- /wp:paragraph -->
+
+<!-- wp:code {"className":"language-powershell"} -->
+<pre class="wp-block-code language-powershell"><code>az identity create `
+        --name $userIdentity `
+        --resource-group $resourceGroup `
+        --location $location `
+        --output none
+</code></pre>
+<!-- /wp:code -->
+
+<!-- wp:paragraph -->
+<p>Now we retrieve the managed identity’s resource ID and save it to <code>$uamiResourceId</code> so we can attach that identity to IoT Hub and DPS in the next steps.</p>
+<!-- /wp:paragraph -->
+
+<!-- wp:code {"className":"language-powershell"} -->
+<pre class="wp-block-code language-powershell"><code>$uamiResourceId = az identity show `
+        --name $userIdentity `
+        --resource-group $resourceGroup `
+        --query id -o tsv
+</code></pre>
+<!-- /wp:code -->
+
+<!-- wp:paragraph -->
+<p>Now we retrieve the managed identity’s principal ID and store it in <code>$uamiPrincipalId</code> so we can grant it RBAC permissions on ADR.</p>
+<!-- /wp:paragraph -->
+
+<!-- wp:code {"className":"language-powershell"} -->
+<pre class="wp-block-code language-powershell"><code>$uamiPrincipalId = az identity show `
+        --name $userIdentity `
+        --resource-group $resourceGroup `
+        --query principalId -o tsv
+</code></pre>
+<!-- /wp:code -->
+
+<!-- wp:heading {"level":3} -->
+<h3 class="wp-block-heading">Step 4: Create ADR Namespace + Credential Policy</h3>
+<!-- /wp:heading -->
+
+<!-- wp:paragraph -->
+<p>ADR backs certificate issuance. We create the namespace and a policy that uses Microsoft-managed CA.</p>
+<!-- /wp:paragraph -->
+
+<!-- wp:paragraph -->
+<p><strong>Create ADR namespace:</strong></p>
+<!-- /wp:paragraph -->
+
+<!-- wp:code {"className":"language-powershell"} -->
+<pre class="wp-block-code language-powershell"><code>az iot adr ns create `
+  --name $adrNamespace `
+  --resource-group $resourceGroup `
+  --location $location `
+  --enable-certificate-management true `
+  --policy-name $credentialPolicyName
+</code></pre>
+<!-- /wp:code -->
+
+<!-- wp:paragraph -->
+<p>Certificate management creates a namespace root CA and an issuing-CA policy.
+The default certificate validity is 30 days; custom policies can set a
+1–30-day validity period.</p>
+<!-- /wp:paragraph -->
+
+<!-- wp:paragraph -->
+<p>Namespace creation also configures a system-assigned managed identity and
+can take up to five minutes. Verify the identity, root CA credential, and
+named policy before continuing:</p>
+<!-- /wp:paragraph -->
+
+<!-- wp:code {"className":"language-powershell"} -->
+<pre class="wp-block-code language-powershell"><code>az iot adr ns show `
+        --name $adrNamespace `
+        --resource-group $resourceGroup
+
+az iot adr ns credential show `
+        --namespace $adrNamespace `
+        --resource-group $resourceGroup
+
+az iot adr ns policy show `
+        --namespace $adrNamespace `
+        --resource-group $resourceGroup `
+        --name $credentialPolicyName
+</code></pre>
+<!-- /wp:code -->
+
+<!-- wp:paragraph -->
+<p>Retrieve the namespace resource ID and assign the managed identity the Azure
+Device Registry Contributor and Onboarding roles:</p>
+<!-- /wp:paragraph -->
+
+<!-- wp:code {"className":"language-powershell"} -->
+<pre class="wp-block-code language-powershell"><code>$namespaceResourceId = az iot adr ns show `
+        --name $adrNamespace `
+        --resource-group $resourceGroup `
+        --query id -o tsv
+
+az role assignment create `
+        --assignee $uamiPrincipalId `
+        --role &quot;a5c3590a-3a1a-4cd4-9648-ea0a32b15137&quot; `
+        --scope $namespaceResourceId
+
+az role assignment create `
+        --assignee $uamiPrincipalId `
+        --role &quot;547f7f0a-69c0-4807-bd9e-0321dfb66a84&quot; `
+        --scope $namespaceResourceId
+</code></pre>
+<!-- /wp:code -->
+
+<!-- wp:heading {"level":3} -->
+<h3 class="wp-block-heading">Step 5: Create IoT Hub</h3>
+<!-- /wp:heading -->
+
+<!-- wp:paragraph -->
+<p>Create a <strong>new</strong> IoT Hub linked to the ADR namespace. The preview uses the
+<code>GEN2</code> SKU; existing hubs have no upgrade path to ADR integration.</p>
+<!-- /wp:paragraph -->
+
+<!-- wp:code {"className":"language-powershell"} -->
+<pre class="wp-block-code language-powershell"><code>az iot hub create `
+        --name $iotHubName `
+        --resource-group $resourceGroup `
+        --location $location `
+        --sku GEN2 `
+        --mi-user-assigned $uamiResourceId `
+        --ns-resource-id $namespaceResourceId `
+        --ns-identity-id $uamiResourceId `
+        --output none
+
+$hubResourceId = az iot hub show `
+        --name $iotHubName `
+        --resource-group $resourceGroup `
+        --query id -o tsv
+</code></pre>
+<!-- /wp:code -->
+
+<!-- wp:paragraph -->
+<p>Verify that the hub has the managed identity and namespace properties
+configured:</p>
+<!-- /wp:paragraph -->
+
+<!-- wp:code {"className":"language-powershell"} -->
+<pre class="wp-block-code language-powershell"><code>az iot hub show `
+        --name $iotHubName `
+        --resource-group $resourceGroup `
+        --output json
+</code></pre>
+<!-- /wp:code -->
+
+<!-- wp:heading {"level":3} -->
+<h3 class="wp-block-heading">Step 6: Assign IoT Hub Roles to the ADR Namespace Identity</h3>
+<!-- /wp:heading -->
+
+<!-- wp:paragraph -->
+<p>The namespace has its own managed identity. Retrieve its principal ID so we
+can grant it access to IoT Hub.</p>
+<!-- /wp:paragraph -->
+
+<!-- wp:code {"className":"language-powershell"} -->
+<pre class="wp-block-code language-powershell"><code>$adrPrincipalId = az iot adr ns show `
+        --name $adrNamespace `
+        --resource-group $resourceGroup `
+        --query identity.principalId -o tsv
+</code></pre>
+<!-- /wp:code -->
+
+<!-- wp:paragraph -->
+<p>Now we grant the ADR namespace identity Contributor access on the IoT Hub so ADR can manage required hub-side resources during provisioning.</p>
+<!-- /wp:paragraph -->
+
+<!-- wp:code {"className":"language-powershell"} -->
+<pre class="wp-block-code language-powershell"><code>az role assignment create `
+        --assignee $adrPrincipalId `
+        --role &quot;Contributor&quot; `
+        --scope $hubResourceId `
+        --output none
+</code></pre>
+<!-- /wp:code -->
+
+<!-- wp:paragraph -->
+<p>Now we grant the ADR namespace identity the IoT Hub Registry Contributor role so it can create and manage device identities during provisioning.</p>
+<!-- /wp:paragraph -->
+
+<!-- wp:code {"className":"language-powershell"} -->
+<pre class="wp-block-code language-powershell"><code>az role assignment create `
+        --assignee $adrPrincipalId `
+        --role &quot;IoT Hub Registry Contributor&quot; `
+        --scope $hubResourceId `
+        --output none
+</code></pre>
+<!-- /wp:code -->
+
+<!-- wp:heading {"level":3} -->
+<h3 class="wp-block-heading">Step 7: Create DPS</h3>
+<!-- /wp:heading -->
+
+<!-- wp:paragraph -->
+<p>DPS is the front door. It will handle attestation and hand out hubs.</p>
+<!-- /wp:paragraph -->
+
+<!-- wp:code {"className":"language-powershell"} -->
+<pre class="wp-block-code language-powershell"><code>az iot dps create `
+        --name $dpsName `
+        --resource-group $resourceGroup `
+        --location $location `
+        --mi-user-assigned $uamiResourceId `
+        --ns-resource-id $namespaceResourceId `
+        --ns-identity-id $uamiResourceId `
+        --output none
+</code></pre>
+<!-- /wp:code -->
+
+<!-- wp:paragraph -->
+<p><strong>Get DPS ID Scope:</strong></p>
+<!-- /wp:paragraph -->
+
+<!-- wp:paragraph -->
+<p>First verify its managed identity and namespace properties, then capture the
+ID Scope for the device application:</p>
+<!-- /wp:paragraph -->
+
+<!-- wp:code {"className":"language-powershell"} -->
+<pre class="wp-block-code language-powershell"><code>az iot dps show `
+  --name $dpsName `
+  --resource-group $resourceGroup `
+  --output json
+
+$idScope = az iot dps show `
+  --name $dpsName `
+  --resource-group $resourceGroup `
+  --query properties.idScope -o tsv
+
+Write-Host &quot;DPS ID Scope: $idScope&quot; -ForegroundColor Green
+</code></pre>
+<!-- /wp:code -->
+
+<!-- wp:heading {"level":3} -->
+<h3 class="wp-block-heading">Step 8: Link DPS to IoT Hub</h3>
+<!-- /wp:heading -->
+
+<!-- wp:paragraph -->
+<p>DPS already links to the ADR namespace from Step 7. Now link the hub and
+verify that it appears in DPS:</p>
+<!-- /wp:paragraph -->
+
+<!-- wp:code {"className":"language-powershell"} -->
+<pre class="wp-block-code language-powershell"><code>az iot dps linked-hub create `
+        --dps-name $dpsName `
+        --resource-group $resourceGroup `
+        --hub-name $iotHubName `
+        --output none
+
+az iot dps linked-hub list `
+        --dps-name $dpsName `
+        --resource-group $resourceGroup
+</code></pre>
+<!-- /wp:code -->
+
+<!-- wp:heading {"level":3} -->
+<h3 class="wp-block-heading">Step 9: Sync Credential Policy</h3>
+<!-- /wp:heading -->
+
+<!-- wp:paragraph -->
+<p>Next up we sync ADR credentials into IoT Hub so certs verify correctly.</p>
+<!-- /wp:paragraph -->
+
+<!-- wp:paragraph -->
+<p><strong>Sync credential policy to IoT Hub:</strong></p>
+<!-- /wp:paragraph -->
+
+<!-- wp:code {"className":"language-powershell"} -->
+<pre class="wp-block-code language-powershell"><code>az iot adr ns credential sync `
+        --namespace $adrNamespace `
+        --resource-group $resourceGroup `
+        --output json
+</code></pre>
+<!-- /wp:code -->
+
+<!-- wp:paragraph -->
+<p><strong>List certificates in IoT Hub:</strong></p>
+<!-- /wp:paragraph -->
+
+<!-- wp:code {"className":"language-powershell"} -->
+<pre class="wp-block-code language-powershell"><code>az iot hub certificate list `
+  --hub-name $iotHubName `
+  --resource-group $resourceGroup
+</code></pre>
+<!-- /wp:code -->
+
+<!-- wp:paragraph -->
+<p>Verify the hub has registered the CA certificate.</p>
+<!-- /wp:paragraph -->
+
+<!-- wp:heading {"level":3} -->
+<h3 class="wp-block-heading">Step 10: Create an Enrollment Group</h3>
+<!-- /wp:heading -->
+
+<!-- wp:paragraph -->
+<p>Create an enrollment group and assign the namespace policy. This example uses
+the default symmetric-key attestation; the onboarding credential is distinct
+from the operational certificate issued by the policy.
+Because our policy is named <code>cert-policy</code> rather than <code>default</code>, pass its name
+explicitly:</p>
+<!-- /wp:paragraph -->
+
+<!-- wp:code {"className":"language-powershell"} -->
+<pre class="wp-block-code language-powershell"><code>az iot dps enrollment-group create `
+        --dps-name $dpsName `
+        --resource-group $resourceGroup `
+        --enrollment-id $enrollmentGroupName `
+        --credential-policy $credentialPolicyName
+</code></pre>
+<!-- /wp:code -->
+
+<!-- wp:paragraph -->
+<p>This completes the current Learn CLI setup using symmetric-key onboarding.
+The X.509 onboarding path used by the device application needs the bootstrap
+CA and enrollment configuration in
+<a href="https://www.petecodes.co.uk/iot-hub-with-adr-and-certificate-management-part-4/">Part 4</a>.
+Keep the operational-certificate policy attached when configuring that
+enrollment; creating a namespace policy alone doesn't assign it to devices.</p>
+<!-- /wp:paragraph -->
+
+<!-- wp:heading {"level":3} -->
+<h3 class="wp-block-heading">Verify in Portal</h3>
+<!-- /wp:heading -->
+
+<!-- wp:paragraph -->
+<p>Now we check:</p>
+<!-- /wp:paragraph -->
+
+<!-- wp:list -->
+<ul class="wp-block-list"><!-- wp:list-item -->
+<li>Resource Group shows IoT Hub, DPS, ADR</li>
+<!-- /wp:list-item -->
+<!-- wp:list-item -->
+<li>DPS → Linked IoT hubs lists your hub</li>
+<!-- /wp:list-item -->
+<!-- wp:list-item -->
+<li>DPS → Overview shows the ID Scope</li>
+<!-- /wp:list-item -->
+<!-- wp:list-item -->
+<li>IoT Hub → Certificates includes the synced CA</li>
+<!-- /wp:list-item -->
+</ul>
+<!-- /wp:list -->
+
+<!-- wp:heading {"level":3} -->
+<h3 class="wp-block-heading">Troubleshooting</h3>
+<!-- /wp:heading -->
+
+<!-- wp:list -->
+<ul class="wp-block-list"><!-- wp:list-item -->
+<li><strong>Name already exists</strong>: Pick a new <code>$unique</code>.</li>
+<!-- /wp:list-item -->
+<!-- wp:list-item -->
+<li><strong>Unsupported region</strong>: Use one of the supported regions listed above for
+IoT Hub, ADR, and DPS.</li>
+<!-- /wp:list-item -->
+<!-- wp:list-item -->
+<li><strong>Role assignment fails</strong>: Wait 1–2 minutes, then retry.</li>
+<!-- /wp:list-item -->
+<!-- wp:list-item -->
+<li><strong>No CA in IoT Hub</strong>: Re-run the credential-policy sync.</li>
+<!-- /wp:list-item -->
+</ul>
+<!-- /wp:list -->
+
+<!-- wp:heading {"level":3} -->
+<h3 class="wp-block-heading">What We Finished</h3>
+<!-- /wp:heading -->
+
+<!-- wp:list -->
+<ul class="wp-block-list"><!-- wp:list-item -->
+<li>Resource group created</li>
+<!-- /wp:list-item -->
+<!-- wp:list-item -->
+<li>New IoT Hub created with ADR integration (<code>GEN2</code>)</li>
+<!-- /wp:list-item -->
+<!-- wp:list-item -->
+<li>DPS created and ID Scope captured</li>
+<!-- /wp:list-item -->
+<!-- wp:list-item -->
+<li>ADR namespace + credential policy ready</li>
+<!-- /wp:list-item -->
+<!-- wp:list-item -->
+<li>Links and roles wired up</li>
+<!-- /wp:list-item -->
+<!-- wp:list-item -->
+<li>Enrollment group linked to the ADR certificate policy</li>
+<!-- /wp:list-item -->
+</ul>
+<!-- /wp:list -->
+
+<!-- wp:paragraph -->
+<p>Next up we explain onboarding credentials, operational certificates, and the
+CSR workflow. For the current complete setup walkthrough, see the
+<a href="https://learn.microsoft.com/en-us/azure/iot-hub/iot-hub-device-registry-setup?pivots=azure-cli">Microsoft Learn deployment guide</a>.</p>
+<!-- /wp:paragraph -->
+
+<!-- wp:separator -->
+<hr class="wp-block-separator has-alpha-channel-opacity"/>
+<!-- /wp:separator -->
+
+<!-- wp:paragraph -->
+<p><a href="https://www.petecodes.co.uk/iot-hub-with-adr-and-certificate-management-part-4/">Next: Creating X.509 Certificates &gt;</a></p>
+<!-- /wp:paragraph -->

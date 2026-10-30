@@ -18,7 +18,7 @@
     Name of the Azure resource group to create or use.
 
 .PARAMETER Location
-    Azure region for resources (e.g., 'eastus', 'westus2').
+    Supported Azure region for resources (Australia East, Japan East, Central US, or UK South).
 
 .PARAMETER IoTHubName
     Name for the IoT Hub (must be globally unique).
@@ -65,14 +65,14 @@
     Skip certificate verification step (uploads certs but doesn't verify them).
 
 .EXAMPLE
-    .\setup-x509-dps-adr.ps1 -ResourceGroup "iot-demo-rg" -Location "eastus" -IoTHubName "my-hub-001" -DPSName "my-dps-001" -AdrNamespace "my-adr-001" -UserIdentity "my-uami"
+    .\setup-x509-dps-adr.ps1 -ResourceGroup "iot-demo-rg" -Location "uksouth" -IoTHubName "my-hub-001" -DPSName "my-dps-001" -AdrNamespace "my-adr-001" -UserIdentity "my-uami"
 
 .EXAMPLE
-    .\setup-x509-dps-adr.ps1 -ResourceGroup "iot-demo-rg" -Location "eastus" -IoTHubName "my-hub-001" -DPSName "my-dps-001" -AdrNamespace "my-adr-001" -UserIdentity "my-uami" -SkipAzureSetup
+    .\setup-x509-dps-adr.ps1 -ResourceGroup "iot-demo-rg" -Location "uksouth" -IoTHubName "my-hub-001" -DPSName "my-dps-001" -AdrNamespace "my-adr-001" -UserIdentity "my-uami" -SkipAzureSetup
 
 .NOTES
     Author: Generated for X.509 DPS + ADR Blog Series
-    Requires: Azure CLI (with azure-iot extension 0.30.0b1+), OpenSSL, PowerShell 7+
+    Requires: Azure CLI 2.73.0+ (with azure-iot extension 1.0.0b2+), Python 3.10+, OpenSSL, PowerShell 7+
 #>
 
 [CmdletBinding()]
@@ -81,6 +81,7 @@ param(
     [string]$ResourceGroup,
 
     [Parameter(Mandatory = $true)]
+    [ValidateSet("australiaeast", "japaneast", "centralus", "uksouth")]
     [string]$Location,
 
     [Parameter(Mandatory = $true)]
@@ -206,17 +207,31 @@ if (-not (Test-CommandExists "openssl")) {
 }
 Write-Log "OpenSSL found" "SUCCESS"
 
-# Check Azure IoT extension
-if (-not (Test-AzureIoTExtension)) {
-    Write-Log "Installing Azure IoT extension with preview support..." "INFO"
-    az extension add --name azure-iot --allow-preview
-} else {
-    $version = Get-AzureIoTExtensionVersion
-    Write-Log "Azure IoT extension version: $version" "DEBUG"
-    if ($version -lt "0.30.0") {
-        Write-Log "Updating Azure IoT extension to support preview features..." "WARNING"
-        az extension update --name azure-iot --allow-preview
+# The current preview guide requires a fresh preview-enabled extension install.
+if (Test-AzureIoTExtension) {
+    Write-Log "Removing the existing Azure IoT extension before installing the preview version..." "INFO"
+    az extension remove --name azure-iot
+    if ($LASTEXITCODE -ne 0) {
+        throw "Failed to remove the existing Azure IoT extension."
     }
+}
+
+az extension add --name azure-iot --allow-preview
+if ($LASTEXITCODE -ne 0) {
+    throw "Failed to install the Azure IoT extension with preview support."
+}
+
+$version = Get-AzureIoTExtensionVersion
+Write-Log "Azure IoT extension version: $version" "INFO"
+# Compare beta builds explicitly because [version] doesn't parse Azure CLI's "bN" suffix.
+if ($version -notmatch '^(\d+)\.(\d+)\.(\d+)(?:b(\d+))?$') {
+    throw "Unable to verify Azure IoT extension version '$version'."
+}
+$betaVersion = $Matches[4]
+$installedVersion = [version]"$($Matches[1]).$($Matches[2]).$($Matches[3])"
+if ($installedVersion -lt [version]"1.0.0" -or
+    ($installedVersion -eq [version]"1.0.0" -and $betaVersion -and [int]$betaVersion -lt 2)) {
+    throw "Azure IoT extension 1.0.0b2 or later is required; installed version is $version."
 }
 Write-Log "Azure IoT extension ready" "SUCCESS"
 
@@ -278,14 +293,14 @@ if (-not $SkipAzureSetup) {
     
     Write-Log "UAMI created with Principal ID: $uamiPrincipalId" "SUCCESS"
 
-    # Create ADR Namespace with System-Assigned Identity and Default Policy
+    # Create ADR Namespace with certificate management and a named policy
     Write-Log "Creating ADR Namespace: $AdrNamespace (this may take up to 5 minutes...)" "INFO"
     
     $adrCreateOutput = az iot adr ns create `
         --name $AdrNamespace `
         --resource-group $ResourceGroup `
         --location $Location `
-        --enable-credential-policy true `
+        --enable-certificate-management true `
         --policy-name $CredentialPolicyName `
         --output json 2>&1
     
@@ -334,16 +349,22 @@ if (-not $SkipAzureSetup) {
     
     Write-Log "ADR Namespace created" "SUCCESS"
 
-    # Assign UAMI role to access the ADR namespace
+    # Assign both namespace roles required by the current IoT Hub deployment workflow.
     Write-Log "Assigning Azure Device Registry Contributor role to UAMI..." "INFO"
     az role assignment create `
         --assignee $uamiPrincipalId `
         --role "a5c3590a-3a1a-4cd4-9648-ea0a32b15137" `
         --scope $namespaceResourceId `
         --output none
-    Write-Log "UAMI role assigned" "SUCCESS"
 
-    # Create IoT Hub with ADR integration
+    az role assignment create `
+        --assignee $uamiPrincipalId `
+        --role "547f7f0a-69c0-4807-bd9e-0321dfb66a84" `
+        --scope $namespaceResourceId `
+        --output none
+    Write-Log "UAMI roles assigned" "SUCCESS"
+
+    # Create the Hub separately; extension 1.0.0b2 links resources with the ADR namespace afterward.
     Write-Log "Creating IoT Hub: $IoTHubName (this may take a few minutes...)" "INFO"
     az iot hub create `
         --name $IoTHubName `
@@ -351,8 +372,6 @@ if (-not $SkipAzureSetup) {
         --location $Location `
         --sku $IoTHubSku `
         --mi-user-assigned $uamiResourceId `
-        --ns-resource-id $namespaceResourceId `
-        --ns-identity-id $uamiResourceId `
         --output none
     
     $hubResourceId = az iot hub show `
@@ -362,38 +381,37 @@ if (-not $SkipAzureSetup) {
     
     Write-Log "IoT Hub created" "SUCCESS"
 
-    # Assign IoT Hub roles to access the ADR namespace
-    Write-Log "Configuring ADR to IoT Hub permissions..." "INFO"
-    $adrPrincipalId = az iot adr ns show `
-        --name $AdrNamespace `
-        --resource-group $ResourceGroup `
-        --query identity.principalId -o tsv
-    
-    az role assignment create `
-        --assignee $adrPrincipalId `
-        --role "Contributor" `
-        --scope $hubResourceId `
-        --output none
-    
-    az role assignment create `
-        --assignee $adrPrincipalId `
-        --role "IoT Hub Registry Contributor" `
-        --scope $hubResourceId `
-        --output none
-    
-    Write-Log "IoT Hub roles configured" "SUCCESS"
-
-    # Create DPS with ADR integration
+    # Create DPS separately, then use the namespace link command for ADR integration.
     Write-Log "Creating Device Provisioning Service: $DPSName" "INFO"
     az iot dps create `
         --name $DPSName `
         --resource-group $ResourceGroup `
         --location $Location `
         --mi-user-assigned $uamiResourceId `
-        --ns-resource-id $namespaceResourceId `
-        --ns-identity-id $uamiResourceId `
         --output none
     Write-Log "DPS created" "SUCCESS"
+
+    $dpsResourceId = az iot dps show `
+        --name $DPSName `
+        --resource-group $ResourceGroup `
+        --query id -o tsv
+
+    # This command links DPS first, then the Hub, and configures required service roles.
+    Write-Log "Linking DPS and IoT Hub to the ADR namespace..." "INFO"
+    az iot adr ns link add `
+        --namespace $AdrNamespace `
+        --resource-group $ResourceGroup `
+        --dps-endpoint-name $DPSName `
+        --dps-resource-id $dpsResourceId `
+        --dps-user-assigned-mi $uamiResourceId `
+        --hub-endpoint-name $IoTHubName `
+        --hub-resource-id $hubResourceId `
+        --hub-user-assigned-mi $uamiResourceId `
+        --output none
+    if ($LASTEXITCODE -ne 0) {
+        throw "Failed to link DPS and IoT Hub to ADR namespace '$AdrNamespace'."
+    }
+    Write-Log "DPS and IoT Hub linked to ADR namespace" "SUCCESS"
 
     # Link DPS to IoT Hub
     Write-Log "Linking DPS to IoT Hub..." "INFO"

@@ -1,0 +1,843 @@
+<!-- wp:heading {"level":2} -->
+<h2 class="wp-block-heading"><strong>Understanding X.509 and CSR Workflows</strong></h2>
+<!-- /wp:heading -->
+
+<!-- wp:separator -->
+<hr class="wp-block-separator has-alpha-channel-opacity"/>
+<!-- /wp:separator -->
+
+<!-- wp:paragraph -->
+<p>This series uses Microsoft's <strong>new</strong> certificate management (preview) that enables devices to receive X.509 certificates automatically during provisioning. This post provides a high-level overview and points you to resources for implementation.</p>
+<!-- /wp:paragraph -->
+
+<!-- wp:quote -->
+<blockquote class="wp-block-quote"><!-- wp:paragraph -->
+<p><strong>Preview status:</strong> Microsoft-backed X.509 certificate management is in
+public preview and isn't recommended for production workloads. For details,
+see the <a href="https://learn.microsoft.com/en-us/azure/iot/iot-certificate-management-overview">Certificate Management Overview</a>.</p>
+<!-- /wp:paragraph --></blockquote>
+<!-- /wp:quote -->
+
+<!-- wp:separator -->
+<hr class="wp-block-separator has-alpha-channel-opacity"/>
+<!-- /wp:separator -->
+
+<!-- wp:heading {"textColor":"#f6f6f4"} -->
+<h2 class="wp-block-heading has-f-6-f-6-f-4-color has-text-color">Contents:</h2>
+<!-- /wp:heading -->
+
+<!-- wp:list {"ordered":true,"textColor":"#f6f6f4"} -->
+<ol class="wp-block-list has-f-6-f-6-f-4-color has-text-color"><!-- wp:list-item -->
+<li><a href="https://www.petecodes.co.uk/iot-hub-with-adr-and-certificate-management-part-1" target="_blank" rel="noreferrer noopener">Introduction</a></li>
+<!-- /wp:list-item -->
+
+<!-- wp:list-item -->
+<li><a href="https://www.petecodes.co.uk/iot-hub-with-adr-and-certificate-management-part-2" target="_blank" rel="noreferrer noopener">A DPS Primer</a></li>
+<!-- /wp:list-item -->
+
+<!-- wp:list-item -->
+<li><a href="https://www.petecodes.co.uk/iot-hub-with-adr-and-certificate-management-part-3" target="_blank" rel="noreferrer noopener">Creating DPS, IoT Hub and ADR Instances</a></li>
+<!-- /wp:list-item -->
+
+<!-- wp:list-item -->
+<li><a href="https://www.petecodes.co.uk/iot-hub-with-adr-and-certificate-management-part-4" target="_blank" rel="noreferrer noopener">Understanding X.509 and CSR Workflows</a> (This Post)</li>
+<!-- /wp:list-item -->
+
+<!-- wp:list-item -->
+<li><a href="https://www.petecodes.co.uk/iot-hub-with-adr-and-certificate-management-part-5" target="_blank" rel="noreferrer noopener">The Device Application</a></li>
+<!-- /wp:list-item --></ol>
+<!-- /wp:list -->
+
+<!-- wp:heading {"level":2} -->
+<h2 class="wp-block-heading">Two Types of Certificates</h2>
+<!-- /wp:heading -->
+
+<!-- wp:paragraph -->
+<p>The new certificate management service makes use of a <strong>two-phase approach</strong>:</p>
+<!-- /wp:paragraph -->
+
+<!-- wp:heading {"level":3} -->
+<h3 class="wp-block-heading">Phase 1: Onboarding Credentials</h3>
+<!-- /wp:heading -->
+
+<!-- wp:list -->
+<ul class="wp-block-list"><!-- wp:list-item -->
+<li><strong>Purpose:</strong> Device authenticates to DPS during initial provisioning</li>
+<!-- /wp:list-item -->
+<!-- wp:list-item -->
+<li><strong>Options:</strong> X.509 certificates (from third-party CA), symmetric keys, or TPM</li>
+<!-- /wp:list-item -->
+<!-- wp:list-item -->
+<li><strong>Your responsibility:</strong> Pre-install on device before shipment</li>
+<!-- /wp:list-item -->
+<!-- wp:list-item -->
+<li><strong>Lifespan:</strong> Long-lived or used once for initial authentication</li>
+<!-- /wp:list-item -->
+</ul>
+<!-- /wp:list -->
+
+<!-- wp:heading {"level":3} -->
+<h3 class="wp-block-heading">Phase 2: Operational Certificates (Microsoft-Managed)</h3>
+<!-- /wp:heading -->
+
+<!-- wp:list -->
+<ul class="wp-block-list"><!-- wp:list-item -->
+<li><strong>Purpose:</strong> Device authenticates to IoT Hub for ongoing operations</li>
+<!-- /wp:list-item -->
+<!-- wp:list-item -->
+<li><strong>How it works:</strong> DPS validates the onboarding credential and coordinates
+issuance by the namespace's ADR issuing CA when the device submits a CSR</li>
+<!-- /wp:list-item -->
+<!-- wp:list-item -->
+<li><strong>Generated on:</strong> Device itself (private key never leaves device)</li>
+<!-- /wp:list-item -->
+<!-- wp:list-item -->
+<li><strong>Lifespan:</strong> Set by the assigned certificate policy (1–30 days in the
+current setup guide); renewal is supported</li>
+<!-- /wp:list-item -->
+<!-- wp:list-item -->
+<li><strong>Security:</strong> Higher security, no key transport</li>
+<!-- /wp:list-item -->
+</ul>
+<!-- /wp:list -->
+
+<!-- wp:heading {"level":2} -->
+<h2 class="wp-block-heading">How It Works</h2>
+<!-- /wp:heading -->
+
+<!-- wp:paragraph -->
+<p>The following diagram shows the complete provisioning flow:</p>
+<!-- /wp:paragraph -->
+
+<!-- wp:merpress/mermaidjs -->
+<div class="wp-block-merpress-mermaidjs diagram-source-mermaid"><pre class="mermaid">sequenceDiagram
+    participant Device as IoT Device
+    participant DPS as DPS
+    participant ADR as ADR
+    participant PKI as PKI-R&lt;br/>(Issuing CA)
+    participant Hub as IoT Hub
+
+    Note over Device: Pre-configured with&lt;br/>onboarding credential&lt;br/>and DPS endpoint
+
+    Note over DPS: Configure enrollment:&lt;br/>1) Define onboarding method&lt;br/>2) Link to ADR policy
+
+    Note over ADR: Configure credential&lt;br/>(Root CA) and&lt;br/>policies (ICAs)
+
+    Note over PKI: Manage hierarchy of&lt;br/>Certificate&lt;br/>Authorities (CAs)
+
+    Note over Hub: Store CA and&lt;br/>validate leaf certs
+
+    Device->>DPS: 1. Provisioning Request + CSR
+    Note over Device,DPS: Device sends Certificate Signing Request
+
+    DPS->>DPS: 2. Verify onboarding credential
+    
+    DPS->>Hub: 3. Provision device to Hub
+    DPS->>ADR: 3. Register device in ADR
+    
+    Hub-->>DPS: Device created
+    ADR-->>DPS: Device registered
+
+    DPS->>PKI: 4. Request operational certificate
+    Note over DPS,PKI: Forward CSR to issuing CA
+
+    PKI->>PKI: 5. ICA signs and returns&lt;br/>operational certificate
+    
+    PKI-->>DPS: 6. Operational cert + chain
+
+    DPS-->>Device: 6. Return operational cert&lt;br/>+ Hub endpoint
+
+    Device->>Hub: 7. Authenticate with IoT Hub&lt;br/>using operational certificate chain
+    
+    Note over Device,Hub: Device uses newly issued&lt;br/>operational certificate for&lt;br/>all future communications
+</pre></div>
+<!-- /wp:merpress/mermaidjs -->
+
+<!-- wp:paragraph -->
+<p><strong>Key Steps:</strong></p>
+<!-- /wp:paragraph -->
+
+<!-- wp:list {"ordered":true} -->
+<ol class="wp-block-list"><!-- wp:list-item -->
+<li><strong>Device sends provisioning request + CSR</strong> - Device authenticates with onboarding credential and submits Certificate Signing Request</li>
+<!-- /wp:list-item -->
+<!-- wp:list-item -->
+<li><strong>DPS verifies onboarding credential</strong> - Validates device identity (X.509, symmetric key, or TPM)</li>
+<!-- /wp:list-item -->
+<!-- wp:list-item -->
+<li><strong>Device provisioned to Hub and registered in ADR</strong> - Device identity created in both services</li>
+<!-- /wp:list-item -->
+<!-- wp:list-item -->
+<li><strong>Request operational certificate</strong> - DPS uses the CSR to request an operational certificate from the PKI. The PKI validates the CSR and forwards it to the policy (issuing CA) linked to the DPS enrollment.</li>
+<!-- /wp:list-item -->
+<!-- wp:list-item -->
+<li><strong>ICA signs and returns operational certificate</strong> - Issuing CA issues leaf certificate</li>
+<!-- /wp:list-item -->
+<!-- wp:list-item -->
+<li><strong>Return operational cert + Hub endpoint</strong> - DPS sends certificate chain back to device</li>
+<!-- /wp:list-item -->
+<!-- wp:list-item -->
+<li><strong>Device authenticates with IoT Hub</strong> - Device uses new operational certificate for all future connections</li>
+<!-- /wp:list-item -->
+</ol>
+<!-- /wp:list -->
+
+<!-- wp:heading {"level":2} -->
+<h2 class="wp-block-heading">Microsoft-Managed PKI Architecture</h2>
+<!-- /wp:heading -->
+
+<!-- wp:paragraph -->
+<p>Azure Device Registry (ADR) provides a private cloud PKI for each namespace.
+Certificate management supports one root CA and up to three intermediate CAs
+per namespace. Each intermediate CA has a certificate policy that controls
+the validity of issued device certificates. The default policy issues
+30-day certificates; the current setup guide allows a custom validity of
+1–30 days. The CA signing keys are hardware-protected by Azure Managed HSM.</p>
+<!-- /wp:paragraph -->
+
+<!-- wp:paragraph -->
+<p>ADR synchronizes CA certificates with linked IoT Hubs so the hubs can trust
+operational device certificates. You can use a Microsoft cloud root CA or bring
+your own external root CA and have ADR manage an intermediate CA.</p>
+<!-- /wp:paragraph -->
+
+<!-- wp:heading {"level":2} -->
+<h2 class="wp-block-heading">Key Features</h2>
+<!-- /wp:heading -->
+
+<!-- wp:table -->
+<figure class="wp-block-table"><table class="has-fixed-layout">
+<thead>
+<tr>
+<th class="has-text-align-left" data-align="left">Feature</th>
+<th class="has-text-align-left" data-align="left">Description</th>
+</tr>
+</thead>
+<tbody>
+<tr>
+<td class="has-text-align-left" data-align="left"><strong>Algorithms</strong></td>
+<td class="has-text-align-left" data-align="left">ECC (ECDSA) with NIST P-384 curve, SHA-384 hashing</td>
+</tr>
+<tr>
+<td class="has-text-align-left" data-align="left"><strong>HSM Keys</strong></td>
+<td class="has-text-align-left" data-align="left">Azure Managed HSM (no additional subscription required)</td>
+</tr>
+<tr>
+<td class="has-text-align-left" data-align="left"><strong>Certificate Validity</strong></td>
+<td class="has-text-align-left" data-align="left">1–30 days in the current setup guide (configurable per policy)</td>
+</tr>
+<tr>
+<td class="has-text-align-left" data-align="left"><strong>Protocols</strong></td>
+<td class="has-text-align-left" data-align="left">HTTP and MQTT during provisioning</td>
+</tr>
+<tr>
+<td class="has-text-align-left" data-align="left"><strong>Renewal</strong></td>
+<td class="has-text-align-left" data-align="left">Operational certificates can be renewed without reprovisioning</td>
+</tr>
+<tr>
+<td class="has-text-align-left" data-align="left"><strong>Revocation</strong></td>
+<td class="has-text-align-left" data-align="left">Device certificate revocation is supported; intermediate CA revocation has limits</td>
+</tr>
+<tr>
+<td class="has-text-align-left" data-align="left"><strong>CA lifecycle</strong></td>
+<td class="has-text-align-left" data-align="left">CA rotation and certificate synchronization are managed through ADR</td>
+</tr>
+</tbody>
+</table></figure>
+<!-- /wp:table -->
+
+<!-- wp:heading {"level":2} -->
+<h2 class="wp-block-heading">What You'll Be Doing</h2>
+<!-- /wp:heading -->
+
+<!-- wp:paragraph -->
+<p>For this series, you'll create <strong>onboarding credentials</strong> (Phase 1) - we provide automation scripts:</p>
+<!-- /wp:paragraph -->
+
+<!-- wp:quote -->
+<blockquote class="wp-block-quote"><!-- wp:paragraph -->
+<p><strong>Preview Reminder:</strong> Microsoft-backed X.509 certificate management is <strong>new and in public preview</strong>. Operational certificates (Phase 2) are issued by ADR during provisioning and are <strong>not recommended for production workloads</strong> during preview.</p>
+<!-- /wp:paragraph --></blockquote>
+<!-- /wp:quote -->
+
+<!-- wp:heading {"level":3} -->
+<h3 class="wp-block-heading">Quick Setup: Automated X.509 Bootstrap Certificates (if you didn't already run the full setup script!)</h3>
+<!-- /wp:heading -->
+
+<!-- wp:code {"className":"language-powershell"} -->
+<pre class="wp-block-code language-powershell"><code>cd scripts
+
+.\setup-x509-attestation.ps1 `
+  -RegistrationId &quot;my-device&quot; `
+  -DpsName &quot;my-dps-001&quot; `
+  -ResourceGroup &quot;my-iot-rg&quot; `
+  -enrollmentGroupName &quot;my-device-group&quot;
+</code></pre>
+<!-- /wp:code -->
+
+<!-- wp:heading {"level":3} -->
+<h3 class="wp-block-heading">Manual Setup: Step-by-Step (X.509 Bootstrap Certificates)</h3>
+<!-- /wp:heading -->
+
+<!-- wp:paragraph -->
+<p>If you prefer not to use the script, here are the manual steps to create <strong>onboarding credentials</strong> (bootstrap certs) and verify your CA with DPS.</p>
+<!-- /wp:paragraph -->
+
+<!-- wp:paragraph -->
+<p>We'll start fresh here so that folks can run through these steps in isolation if needed.</p>
+<!-- /wp:paragraph -->
+
+<!-- wp:paragraph -->
+<p><strong>Prerequisites:</strong></p>
+<!-- /wp:paragraph -->
+
+<!-- wp:code {"className":"language-powershell"} -->
+<pre class="wp-block-code language-powershell"><code># Verify tools are available
+az --version                    # Azure CLI
+openssl version                 # OpenSSL
+</code></pre>
+<!-- /wp:code -->
+
+<!-- wp:paragraph -->
+<p>If PowerShell shows this error when you run <code>openssl</code>:</p>
+<!-- /wp:paragraph -->
+
+<!-- wp:code {"className":"language-powershell"} -->
+<pre class="wp-block-code language-powershell"><code>openssl : The term 'openssl' is not recognized as the name of a cmdlet, function, script file, or operable program.
+</code></pre>
+<!-- /wp:code -->
+
+<!-- wp:paragraph -->
+<p>Add OpenSSL to your PATH for this session (check if if this is the correct path for your openssl install):</p>
+<!-- /wp:paragraph -->
+
+<!-- wp:code {"className":"language-powershell"} -->
+<pre class="wp-block-code language-powershell"><code>$env:Path = &quot;C:\Program Files\OpenSSL-Win64\bin;$env:Path&quot;
+</code></pre>
+<!-- /wp:code -->
+
+<!-- wp:paragraph -->
+<p><strong>1) Set variables and create folders:</strong></p>
+<!-- /wp:paragraph -->
+
+<!-- wp:paragraph -->
+<p><strong>Set variables:</strong></p>
+<!-- /wp:paragraph -->
+
+<!-- wp:code {"className":"language-powershell"} -->
+<pre class="wp-block-code language-powershell"><code>$unique = &quot;dev001&quot;             # make it unique
+
+$resourceGroup = &quot;$unique-skittlesorter-rg&quot;
+$dpsName = &quot;$unique-skittlesorter-dps&quot;      # must be globally unique
+$registrationId = &quot;$unique-skittlesorter&quot;
+$enrollmentGroupName = &quot;$unique-skittlesorter-group&quot;
+$certDir = &quot;.\certs&quot;
+</code></pre>
+<!-- /wp:code -->
+
+<!-- wp:paragraph -->
+<p><strong>Create root CA folder:</strong></p>
+<!-- /wp:paragraph -->
+
+<!-- wp:code {"className":"language-powershell"} -->
+<pre class="wp-block-code language-powershell"><code>New-Item -ItemType Directory -Path &quot;$certDir\root&quot; -Force | Out-Null
+</code></pre>
+<!-- /wp:code -->
+
+<!-- wp:paragraph -->
+<p><strong>Create intermediate CA folder:</strong></p>
+<!-- /wp:paragraph -->
+
+<!-- wp:code {"className":"language-powershell"} -->
+<pre class="wp-block-code language-powershell"><code>New-Item -ItemType Directory -Path &quot;$certDir\ca&quot; -Force | Out-Null
+</code></pre>
+<!-- /wp:code -->
+
+<!-- wp:paragraph -->
+<p><strong>Create device folder:</strong></p>
+<!-- /wp:paragraph -->
+
+<!-- wp:code {"className":"language-powershell"} -->
+<pre class="wp-block-code language-powershell"><code>New-Item -ItemType Directory -Path &quot;$certDir\device&quot; -Force | Out-Null
+</code></pre>
+<!-- /wp:code -->
+
+<!-- wp:paragraph -->
+<p><strong>2) Create root and intermediate CA:</strong></p>
+<!-- /wp:paragraph -->
+
+<!-- wp:paragraph -->
+<p><strong>Create root CA certificate (self-signed):</strong></p>
+<!-- /wp:paragraph -->
+
+<!-- wp:code {"className":"language-powershell"} -->
+<pre class="wp-block-code language-powershell"><code>openssl req -x509 -new -nodes -newkey rsa:4096 `
+  -keyout &quot;$certDir\root\root-ca.key&quot; `
+  -out &quot;$certDir\root\root-ca.pem&quot; `
+  -days 3650 -sha256 `
+  -subj &quot;/CN=$registrationId-root&quot; `
+  -addext &quot;basicConstraints=critical,CA:true,pathlen:1&quot; `
+  -addext &quot;keyUsage=critical,keyCertSign,cRLSign&quot; `
+  -addext &quot;subjectKeyIdentifier=hash&quot; `
+  -addext &quot;authorityKeyIdentifier=keyid:always&quot;
+</code></pre>
+<!-- /wp:code -->
+
+<!-- wp:paragraph -->
+<p><strong>Create intermediate CA private key:</strong></p>
+<!-- /wp:paragraph -->
+
+<!-- wp:code {"className":"language-powershell"} -->
+<pre class="wp-block-code language-powershell"><code>openssl genrsa -out &quot;$certDir\ca\intermediate-ca.key&quot; 4096
+</code></pre>
+<!-- /wp:code -->
+
+<!-- wp:paragraph -->
+<p><strong>Create intermediate CA CSR:</strong></p>
+<!-- /wp:paragraph -->
+
+<!-- wp:code {"className":"language-powershell"} -->
+<pre class="wp-block-code language-powershell"><code>openssl req -new `
+  -key &quot;$certDir\ca\intermediate-ca.key&quot; `
+  -out &quot;$certDir\ca\intermediate-ca.csr&quot; `
+  -subj &quot;/CN=$registrationId-intermediate&quot;
+</code></pre>
+<!-- /wp:code -->
+
+<!-- wp:paragraph -->
+<p><strong>Create intermediate CA extensions file:</strong></p>
+<!-- /wp:paragraph -->
+
+<!-- wp:code {"className":"language-powershell"} -->
+<pre class="wp-block-code language-powershell"><code>@&quot;
+&#91; v3_intermediate ]
+basicConstraints = critical,CA:true,pathlen:0
+keyUsage = critical, keyCertSign, cRLSign
+subjectKeyIdentifier = hash
+authorityKeyIdentifier = keyid:always,issuer
+&quot;@ | Set-Content -Path &quot;$certDir\ca\intermediate-ext.cnf&quot; -Encoding ASCII
+</code></pre>
+<!-- /wp:code -->
+
+<!-- wp:paragraph -->
+<p><strong>Sign intermediate CA with root CA:</strong></p>
+<!-- /wp:paragraph -->
+
+<!-- wp:code {"className":"language-powershell"} -->
+<pre class="wp-block-code language-powershell"><code>openssl x509 -req `
+  -in &quot;$certDir\ca\intermediate-ca.csr&quot; `
+  -CA &quot;$certDir\root\root-ca.pem&quot; `
+  -CAkey &quot;$certDir\root\root-ca.key&quot; `
+  -CAcreateserial `
+  -out &quot;$certDir\ca\intermediate-ca.pem&quot; `
+  -days 1825 -sha256 `
+  -extfile &quot;$certDir\ca\intermediate-ext.cnf&quot; 
+  -extensions v3_intermediate
+</code></pre>
+<!-- /wp:code -->
+
+<!-- wp:paragraph -->
+<p>3**) Extract certificate thumbprints:**</p>
+<!-- /wp:paragraph -->
+
+<!-- wp:paragraph -->
+<p><strong>Extract root CA thumbprint:</strong></p>
+<!-- /wp:paragraph -->
+
+<!-- wp:code {"className":"language-powershell"} -->
+<pre class="wp-block-code language-powershell"><code>$rootX509 = New-Object System.Security.Cryptography.X509Certificates.X509Certificate2(&quot;$certDir\root\root-ca.pem&quot;)
+$rootThumbprint = $rootX509.Thumbprint
+</code></pre>
+<!-- /wp:code -->
+
+<!-- wp:paragraph -->
+<p><strong>Extract intermediate CA thumbprint:</strong></p>
+<!-- /wp:paragraph -->
+
+<!-- wp:code {"className":"language-powershell"} -->
+<pre class="wp-block-code language-powershell"><code>$caX509 = New-Object System.Security.Cryptography.X509Certificates.X509Certificate2(&quot;$certDir\ca\intermediate-ca.pem&quot;)
+$caThumbprint = $caX509.Thumbprint
+</code></pre>
+<!-- /wp:code -->
+
+<!-- wp:paragraph -->
+<p><strong>4) Upload and verify root CA with DPS:</strong></p>
+<!-- /wp:paragraph -->
+
+<!-- wp:paragraph -->
+<p><strong>Upload root CA to DPS:</strong></p>
+<!-- /wp:paragraph -->
+
+<!-- wp:code {"className":"language-powershell"} -->
+<pre class="wp-block-code language-powershell"><code>$rootCertName = &quot;$registrationId-root&quot;
+az iot dps certificate create --dps-name $dpsName --resource-group $resourceGroup --certificate-name $rootCertName --path &quot;$certDir\root\root-ca.pem&quot;
+</code></pre>
+<!-- /wp:code -->
+
+<!-- wp:paragraph -->
+<p><strong>Get root CA etag and generate verification code:</strong></p>
+<!-- /wp:paragraph -->
+
+<!-- wp:code {"className":"language-powershell"} -->
+<pre class="wp-block-code language-powershell"><code>$rootCert = az iot dps certificate show --dps-name $dpsName --resource-group $resourceGroup --certificate-name $rootCertName -o json | ConvertFrom-Json
+$rootEtag = $rootCert.properties.etag
+
+$rootVer = az iot dps certificate generate-verification-code --dps-name $dpsName --resource-group $resourceGroup --certificate-name $rootCertName --etag $rootEtag -o json | ConvertFrom-Json
+$rootVerCode = $rootVer.properties.verificationCode
+Write-Host &quot;Verification Code: $rootVerCode&quot; -ForegroundColor Cyan
+</code></pre>
+<!-- /wp:code -->
+
+<!-- wp:paragraph -->
+<p><strong>Create root CA verification certificate:</strong></p>
+<!-- /wp:paragraph -->
+
+<!-- wp:code {"className":"language-powershell"} -->
+<pre class="wp-block-code language-powershell"><code>openssl genrsa -out &quot;$certDir\root\verification.key&quot; 2048
+openssl req -new -key &quot;$certDir\root\verification.key&quot; -out &quot;$certDir\root\verification.csr&quot; -subj &quot;/CN=$rootVerCode&quot;
+openssl x509 -req -in &quot;$certDir\root\verification.csr&quot; -CA &quot;$certDir\root\root-ca.pem&quot; -CAkey &quot;$certDir\root\root-ca.key&quot; -CAcreateserial -out &quot;$certDir\root\verification.pem&quot; -days 1 -sha256
+</code></pre>
+<!-- /wp:code -->
+
+<!-- wp:paragraph -->
+<p><strong>Verify root CA in DPS:</strong></p>
+<!-- /wp:paragraph -->
+
+<!-- wp:code {"className":"language-powershell"} -->
+<pre class="wp-block-code language-powershell"><code>$rootEtag = $rootVer.properties.etag
+az iot dps certificate verify --dps-name $dpsName --resource-group $resourceGroup --certificate-name $rootCertName --path &quot;$certDir\root\verification.pem&quot; --etag $rootEtag
+Write-Host &quot;✓ Root CA verified in DPS&quot; -ForegroundColor Green
+</code></pre>
+<!-- /wp:code -->
+
+<!-- wp:paragraph -->
+<p><strong>5) Upload and verify intermediate CA with DPS:</strong></p>
+<!-- /wp:paragraph -->
+
+<!-- wp:paragraph -->
+<p><strong>Upload intermediate CA to DPS:</strong></p>
+<!-- /wp:paragraph -->
+
+<!-- wp:code {"className":"language-powershell"} -->
+<pre class="wp-block-code language-powershell"><code>$caCertName = &quot;$registrationId-intermediate&quot;
+az iot dps certificate create --dps-name $dpsName --resource-group $resourceGroup --certificate-name $caCertName --path &quot;$certDir\ca\intermediate-ca.pem&quot;
+</code></pre>
+<!-- /wp:code -->
+
+<!-- wp:paragraph -->
+<p><strong>Get intermediate CA etag and generate verification code:</strong></p>
+<!-- /wp:paragraph -->
+
+<!-- wp:code {"className":"language-powershell"} -->
+<pre class="wp-block-code language-powershell"><code>$caCert = az iot dps certificate show --dps-name $dpsName --resource-group $resourceGroup --certificate-name $caCertName -o json | ConvertFrom-Json
+$caEtag = $caCert.properties.etag
+
+$caVer = az iot dps certificate generate-verification-code --dps-name $dpsName --resource-group $resourceGroup --certificate-name $caCertName --etag $caEtag -o json | ConvertFrom-Json
+$caVerCode = $caVer.properties.verificationCode
+Write-Host &quot;Verification Code: $caVerCode&quot; -ForegroundColor Cyan
+</code></pre>
+<!-- /wp:code -->
+
+<!-- wp:paragraph -->
+<p><strong>Create intermediate CA verification certificate:</strong></p>
+<!-- /wp:paragraph -->
+
+<!-- wp:code {"className":"language-powershell"} -->
+<pre class="wp-block-code language-powershell"><code>openssl genrsa -out &quot;$certDir\ca\verification.key&quot; 2048
+openssl req -new -key &quot;$certDir\ca\verification.key&quot; -out &quot;$certDir\ca\verification.csr&quot; -subj &quot;/CN=$caVerCode&quot;
+openssl x509 -req -in &quot;$certDir\ca\verification.csr&quot; -CA &quot;$certDir\ca\intermediate-ca.pem&quot; -CAkey &quot;$certDir\ca\intermediate-ca.key&quot; -CAcreateserial -out &quot;$certDir\ca\verification.pem&quot; -days 1 -sha256
+</code></pre>
+<!-- /wp:code -->
+
+<!-- wp:paragraph -->
+<p><strong>Verify intermediate CA in DPS:</strong></p>
+<!-- /wp:paragraph -->
+
+<!-- wp:code {"className":"language-powershell"} -->
+<pre class="wp-block-code language-powershell"><code>$caEtag = $caVer.properties.etag
+az iot dps certificate verify --dps-name $dpsName --resource-group $resourceGroup --certificate-name $caCertName --path &quot;$certDir\ca\verification.pem&quot; --etag $caEtag
+Write-Host &quot;✓ Intermediate CA verified in DPS&quot; -ForegroundColor Green
+</code></pre>
+<!-- /wp:code -->
+
+<!-- wp:paragraph -->
+<p>6**) Create device bootstrap certificate:**</p>
+<!-- /wp:paragraph -->
+
+<!-- wp:paragraph -->
+<p><strong>Create device private key and CSR:</strong></p>
+<!-- /wp:paragraph -->
+
+<!-- wp:code {"className":"language-powershell"} -->
+<pre class="wp-block-code language-powershell"><code>openssl genrsa -out &quot;$certDir\device\device.key&quot; 2048
+openssl req -new -key &quot;$certDir\device\device.key&quot; -out &quot;$certDir\device\device.csr&quot; -subj &quot;/CN=$registrationId&quot;
+</code></pre>
+<!-- /wp:code -->
+
+<!-- wp:paragraph -->
+<p><strong>Create device extensions file:</strong></p>
+<!-- /wp:paragraph -->
+
+<!-- wp:code {"className":"language-powershell"} -->
+<pre class="wp-block-code language-powershell"><code>@&quot;
+&#91; v3_req ]
+basicConstraints = CA:FALSE
+keyUsage = critical, digitalSignature, keyEncipherment
+extendedKeyUsage = clientAuth
+subjectAltName = DNS:$registrationId
+authorityKeyIdentifier = keyid:always,issuer
+&quot;@ | Set-Content -Path &quot;$certDir\device\device-ext.cnf&quot; -Encoding ASCII
+</code></pre>
+<!-- /wp:code -->
+
+<!-- wp:paragraph -->
+<p><strong>Sign device certificate with intermediate CA:</strong></p>
+<!-- /wp:paragraph -->
+
+<!-- wp:code {"className":"language-powershell"} -->
+<pre class="wp-block-code language-powershell"><code>openssl x509 -req -in &quot;$certDir\device\device.csr&quot; -CA &quot;$certDir\ca\intermediate-ca.pem&quot; -CAkey &quot;$certDir\ca\intermediate-ca.key&quot; -out &quot;$certDir\device\device.pem&quot; -days 365 -sha256 -extfile &quot;$certDir\device\device-ext.cnf&quot; -extensions v3_req
+</code></pre>
+<!-- /wp:code -->
+
+<!-- wp:paragraph -->
+<p><strong>Create certificate chain files:</strong></p>
+<!-- /wp:paragraph -->
+
+<!-- wp:code {"className":"language-powershell"} -->
+<pre class="wp-block-code language-powershell"><code>Get-Content &quot;$certDir\ca\intermediate-ca.pem&quot;, &quot;$certDir\root\root-ca.pem&quot; | Set-Content -Path &quot;$certDir\device\chain.pem&quot; -Encoding ASCII
+Get-Content &quot;$certDir\device\device.pem&quot;, &quot;$certDir\ca\intermediate-ca.pem&quot;, &quot;$certDir\root\root-ca.pem&quot; | Set-Content -Path &quot;$certDir\device\device-full-chain.pem&quot; -Encoding ASCII
+Write-Host &quot;✓ Device bootstrap certificate created&quot; -ForegroundColor Green
+</code></pre>
+<!-- /wp:code -->
+
+<!-- wp:paragraph -->
+<p><strong>7) Create DPS enrollment group:</strong></p>
+<!-- /wp:paragraph -->
+
+<!-- wp:code {"className":"language-powershell"} -->
+<pre class="wp-block-code language-powershell"><code>az iot dps enrollment-group create --dps-name $dpsName --resource-group $resourceGroup --enrollment-id $enrollmentGroupName --ca-name &quot;$registrationId-intermediate&quot; --credential-policy &quot;cert-policy&quot; --provisioning-status enabled
+
+Write-Host &quot;✓ Enrollment group created with CSR-based certificate issuance&quot; -ForegroundColor Green
+</code></pre>
+<!-- /wp:code -->
+
+<!-- wp:paragraph -->
+<p><strong>8) Deploy to device:</strong></p>
+<!-- /wp:paragraph -->
+
+<!-- wp:paragraph -->
+<p>Copy to your device:</p>
+<!-- /wp:paragraph -->
+
+<!-- wp:list -->
+<ul class="wp-block-list"><!-- wp:list-item -->
+<li><code>$certDir\device\device.pem</code> - Bootstrap certificate</li>
+<!-- /wp:list-item -->
+<!-- wp:list-item -->
+<li><code>$certDir\device\device.key</code> - Device private key</li>
+<!-- /wp:list-item -->
+<!-- wp:list-item -->
+<li><code>$certDir\device\device-full-chain.pem</code> - Full certificate chain</li>
+<!-- /wp:list-item -->
+</ul>
+<!-- /wp:list -->
+
+<!-- wp:paragraph -->
+<p>Store keys securely (TPM/secure element if available).</p>
+<!-- /wp:paragraph -->
+
+<!-- wp:heading {"level":2} -->
+<h2 class="wp-block-heading">Setup Complete</h2>
+<!-- /wp:heading -->
+
+<!-- wp:paragraph -->
+<p>You've now completed all manual setup steps:</p>
+<!-- /wp:paragraph -->
+
+<!-- wp:paragraph -->
+<p><strong>✓ Certificate Authority Chain Created:</strong></p>
+<!-- /wp:paragraph -->
+
+<!-- wp:list -->
+<ul class="wp-block-list"><!-- wp:list-item -->
+<li>Root CA (uploaded and verified in DPS)</li>
+<!-- /wp:list-item -->
+<!-- wp:list-item -->
+<li>Intermediate CA (uploaded and verified in DPS)</li>
+<!-- /wp:list-item -->
+<!-- wp:list-item -->
+<li>Device bootstrap certificate (signed by intermediate CA)</li>
+<!-- /wp:list-item -->
+</ul>
+<!-- /wp:list -->
+
+<!-- wp:paragraph -->
+<p><strong>✓ DPS Enrollment Configured:</strong></p>
+<!-- /wp:paragraph -->
+
+<!-- wp:list -->
+<ul class="wp-block-list"><!-- wp:list-item -->
+<li>Enrollment group linked to intermediate CA</li>
+<!-- /wp:list-item -->
+<!-- wp:list-item -->
+<li>CSR-based certificate issuance enabled</li>
+<!-- /wp:list-item -->
+<!-- wp:list-item -->
+<li>Ready for device provisioning</li>
+<!-- /wp:list-item -->
+</ul>
+<!-- /wp:list -->
+
+<!-- wp:paragraph -->
+<p><strong>Certificate Files Created:</strong></p>
+<!-- /wp:paragraph -->
+
+<!-- wp:list -->
+<ul class="wp-block-list"><!-- wp:list-item -->
+<li>Root: <code>$certDir\root\root-ca.pem</code></li>
+<!-- /wp:list-item -->
+<!-- wp:list-item -->
+<li>Intermediate: <code>$certDir\ca\intermediate-ca.pem</code></li>
+<!-- /wp:list-item -->
+<!-- wp:list-item -->
+<li>Device: <code>$certDir\device\device.pem</code></li>
+<!-- /wp:list-item -->
+<!-- wp:list-item -->
+<li>Device Key: <code>$certDir\device\device.key</code></li>
+<!-- /wp:list-item -->
+<!-- wp:list-item -->
+<li>TLS Chain: <code>$certDir\device\chain.pem</code> (intermediate + root)</li>
+<!-- /wp:list-item -->
+<!-- wp:list-item -->
+<li>Full Chain: <code>$certDir\device\device-full-chain.pem</code> (leaf + intermediate + root)</li>
+<!-- /wp:list-item -->
+</ul>
+<!-- /wp:list -->
+
+<!-- wp:paragraph -->
+<p><strong>What Happens Next:</strong></p>
+<!-- /wp:paragraph -->
+
+<!-- wp:list {"ordered":true} -->
+<ol class="wp-block-list"><!-- wp:list-item -->
+<li>Deploy <code>device.pem</code>, <code>device.key</code>, and <code>device-full-chain.pem</code> to your device</li>
+<!-- /wp:list-item -->
+<!-- wp:list-item -->
+<li>Device boots and authenticates to DPS with bootstrap certificate</li>
+<!-- /wp:list-item -->
+<!-- wp:list-item -->
+<li>Device generates new key pair and submits Certificate Signing Request (CSR)</li>
+<!-- /wp:list-item -->
+<!-- wp:list-item -->
+<li>DPS forwards CSR to ADR issuing CA (via credential policy)</li>
+<!-- /wp:list-item -->
+<!-- wp:list-item -->
+<li>ADR issues operational certificate (Phase 2)</li>
+<!-- /wp:list-item -->
+<!-- wp:list-item -->
+<li>Device receives operational certificate from DPS</li>
+<!-- /wp:list-item -->
+<!-- wp:list-item -->
+<li>Device uses operational certificate for all IoT Hub connections</li>
+<!-- /wp:list-item -->
+</ol>
+<!-- /wp:list -->
+
+<!-- wp:paragraph -->
+<p><strong>For Detailed Explanations:</strong> See <a href="https://www.petecodes.co.uk/iot-hub-with-adr-and-certificate-management-part-4a">Understanding X.509 and CSR Workflows (Deep Dive)</a> for complete technical details, certificate architecture, and advanced scenarios.</p>
+<!-- /wp:paragraph -->
+
+<!-- wp:heading {"level":2} -->
+<h2 class="wp-block-heading">Certificate Renewal and Revocation</h2>
+<!-- /wp:heading -->
+
+<!-- wp:paragraph -->
+<p>The current IoT Hub certificate-management workflow supports operational
+certificate renewal without requiring the device to reprovision. This differs
+from the sample implementation's renewal logic; review the current
+<a href="https://learn.microsoft.com/en-us/azure/iot/iot-certificate-management-overview">certificate-management overview</a>
+and device workflow before relying on a fixed renewal interval.</p>
+<!-- /wp:paragraph -->
+
+<!-- wp:paragraph -->
+<p>Certificate management also supports revoking individual device certificates.
+Revocation blocks the affected certificate from connecting until the device
+receives a replacement. Intermediate CA revocation is not supported when that
+intermediate is signed by an external CA. ADR automatically rotates CAs before
+expiry; devices that don't migrate to replacement certificates during the
+transition can lose connectivity.</p>
+<!-- /wp:paragraph -->
+
+<!-- wp:heading {"level":2} -->
+<h2 class="wp-block-heading">Preview Limitations</h2>
+<!-- /wp:heading -->
+
+<!-- wp:paragraph -->
+<p>⚠️ <strong>Production Use:</strong> IoT Hub integration and certificate management remain in public preview and aren't recommended for production workloads.
+⚠️ <strong>Existing hubs:</strong> There is no upgrade path to add ADR integration; use a new IoT Hub.
+⚠️ <strong>DPS:</strong> Required for all IoT Hub preview scenarios, even if certificate management is disabled.</p>
+<!-- /wp:paragraph -->
+
+<!-- wp:heading {"level":2} -->
+<h2 class="wp-block-heading">Learn More</h2>
+<!-- /wp:heading -->
+
+<!-- wp:paragraph -->
+<p><strong>Official Microsoft Documentation:</strong></p>
+<!-- /wp:paragraph -->
+
+<!-- wp:list -->
+<ul class="wp-block-list"><!-- wp:list-item -->
+<li><a href="https://learn.microsoft.com/en-us/azure/iot-hub/iot-hub-what-is-new">What's New in IoT Hub</a></li>
+<!-- /wp:list-item -->
+<!-- wp:list-item -->
+<li><a href="https://learn.microsoft.com/en-us/azure/iot/iot-certificate-management-overview">Certificate Management Overview</a></li>
+<!-- /wp:list-item -->
+<!-- wp:list-item -->
+<li><a href="https://learn.microsoft.com/en-us/azure/iot/iot-certificate-management-concepts">Certificate Management Concepts</a></li>
+<!-- /wp:list-item -->
+<!-- wp:list-item -->
+<li><a href="https://learn.microsoft.com/en-us/azure/iot-hub/iot-hub-device-registry-setup">Azure IoT Hub Device Registry setup</a></li>
+<!-- /wp:list-item -->
+</ul>
+<!-- /wp:list -->
+
+<!-- wp:paragraph -->
+<p><strong>Deep Dive:</strong></p>
+<!-- /wp:paragraph -->
+
+<!-- wp:list -->
+<ul class="wp-block-list"><!-- wp:list-item -->
+<li><a href="https://www.petecodes.co.uk/iot-hub-with-adr-and-certificate-management-part-4a">Understanding X.509 and CSR Workflows (Deep Dive)</a> - Detailed technical explanation with manual steps</li>
+<!-- /wp:list-item -->
+</ul>
+<!-- /wp:list -->
+
+<!-- wp:heading {"level":2} -->
+<h2 class="wp-block-heading">Next Steps</h2>
+<!-- /wp:heading -->
+
+<!-- wp:paragraph -->
+<p>Now that you understand the certificate workflow, you'll configure enrollment groups to use these certificates:</p>
+<!-- /wp:paragraph -->
+
+<!-- wp:list -->
+<ul class="wp-block-list"><!-- wp:list-item -->
+<li>Creating X.509 enrollment groups</li>
+<!-- /wp:list-item -->
+<!-- wp:list-item -->
+<li>Linking ADR policies for operational certificate issuance</li>
+<!-- /wp:list-item -->
+<!-- wp:list-item -->
+<li>Testing provisioning with certificates</li>
+<!-- /wp:list-item -->
+</ul>
+<!-- /wp:list -->
+
+<!-- wp:separator -->
+<hr class="wp-block-separator has-alpha-channel-opacity"/>
+<!-- /wp:separator -->
+
+<!-- wp:paragraph -->
+<p><a href="https://www.petecodes.co.uk/iot-hub-with-adr-and-certificate-management-part-5/">The Device Application →</a></p>
+<!-- /wp:paragraph -->

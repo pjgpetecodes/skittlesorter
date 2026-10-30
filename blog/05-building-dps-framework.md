@@ -1,21 +1,26 @@
 # Building the Custom DPS Framework
 
+> **Release baseline:** This series uses the latest Azure IoT CLI preview
+> extension, `azure-iot` **1.0.0b2**, released **6 October 2026**. Last
+> reviewed **29 October 2026**. [Release notes](https://github.com/Azure/azure-iot-cli-extension/releases/tag/v1.0.0b2).
+
 [← Previous: Configuring Enrollment Groups](04-configuring-enrollment-groups.md) | [Next: Building the Device Application →](06-building-device-application.md)
 
 ---
 
-In this post, we'll dive into the **custom Azure DPS framework** that enables access to preview API features not yet available in the official Microsoft SDK. We'll explore why this framework exists, how it works, and how to use it in your applications.
+In this post, we'll dive into the **custom Azure DPS framework** used by this
+repository's sample to implement its CSR provisioning flow over MQTT. This is
+an implementation choice for this sample; consult current Microsoft
+documentation for the latest API and SDK support before choosing a client for
+another deployment.
 
 ## Why a Custom Framework?
 
-As of January 2026, the official `Microsoft.Azure.Devices.Provisioning.Client` NuGet package does **not** support:
-
-❌ **DPS Preview API** (`2025-07-01-preview`)  
-❌ **CSR-based X.509 certificate issuance**  
-❌ **Certificate issuance workflow** during provisioning  
-❌ **Direct MQTT protocol** for DPS communication  
-
-To access these features, we built a **custom framework** that implements the DPS MQTT protocol directly.
+The framework in this repository uses the `2025-07-01-preview` API and a
+direct MQTT implementation for its CSR-based sample. This page describes that
+code path and does not make a general claim about current Microsoft SDK
+capabilities. IoT Hub integration with ADR and certificate management remain
+in public preview; see [What's Changed since the Previous Preview](07-whats-changed-since-previous-preview.md).
 
 ## Framework Architecture
 

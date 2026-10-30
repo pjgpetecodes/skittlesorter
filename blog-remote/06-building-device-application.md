@@ -1,6 +1,28 @@
 ## **The Device Application**
 
+> **Release baseline:** This series uses the latest Azure IoT CLI preview
+> extension, `azure-iot` **1.0.0b2**, released **6 October 2026**. Last
+> reviewed **29 October 2026**. [Release notes](https://github.com/Azure/azure-iot-cli-extension/releases/tag/v1.0.0b2).
+
 In this post, we'll walk through the complete IoT device application that uses DPS provisioning with CSR-based certificate issuance. Rather than building from scratch, if you've not already done so, we'll clone the repository, run the setup automation, configure the application, and explore how the major components work together.
+
+### Current preview status
+
+IoT Hub integration with Azure Device Registry (ADR) and certificate
+management remains in **public preview** and isn't recommended for production.
+Create a **new IoT Hub** for the integration; existing hubs have no upgrade
+path. DPS is required for every IoT Hub preview scenario. The current supported
+regions are Australia East, Japan East, Central US, and UK South. ADR
+integration and certificate management are free during preview, while IoT Hub
+and DPS are billed at standard rates.
+
+Certificate management issues operational X.509 certificates after a device
+authenticates with a separate onboarding credential. The current service
+supports renewal and revocation of operational certificates and automatic CA
+rotation. The renewal code later in this article describes this repository's
+sample implementation, not the complete current Azure certificate-management
+workflow. See the [current Learn deployment guide](https://learn.microsoft.com/en-us/azure/iot-hub/iot-hub-device-registry-setup)
+before creating or changing Azure resources.
 
 ```wordpress-block
 <!-- wp:heading {"textColor":"#f6f6f4"} -->
@@ -32,12 +54,12 @@ In this post, we'll walk through the complete IoT device application that uses D
 <!-- /wp:list -->
 ```
 
-### Why a Customer DPS Framework?
+### Why This Sample Uses a Custom DPS Framework
 
 ```wordpress-block
 <!-- wp:quote -->
 <blockquote class="wp-block-quote"><!-- wp:paragraph -->
-<p>Microsoft's official C# SDK doesn't yet support the&nbsp;<code>2025-07-01-preview</code>&nbsp;API required for CSR-based certificate issuance. I've built a custom MQTT-based DPS framework that handles the preview API features.</p>
+<p>This repository's sample uses a custom MQTT-based DPS framework for its CSR-based certificate issuance flow. Check the current Microsoft Learn documentation for service requirements and supported client workflows.</p>
 <!-- /wp:paragraph -->
 
 <!-- wp:paragraph {"className":"is-style-warning","fontSize":"medium"} -->
@@ -94,58 +116,28 @@ git clone https://github.com/pjgpetecodes/skittlesorter.git
 cd skittlesorter
 ```
 
-#### Step 2: Run Full Azure Setup (If Not Already Done)
+#### Step 2: Create the Azure Resources
 
-If you haven't already run the Azure setup automation from [Post 02](https://file+.vscode-resource.vscode-cdn.net/c%3A/repos/skittlesorter/blog/02-creating-azure-resources.md), run the comprehensive setup script to create all Azure resources, certificates, and enrollment groups:
+Follow our updated [Azure CLI walkthrough in Part 3](https://www.petecodes.co.uk/iot-hub-with-adr-and-certificate-management-part-3/)
+to create the ADR namespace, a **new** IoT Hub, and DPS in a supported region.
+The commands are aligned with the current
+[Microsoft Learn Azure CLI deployment method](https://learn.microsoft.com/en-us/azure/iot-hub/iot-hub-device-registry-setup?pivots=azure-cli).
+For this application's X.509 onboarding credentials, also complete the
+bootstrap certificate and enrollment steps in
+[Part 4](https://www.petecodes.co.uk/iot-hub-with-adr-and-certificate-management-part-4/).
 
-**Set your parameters:**
-
-```powershell
-$resourceGroup = "my-iot-rg"
-$location = "eastus"
-$iotHubName = "my-iothub-001"
-$dpsName = "my-dps-001"
-$adrNamespace = "my-adrnamespace-001"
-$userIdentity = "my-uami"
-$registrationId = "my-device"
-```
-
-**Run the full setup script:**
-
-```powershell
-cd scripts
-
-.\setup-x509-dps-adr.ps1 `
-  -ResourceGroup $resourceGroup `
-  -Location $location `
-  -IoTHubName $iotHubName `
-  -DPSName $dpsName `
-  -AdrNamespace $adrNamespace `
-  -UserIdentity $userIdentity `
-  -RegistrationId $registrationId
-```
-
-This script will:
-
--   Create resource group, IoT Hub, DPS, and ADR namespace
--   Generate root CA, intermediate CA, and device bootstrap certificates
--   Upload and verify certificates with DPS
--   Create enrollment group with credential policy
--   Link all services together
-
-**Save the output values:**
-
--   **IdScope**: From DPS (format: `0ne00XXXXXX`)
--   **Hub Hostname**: Your IoT Hub endpoint
--   **Certificate Paths**: Location of device certificates
+All IoT Hub preview scenarios require DPS. If using certificate management,
+configure the onboarding credential and certificate policy, link DPS to the
+namespace and new hub, sync the policy, and assign it to the enrollment. Keep
+the resulting DPS ID Scope, hub hostname, and onboarding credential for the
+application configuration.
 
 #### Step 3: Configure the Application
 
-Update `appsettings.json` with your values from the setup script:
+Update `appsettings.json` with the values from your reviewed setup:
 
 ```json
 {
-  {
   "Hardware": {
     "MockMode": {
       "EnableMockColorSensor": true,
@@ -187,9 +179,9 @@ Update `appsettings.json` with your values from the setup script:
   },
   "Adr": {
     "Enabled": true,
-    "SubscriptionId": "&lt;YOUR_SUBSCRIPTION_KEY>",
-    "ResourceGroupName": "&lt;YOUR_RESOURCE_GROUP",
-    "NamespaceName": "&lt;YOUR_ADR_NAMESPACE_NAME"
+    "SubscriptionId": "<YOUR_SUBSCRIPTION_ID>",
+    "ResourceGroupName": "<YOUR_RESOURCE_GROUP>",
+    "NamespaceName": "<YOUR_ADR_NAMESPACE_NAME>"
   }  
 }
 ```
@@ -285,7 +277,7 @@ Navigate to the Scripts folder and run the setup script with the following param
 
 ```powershell
 cd ./scripts
-./setup-x509-attestation.ps1 -RegistrationId "&lt;new-device-id>" -ReuseCa -CaRegistrationId "skittlesorter" -SkipEnrollment
+./setup-x509-attestation.ps1 -RegistrationId "<new-device-id>" -ReuseCa -CaRegistrationId "skittlesorter" -SkipEnrollment
 ```
 
 Then, you can copy the following three files to your device to the scripts/certs folder;
@@ -327,8 +319,8 @@ at System.Security.Cryptography.X509Certificates.X509Certificate2..ctor
 **Check certificate files:**
 
 ```powershell
-Test-Path "./scripts/certs/device/&lt;YOUR_DEVICE_REGISTRATION_ID>-device.pem"
-Test-Path "./scripts/certs/device/&lt;YOUR_DEVICE_REGISTRATION_ID>-device.key"
+Test-Path "./scripts/certs/device/<YOUR_DEVICE_REGISTRATION_ID>-device.pem"
+Test-Path "./scripts/certs/device/<YOUR_DEVICE_REGISTRATION_ID>-device.key"
 ```
 
 **Problem: "DPS registration failed: Unauthorized"**
@@ -340,7 +332,7 @@ DPS initialization failed: Registration failed with status: Unauthorized
 **Solution:**
 
 -   Verify your enrollment group exists in DPS
--   Check that CA certificates are uploaded and **verified** in DPS (see [Post 03](https://file+.vscode-resource.vscode-cdn.net/c%3A/repos/skittlesorter/blog/03-x509-and-csr-workflows.md))
+-   Check that CA certificates are uploaded and **verified** in DPS (see [Understanding X.509 and CSR Workflows](https://www.petecodes.co.uk/iot-hub-with-adr-and-certificate-management-part-4/))
 -   Confirm `IdScope` in `appsettings.json` matches DPS
 
 **Verify enrollment group:**
@@ -435,9 +427,9 @@ dotnet run
 
 **Still having issues?**
 
-1.  Check Azure resources are properly configured ([Post 02](https://file+.vscode-resource.vscode-cdn.net/c%3A/repos/skittlesorter/blog/02-creating-azure-resources.md))
-2.  Verify certificates were created and verified ([Post 03](https://file+.vscode-resource.vscode-cdn.net/c%3A/repos/skittlesorter/blog/03-x509-and-csr-workflows.md))
-3.  Review enrollment group configuration ([Post 04](https://file+.vscode-resource.vscode-cdn.net/c%3A/repos/skittlesorter/blog/04-configuring-enrollment-groups.md))
+1.  Check Azure resources are properly configured ([Creating DPS, IoT Hub and ADR Instances](https://www.petecodes.co.uk/iot-hub-with-adr-and-certificate-management-part-3/))
+2.  Verify certificate and CSR setup ([Understanding X.509 and CSR Workflows](https://www.petecodes.co.uk/iot-hub-with-adr-and-certificate-management-part-4/))
+3.  Review the current [Microsoft Learn deployment guide](https://learn.microsoft.com/en-us/azure/iot-hub/iot-hub-device-registry-setup) for enrollment and credential-policy configuration
 4.  Check DPS and IoT Hub logs in Azure Portal
 5.  Enable verbose logging in `appsettings.json`:
 
@@ -620,7 +612,9 @@ var deviceClient = DeviceClient.Create(
 
 **Why I built it:**
 
-Microsoft's official C# Device Provisioning SDK doesn't support the `2025-07-01-preview` API version required for CSR-based certificate issuance. The preview features include:
+This repository's custom DPS framework implements the `2025-07-01-preview`
+CSR workflow used by the sample application. The service features demonstrated
+include:
 
 -   Certificate Signing Request (CSR) submission during registration
 -   Receiving issued certificates in the registration response
@@ -668,7 +662,7 @@ This generates a CSR using the new operational key pair, not the bootstrap certi
 **2\. MQTT Transport Handler** (ProvisioningTransportHandlerMqtt.cs)
 
 ```csharp
-public async Task&lt;DeviceRegistrationResult> RegisterAsync(
+public async Task<DeviceRegistrationResult> RegisterAsync(
     string idScope,
     SecurityProvider security)
 {
@@ -687,7 +681,7 @@ public async Task&lt;DeviceRegistrationResult> RegisterAsync(
     
     // Publish registration request
     await mqttClient.PublishAsync(
-        $"$dps/registrations/PUT/iotdps-register/?$rid={operationId}&amp;api-version=2025-07-01-preview",
+        $"$dps/registrations/PUT/iotdps-register/?$rid={operationId}&api-version=2025-07-01-preview",
         JsonSerializer.Serialize(payload)
     );
     
@@ -730,7 +724,7 @@ public class ProvisioningDeviceClient
         );
     }
     
-    public async Task&lt;DeviceRegistrationResult> RegisterAsync()
+    public async Task<DeviceRegistrationResult> RegisterAsync()
     {
         // Delegate to transport handler
         return await _transport.RegisterAsync(_idScope, _security);
@@ -776,7 +770,12 @@ public async Task SendSkittleColorTelemetryAsync(string color)
 
 #### Certificate Renewal
 
-The application monitors certificate expiration and triggers renewal:
+The following example shows this repository's sample expiration check and
+DPS-based refresh behavior. It isn't the complete current Azure
+certificate-management renewal flow: current IoT Hub workflows support
+operational-certificate renewal without requiring reprovisioning. Review the
+[current certificate-management overview](https://learn.microsoft.com/en-us/azure/iot/iot-certificate-management-overview)
+before using or adapting this code.
 
 ```csharp
 public static async Task CheckCertificateRenewal(DpsConfiguration dpsCfg)
@@ -815,15 +814,18 @@ Azure Device Registry provides device identity and metadata management that work
 
 **🔹 Credential Management**
 
--   Credential policies for certificate issuance
--   Automated lifecycle management
--   Certificate rotation
+-   Policies for operational-certificate issuance
+-   Certificate issuance, renewal, and revocation
+-   CA lifecycle management, including automatic CA rotation
 
 **🔹 Multi-Hub Support**
 
--   Device identity independent of IoT Hub
--   Move devices between hubs without re-provisioning
--   Query devices across multiple hubs
+-   A namespace can be linked to multiple IoT Hubs
+-   Devices are represented as Azure resources in the namespace
+-   Query and govern resources across hubs sharing a namespace
+
+Don't infer that moving a device between hubs avoids reprovisioning; follow
+the current DPS and IoT Hub documentation for device migration behavior.
 
 #### ADR Client Implementation
 
@@ -840,7 +842,7 @@ var adrClient = new AdrDeviceRegistryClient();
 var devices = await adrClient.ListDevicesAsync(
     subscriptionId: "your-subscription-id",
     resourceGroupName: "my-iot-rg",
-    namespaceName: "my-adrnamespace-001"
+    namespaceName: "my-adrnamespace-uniquesuffix"
 );
 
 Console.WriteLine($"Found {devices.Count} devices:");
@@ -853,7 +855,7 @@ foreach (var device in devices)
 var deviceDetails = await adrClient.GetDeviceAsync(
     subscriptionId: "your-subscription-id",
     resourceGroupName: "my-iot-rg",
-    namespaceName: "my-adrnamespace-001",
+    namespaceName: "my-adrnamespace-uniquesuffix",
     deviceName: "my-device"
 );
 
@@ -885,7 +887,7 @@ Enable automatic device metadata updates in `appsettings.json`:
     "Enabled": true,
     "SubscriptionId": "your-subscription-id",
     "ResourceGroupName": "my-iot-rg",
-    "NamespaceName": "my-adrnamespace-001",
+    "NamespaceName": "my-adrnamespace-uniquesuffix",
     "DeviceUpdate": {
       "Enabled": true,
       "Attributes": {
@@ -963,7 +965,7 @@ az iot hub monitor-events `
 
 ```powershell
 az iot ops asset endpoint device list `
-  --namespace "my-adrnamespace-001" `
+  --namespace "my-adrnamespace-uniquesuffix" `
   --resource-group "my-iot-rg" `
   --output table
 ```
@@ -1053,15 +1055,15 @@ This script will remove your resources safely.
 ```powershell
 cd scripts
 .\remove-resources.ps1 `
-  -DpsName "&lt;your-dps-name>" `
-  -IotHubName "&lt;your-iothub-name>" `
-  -ResourceGroup "&lt;your-resource-group>" `
-  -EnrollmentGroupName "&lt;your-enrollment-group-name>" `
-  -DeviceId "&lt;your-device-id>" `
-  -AdrNamespace "&lt;your-adr-namespace>" `
-  -UserIdentity "&lt;your-user-assigned-identity-name>" `
-  -RootCertName "&lt;your-root-cert-name>" `
-  -IntermediateCertName "&lt;your-intermediate-cert-name>"
+  -DpsName "<your-dps-name>" `
+  -IotHubName "<your-iothub-name>" `
+  -ResourceGroup "<your-resource-group>" `
+  -EnrollmentGroupName "<your-enrollment-group-name>" `
+  -DeviceId "<your-device-id>" `
+  -AdrNamespace "<your-adr-namespace>" `
+  -UserIdentity "<your-user-assigned-identity-name>" `
+  -RootCertName "<your-root-cert-name>" `
+  -IntermediateCertName "<your-intermediate-cert-name>"
 ```
 
 **What it does:**
@@ -1077,14 +1079,14 @@ cd scripts
 ```powershell
 cd scripts
 .\clean-test-start.ps1 `
-  -DpsName "&lt;your-dps-name>" `
-  -IotHubName "&lt;your-iothub-name>" `
-  -ResourceGroup "&lt;your-resource-group>" `
-  -EnrollmentGroupName "&lt;your-enrollment-group-name>" `
-  -DeviceId "&lt;your-device-id>" `
-  -AdrNamespace "&lt;your-adr-namespace>" `
-  -RootCertName "&lt;your-root-cert-name>" `
-  -IntermediateCertName "&lt;your-intermediate-cert-name>" `
+  -DpsName "<your-dps-name>" `
+  -IotHubName "<your-iothub-name>" `
+  -ResourceGroup "<your-resource-group>" `
+  -EnrollmentGroupName "<your-enrollment-group-name>" `
+  -DeviceId "<your-device-id>" `
+  -AdrNamespace "<your-adr-namespace>" `
+  -RootCertName "<your-root-cert-name>" `
+  -IntermediateCertName "<your-intermediate-cert-name>" `
   -RemoveCaCerts
 ```
 
@@ -1101,7 +1103,7 @@ This ensures clean provisioning from scratch every time.
 
 ### Key Takeaways
 
-✅ **Custom DPS Framework Required** - Official SDK doesn't support preview API  
+✅ **Custom DPS Framework** - This sample uses a custom MQTT implementation
 ✅ **Two-Phase Authentication** - Bootstrap cert for DPS, operational cert for IoT Hub  
 ✅ **CSR-Based Issuance** - Private key never leaves device  
 ✅ **MQTT Protocol** - Direct protocol implementation for preview features  
@@ -1113,11 +1115,11 @@ This ensures clean provisioning from scratch every time.
 ✅  Cloned the repository and ran full setup automation  
 ✅ Configured the device application with Azure resources  
 ✅ Understood the main program flow and component architecture  
-✅ Explored the custom DPS framework and why it's needed  
+✅ Explored the custom DPS framework used by this sample
 ✅ Learned how CSR-based provisioning works end-to-end  
 ✅ Integrated with Azure Device Registry for metadata management  
 ✅ Tested the complete solution with telemetry monitoring  
-✅ Prepared for production deployment
+✅ Reviewed the documented preview limitations and production warning
 
 ### Further Learning
 
@@ -1129,8 +1131,8 @@ This ensures clean provisioning from scratch every time.
 ### Questions or Issues?
 
 -   Open an issue on GitHub
--   Check the [Troubleshooting.md](https://file+.vscode-resource.vscode-cdn.net/c%3A/repos/skittlesorter/docs/Troubleshooting.md) guide
--   Review [Azure Setup documentation](https://file+.vscode-resource.vscode-cdn.net/c%3A/repos/skittlesorter/docs/Azure-Setup.md)
+-   Check the [Troubleshooting.md guide](https://github.com/pjgpetecodes/skittlesorter/blob/main/docs/Troubleshooting.md)
+-   Review the [current Azure setup guide](https://learn.microsoft.com/en-us/azure/iot-hub/iot-hub-device-registry-setup)
 
 Thank you for following this series! Happy IoT building! 🚀
 

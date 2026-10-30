@@ -1,0 +1,158 @@
+<!-- wp:heading {"level":1} -->
+<h1 class="wp-block-heading">What's Changed since the Previous Preview?</h1>
+<!-- /wp:heading -->
+
+<!-- wp:paragraph -->
+<p>The earlier posts in this series captured an earlier view of Azure IoT Hub's
+integration with Azure Device Registry (ADR) and Microsoft-backed X.509
+certificate management. This update aligns the series with the current
+Microsoft Learn guidance.</p>
+<!-- /wp:paragraph -->
+
+<!-- wp:paragraph -->
+<p><strong>Important:</strong> IoT Hub integration with ADR and certificate management is still
+in public preview and isn't recommended for production workloads. ADR is
+generally available for Azure IoT Operations, but its IoT Hub integration
+remains in preview.</p>
+<!-- /wp:paragraph -->
+
+<!-- wp:heading {"level":2} -->
+<h2 class="wp-block-heading">Current guidance at a glance</h2>
+<!-- /wp:heading -->
+
+<!-- wp:heading {"level":3} -->
+<h3 class="wp-block-heading">DPS is required for every IoT Hub preview scenario</h3>
+<!-- /wp:heading -->
+
+<!-- wp:paragraph -->
+<p>The current guidance requires Device Provisioning Service (DPS) for all IoT
+Hub preview scenarios, including deployments that use ADR without certificate
+management. Certificate management is optional; DPS is not.</p>
+<!-- /wp:paragraph -->
+
+<!-- wp:heading {"level":3} -->
+<h3 class="wp-block-heading">Existing IoT Hubs can't be upgraded</h3>
+<!-- /wp:heading -->
+
+<!-- wp:paragraph -->
+<p>To try ADR integration, create a new IoT Hub. Existing hubs continue operating,
+but Microsoft documents no upgrade path to add the integration to an existing
+hub. Deploy IoT Hub, ADR, and DPS in one of the currently supported regions:
+Australia East, Japan East, Central US, or UK South.</p>
+<!-- /wp:paragraph -->
+
+<!-- wp:paragraph -->
+<p>Starting in October 2026, ADR integration and certificate management are
+available at no cost during preview. IoT Hub and DPS are billed at their
+standard rates.</p>
+<!-- /wp:paragraph -->
+
+<!-- wp:heading {"level":3} -->
+<h3 class="wp-block-heading">Onboarding and operational certificates are different</h3>
+<!-- /wp:heading -->
+
+<!-- wp:paragraph -->
+<p>Certificate management issues and manages <strong>operational</strong> certificates used
+for device authentication after onboarding. A device still uses a separate
+onboarding credential with DPS; supported onboarding methods include
+third-party X.509 certificates, symmetric keys, and TPM. During provisioning,
+the device submits a CSR and DPS coordinates issuance through the ADR
+namespace's certificate policy.</p>
+<!-- /wp:paragraph -->
+
+<!-- wp:paragraph -->
+<p>The current documentation describes certificate issuance, renewal, and
+revocation, as well as CA synchronization with linked IoT Hubs. It supports a
+cloud PKI with one root CA and up to three intermediate CAs per namespace, and
+also describes bringing an external root CA. Revocation behavior has
+limitations for intermediate CAs signed by an external CA.</p>
+<!-- /wp:paragraph -->
+
+<!-- wp:heading {"level":3} -->
+<h3 class="wp-block-heading">Updated CLI walkthrough</h3>
+<!-- /wp:heading -->
+
+<!-- wp:paragraph -->
+<p>Microsoft's current setup guide covers the namespace, certificate policy,
+managed identities and role assignments, new IoT Hub, DPS links, policy
+synchronization, and enrollment configuration. For Azure CLI deployments, it
+requires the preview-enabled Azure IoT extension at version 0.30.0b2 or later.
+The series retains its own step-by-step Azure CLI walkthrough in
+<a href="https://www.petecodes.co.uk/iot-hub-with-adr-and-certificate-management-part-3/">Part 3</a>,
+updated to follow that method. It covers preview-extension installation,
+namespace certificate management, a <code>GEN2</code> hub, both namespace roles,
+DPS linking, credential synchronization, and enrollment-policy assignment,
+with verification commands along the way.</p>
+<!-- /wp:paragraph -->
+
+<!-- wp:heading {"level":2} -->
+<h2 class="wp-block-heading">What changed in this article series</h2>
+<!-- /wp:heading -->
+
+<!-- wp:paragraph -->
+<p>The earlier posts included a quick-start path using the repository's setup
+scripts, described some sample implementation details as requirements of the
+preview, and stated that certificate revocation wasn't supported. The revised
+articles now:</p>
+<!-- /wp:paragraph -->
+
+<!-- wp:list -->
+<ul class="wp-block-list"><!-- wp:list-item -->
+<li>Keep the CLI walkthrough in the series and update its commands and
+verification steps against Microsoft's current Azure CLI deployment method,
+including the supported-region list.</li>
+<!-- /wp:list-item -->
+<!-- wp:list-item -->
+<li>Update the PowerShell setup scripts to match that workflow: reinstall and
+validate <code>azure-iot</code> 0.30.0b2 or later, restrict the full-setup script to
+supported regions, enable certificate management when creating ADR, and
+assign both required namespace roles. The X.509 attestation helper now
+defaults to the <code>cert-policy</code> name created by the full-setup script.</li>
+<!-- /wp:list-item -->
+<!-- wp:list-item -->
+<li>Clarify that DPS is required even when certificate management isn't enabled,
+and that existing IoT Hubs have no upgrade path.</li>
+<!-- /wp:list-item -->
+<!-- wp:list-item -->
+<li>Separate the device's onboarding credential from its ADR-issued operational
+certificate.</li>
+<!-- /wp:list-item -->
+<!-- wp:list-item -->
+<li>Reflect the documented renewal and revocation lifecycle, while noting the
+documented limitation for externally signed intermediate CAs.</li>
+<!-- /wp:list-item -->
+<!-- wp:list-item -->
+<li>Describe the custom MQTT-based DPS framework as an implementation choice in
+this repository's sample, not a general requirement or a verified statement
+about all official client SDKs.</li>
+<!-- /wp:list-item -->
+</ul>
+<!-- /wp:list -->
+
+<!-- wp:paragraph -->
+<p>These edits align the articles to current documentation; they don't establish
+that every documented capability was newly introduced in this preview.</p>
+<!-- /wp:paragraph -->
+
+<!-- wp:heading {"level":2} -->
+<h2 class="wp-block-heading">Official references</h2>
+<!-- /wp:heading -->
+
+<!-- wp:list -->
+<ul class="wp-block-list"><!-- wp:list-item -->
+<li><a href="https://learn.microsoft.com/en-us/azure/iot-hub/iot-hub-what-is-new">What's new in Azure IoT Hub?</a></li>
+<!-- /wp:list-item -->
+<!-- wp:list-item -->
+<li><a href="https://learn.microsoft.com/en-us/azure/iot-hub/iot-hub-device-registry-overview">Azure Device Registry integration with IoT Hub</a></li>
+<!-- /wp:list-item -->
+<!-- wp:list-item -->
+<li><a href="https://learn.microsoft.com/en-us/azure/iot-hub/iot-hub-device-registry-setup">Deploy IoT Hub with Device Registry integration and certificate management</a></li>
+<!-- /wp:list-item -->
+<!-- wp:list-item -->
+<li><a href="https://learn.microsoft.com/en-us/azure/iot/iot-certificate-management-overview">What is certificate management?</a></li>
+<!-- /wp:list-item -->
+<!-- wp:list-item -->
+<li><a href="https://learn.microsoft.com/en-us/azure/iot/iot-certificate-management-concepts">Key concepts for certificate management</a></li>
+<!-- /wp:list-item -->
+</ul>
+<!-- /wp:list -->

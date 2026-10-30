@@ -1,12 +1,21 @@
 # Understanding X.509 and CSR Workflows
 
+> **Release baseline:** This series uses the latest Azure IoT CLI preview
+> extension, `azure-iot` **1.0.0b2**, released **6 October 2026**. Last
+> reviewed **29 October 2026**. [Release notes](https://github.com/Azure/azure-iot-cli-extension/releases/tag/v1.0.0b2).
+
 [← Previous: Creating Azure Resources](02-creating-azure-resources.md) | [Next: Configuring Enrollment Groups →](04-configuring-enrollment-groups.md)
 
 ---
 
-This series uses Microsoft's **new** certificate management (preview) that enables devices to receive X.509 certificates automatically during provisioning. This post provides a high-level overview and points you to resources for implementation.
+This series covers Microsoft's certificate management preview, which lets
+devices receive operational X.509 certificates during provisioning. The
+device still authenticates to DPS with a separate onboarding credential.
 
-> **🆕 Preview Feature:** Microsoft-backed X.509 certificate management was announced in November 2025 and is currently in public preview. **Not recommended for production workloads.** For details, see [Certificate Management Overview](https://learn.microsoft.com/en-us/azure/iot-hub/iot-hub-certificate-management-overview)
+> **Preview:** IoT Hub integration with ADR and certificate management remain
+> in public preview and aren't recommended for production workloads. For
+> current guidance, see [What's Changed since the Previous Preview](07-whats-changed-since-previous-preview.md)
+> and the [Certificate Management Overview](https://learn.microsoft.com/en-us/azure/iot/iot-certificate-management-overview).
 
 ---
 
@@ -22,9 +31,9 @@ The new certificate management service makes use of a **two-phase approach**:
 
 ### Phase 2: Operational Certificates (Microsoft-Managed)
 - **Purpose:** Device authenticates to IoT Hub for ongoing operations
-- **How it works:** Automatically issued by ADR during provisioning via CSR
+- **How it works:** DPS coordinates issuance through the ADR certificate policy after validating the onboarding credential
 - **Generated on:** Device itself (private key never leaves device)
-- **Lifespan:** Short-lived (1-90 days), automatically renewed
+- **Lifespan:** Set by the assigned policy (1–30 days in the current setup guide); renewal is supported
 - **Security:** Higher security, no key transport
 
 ## How It Works
@@ -88,7 +97,7 @@ sequenceDiagram
 Azure Device Registry (ADR) manages a dedicated PKI for your namespace:
 
 - **Root CA (Credential):** One unique root CA per ADR namespace, managed by Microsoft using Azure Managed HSM
-- **Issuing CA (Policy):** One issuing CA per policy, defines certificate validity (1-90 days)
+- **Issuing CA (Policy):** Certificate policy controls certificate validity (1–30 days in the current setup guide)
 - **Leaf Certificate (Operational):** End-entity certificate issued to device by issuing CA
 
 The issuing CA certificates are automatically synced from ADR to all linked IoT Hubs, enabling Hub to authenticate devices.
@@ -99,7 +108,7 @@ The issuing CA certificates are automatically synced from ADR to all linked IoT 
 |---------|-------------|
 | **Algorithms** | ECC (ECDSA) with NIST P-384 curve, SHA-384 hashing |
 | **HSM Keys** | Azure Managed HSM (no additional subscription required) |
-| **Certificate Validity** | 1-90 days (configurable per policy) |
+| **Certificate Validity** | 1–30 days in the current setup guide (configurable per policy) |
 | **Protocols** | HTTP and MQTT during provisioning |
 | **Renewal** | Device-initiated via DPS registration call |
 | **CA Sync** | Automatic sync from ADR to linked IoT Hubs |
@@ -108,7 +117,7 @@ The issuing CA certificates are automatically synced from ADR to all linked IoT 
 
 For this series, you'll create **onboarding credentials** (Phase 1) - we provide automation scripts:
 
-> **Preview Reminder:** Microsoft-backed X.509 certificate management is **new and in public preview**. Operational certificates (Phase 2) are issued by ADR during provisioning and are **not recommended for production workloads** during preview.
+> **Preview Reminder:** Microsoft-backed X.509 certificate management remains in public preview. Operational certificates (Phase 2) are issued by ADR during provisioning and aren't recommended for production workloads during preview.
 
 ### Quick Setup: Automated X.509 Bootstrap Certificates (if you didn't already run the full setup script!)
 
@@ -360,7 +369,7 @@ Write-Host "✓ Device bootstrap certificate created" -ForegroundColor Green
 **7) Create DPS enrollment group:**
 
 ```powershell
-az iot dps enrollment-group create --dps-name $dpsName --resource-group $resourceGroup --enrollment-id $enrollmentGroupId --ca-name "$registrationId-intermediate" --credential-policy "default" --provisioning-status enabled
+az iot dps enrollment-group create --dps-name $dpsName --resource-group $resourceGroup --enrollment-id $enrollmentGroupId --ca-name "$registrationId-intermediate" --credential-policy "cert-policy" --provisioning-status enabled
 
 Write-Host "✓ Enrollment group created with CSR-based certificate issuance" -ForegroundColor Green
 ```
@@ -421,9 +430,14 @@ Devices are responsible for monitoring operational certificate expiration:
 
 ## Preview Limitations
 
-⚠️ **Certificate Revocation:** Not supported in preview - disable device in IoT Hub instead
-⚠️ **Production Use:** Not recommended during preview
-⚠️ **SDK Support:** Official Microsoft SDKs don't yet support `2025-07-01-preview` API
+⚠️ **Certificate lifecycle:** Individual device certificates can be revoked.
+Revocation of intermediate CAs signed by an external CA has limitations; see
+the current service documentation.
+⚠️ **Production Use:** IoT Hub integration and certificate management remain
+in public preview and aren't recommended for production.
+⚠️ **Implementation:** This repository's sample uses a custom MQTT-based DPS
+framework for its CSR provisioning flow. This is a sample implementation
+choice, not a general requirement for IoT Hub or ADR deployments.
 
 ## Learn More
 

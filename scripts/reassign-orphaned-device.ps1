@@ -34,23 +34,26 @@ az iot hub create `
 	--resource-group pjgiothubdemo003 `
 	--location northeurope `
 	--sku GEN2 `
-	--mi-user-assigned $UAMI_RESOURCE_ID `
-	--ns-resource-id $adrResourceId `
-	--ns-identity-id $UAMI_RESOURCE_ID
-
-$ADR_PRINCIPAL_ID = az iot adr ns show --name pjgadrnamespace003 --resource-group pjgiothubdemo003 --query "identity.principalId" -o tsv
-
-echo $ADR_PRINCIPAL_ID
+	--mi-user-assigned $UAMI_RESOURCE_ID
 
 $HUB_RESOURCE_ID = az iot hub show --name pjgiothubdemo0032 --resource-group pjgiothubdemo003 --query id -o tsv
 
 echo $HUB_RESOURCE_ID
 
-az role assignment create --assignee $ADR_PRINCIPAL_ID --role "Contributor" --scope $HUB_RESOURCE_ID
+az iot dps create --name pjgiothubdemodps003 --resource-group pjgiothubdemo003 --location northeurope --mi-user-assigned $UAMI_RESOURCE_ID
 
-az role assignment create --assignee $ADR_PRINCIPAL_ID --role "IoT Hub Registry Contributor" --scope $HUB_RESOURCE_ID
+$DPS_RESOURCE_ID = az iot dps show --name pjgiothubdemodps003 --resource-group pjgiothubdemo003 --query id -o tsv
 
-az iot dps create --name pjgiothubdemodps003 --resource-group pjgiothubdemo003 --location northeurope --mi-user-assigned $UAMI_RESOURCE_ID --ns-resource-id $adrResourceId --ns-identity-id $UAMI_RESOURCE_ID
+# The 1.0.0b2 workflow links DPS before the Hub and configures required service roles.
+az iot adr ns link add `
+	--namespace pjgadrnamespace003 `
+	--resource-group pjgiothubdemo003 `
+	--dps-endpoint-name pjgiothubdemodps003 `
+	--dps-resource-id $DPS_RESOURCE_ID `
+	--dps-user-assigned-mi $UAMI_RESOURCE_ID `
+	--hub-endpoint-name pjgiothubdemo0032 `
+	--hub-resource-id $HUB_RESOURCE_ID `
+	--hub-user-assigned-mi $UAMI_RESOURCE_ID
 
 # Remaining setup to provision orphaned device through new DPS -> new IoT Hub
 

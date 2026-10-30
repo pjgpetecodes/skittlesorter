@@ -1,5 +1,9 @@
 # Introduction: Building an IoT Device with Azure DPS, ADR, and Certificate Management
 
+> **Release baseline:** This series uses the latest Azure IoT CLI preview
+> extension, `azure-iot` **1.0.0b2**, released **6 October 2026**. Last
+> reviewed **29 October 2026**. [Release notes](https://github.com/Azure/azure-iot-cli-extension/releases/tag/v1.0.0b2).
+
 Welcome to this comprehensive blog series on building a real-world IoT device using Azure's latest IoT Hub, Azure Device Provisioning Service (DPS) features, along with Microsoft-managed certificate infrastructure.
 
 ## What You'll Build
@@ -20,43 +24,52 @@ This series focuses on **patterns and principles**. We’ll use self-signed cert
 
 ### Working with Preview APIs
 
-As of the time of writing (31st January 2026), these are preview features and the official Microsoft C# SDK doesn't yet support the new DPS and certificate management capabilities. 
-
-However, I've built a custom DPS framework that communicates directly with the preview APIs using MQTT protocol. 
-
-It's worth noting that Microsoft does provide SDK support for Python and C/C++, but C# developers need to wait for official support or use custom implementations like ours in the meantime.
+The IoT Hub integration with Azure Device Registry (ADR) and certificate
+management remain in public preview and aren't recommended for production.
+The sample application in this repository uses a custom DPS framework over
+MQTT for its CSR provisioning flow; that is an implementation choice for this
+sample, not a requirement for every IoT Hub or ADR deployment. Check current
+Microsoft documentation for the latest API and client-library support.
 
 ## What's New: Azure IoT Hub with ADR (Preview)
 
-In November 2025, Microsoft announced the public preview of Azure IoT Hub integration with Azure Device Registry (ADR), bringing IoT devices under the Azure management plane with ARM resource representation. ADR includes an optional **certificate management** feature that provides Microsoft-backed X.509 PKI, eliminating the need for custom certificate infrastructure. ADR now serves as a unified control plane for managing both IoT Hub devices and Azure IoT Operations assets, with policy-driven certificate lifecycle management that automates issuance and renewal at scale.
+Azure IoT Hub integration with Azure Device Registry (ADR) represents IoT Hub
+devices as Azure Resource Manager resources. ADR is generally available for
+Azure IoT Operations, while its IoT Hub integration and Microsoft-backed
+certificate management remain in public preview. Certificate management is
+optional and issues operational certificates after a separate device
+onboarding credential is validated by DPS.
 
 ![Azure IoT Hub with ADR Architecture](path/to/architecture-diagram.png)
 
 ## What's New in 2025-2026
 
-This series focuses on **preview features** (starting November 2025):
+This series focuses on the current IoT Hub preview guidance:
 
 ### 🆕 Azure IoT Hub + Azure Device Registry (ADR) Integration (Preview)
 - IoT Hub integrates with ADR to provide a **unified device registry** across IoT Hub and IoT Operations
 - ADR namespaces enable centralized device metadata and identity management
-- ADR integration is required for the latest provisioning and certificate management features
+- Existing IoT Hubs can't be upgraded to add ADR integration; create a new hub
 
 ### 🆕 Microsoft-Backed X.509 Certificate Management (Preview)
 - ADR offers **certificate management** using Microsoft-managed PKI
 - Issues and renews **operational X.509 certificates** for device authentication to IoT Hub
 - Certificates are chained to Microsoft-managed Certificate Authorities (CAs)
-- Devices onboard through DPS, then receive operational certs via policy-driven certificate issuance
-- **DPS is required** for provisioning (DPS must be linked and used for all preview scenarios)
+- Devices onboard through DPS, then may receive operational certificates via policy-driven issuance
+- **DPS is required** for every IoT Hub preview scenario; certificate management is optional
 
 > ⚠️ **Preview Notice:** ADR integration and Microsoft-backed certificate management are in public preview and **not recommended for production workloads**.
 
 ### Supported Regions (Preview)
-- East US
-- East US 2
-- West US
-- West US 2
-- West Europe
-- North Europe
+- Australia East
+- Japan East
+- Central US
+- UK South
+
+Starting in October 2026, ADR integration and certificate management are
+available at no cost during preview; IoT Hub and DPS are billed at standard
+rates. See [What's Changed since the Previous Preview](07-whats-changed-since-previous-preview.md)
+for the complete current guidance and references.
 
 ## Official Docs & Announcements
 
@@ -77,10 +90,10 @@ cd skittlesorter/scripts
 # Full ADR + X.509 setup (recommended)
 .\setup-x509-dps-adr.ps1 `
   -ResourceGroup "my-iot-rg" `
-  -Location "eastus" `
+  -Location "uksouth" `
   -IoTHubName "my-hub-001" `
   -DPSName "my-dps-001" `
-  -AdrNamespace "my-adr-001" `
+  -AdrNamespace "my-adr-uniquesuffix" `
   -UserIdentity "my-uami"
 
 # OR X.509 only (traditional approach)

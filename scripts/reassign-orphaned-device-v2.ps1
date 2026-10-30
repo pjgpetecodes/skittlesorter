@@ -57,19 +57,6 @@ function Invoke-AzCommand {
     return $outputText
 }
 
-function Ensure-RoleAssignment {
-    param(
-        [string]$Assignee,
-        [string]$Role,
-        [string]$Scope
-    )
-
-    $output = Invoke-AzCommand "az role assignment create --assignee `"$Assignee`" --role `"$Role`" --scope `"$Scope`" --output none" -IgnoreError
-    if ($LASTEXITCODE -ne 0 -and ($output -notmatch "RoleAssignmentExists|already exists")) {
-        throw "Failed role assignment [$Role] on [$Scope]: $output"
-    }
-}
-
 function Ensure-AdrPolicy {
     param(
         [string]$Namespace,
@@ -119,32 +106,6 @@ function Invoke-AdrCredentialSyncWithRetry {
     throw "ADR credential sync failed."
 }
 
-function Ensure-AdrEndpointHubPermissions {
-    param(
-        [string]$Namespace,
-        [string]$ResourceGroup,
-        [string]$AdrPrincipalId
-    )
-
-    $endpointIdsRaw = Invoke-AzCommand "az iot adr ns show --name $Namespace --resource-group $ResourceGroup --query `"properties.messaging.endpoints.*.resourceId`" -o tsv" -IgnoreError
-    if ($LASTEXITCODE -ne 0 -or [string]::IsNullOrWhiteSpace($endpointIdsRaw)) {
-        Write-Warning "No ADR messaging endpoints found (or unable to query). Skipping endpoint permission grant."
-        return
-    }
-
-    $endpointIds = $endpointIdsRaw -split "`r?`n" | Where-Object { -not [string]::IsNullOrWhiteSpace($_) }
-    foreach ($endpointId in $endpointIds) {
-        $resolvedId = (Invoke-AzCommand "az resource show --ids `"$endpointId`" --query id -o tsv" -IgnoreError).Trim()
-        if ($LASTEXITCODE -ne 0 -or [string]::IsNullOrWhiteSpace($resolvedId)) {
-            Write-Warning "Skipping missing endpoint resource: $endpointId"
-            continue
-        }
-
-        Ensure-RoleAssignment -Assignee $AdrPrincipalId -Role "Contributor" -Scope $resolvedId
-        Ensure-RoleAssignment -Assignee $AdrPrincipalId -Role "IoT Hub Registry Contributor" -Scope $resolvedId
-    }
-}
-
 Write-Step "Resolve ADR and Identity IDs"
 
 $adrNsId = (Invoke-AzCommand "az iot adr ns show --name $AdrNamespace --resource-group $ResourceGroup --query id -o tsv").Trim()
@@ -159,58 +120,40 @@ if ([string]::IsNullOrWhiteSpace($uamiId)) {
     $uamiId = (Invoke-AzCommand "az identity show --name $UserIdentity --resource-group $ResourceGroup --query id -o tsv").Trim()
 }
 
-$adrPrincipalId = (Invoke-AzCommand "az iot adr ns show --name $AdrNamespace --resource-group $ResourceGroup --query identity.principalId -o tsv").Trim()
-if ([string]::IsNullOrWhiteSpace($adrPrincipalId)) {
-    throw "Could not resolve ADR namespace principalId."
-}
-
 Write-Step "Create new GEN2 IoT Hub linked to ADR"
 
-$hubCreatePrimary = Invoke-AzCommand "az iot hub create --name $NewHubName --resource-group $ResourceGroup --location $Location --sku GEN2 --adr-ns-id $adrNsId --adr-identity-id $uamiId -o json" -IgnoreError
+$hubCreateOutput = Invoke-AzCommand "az iot hub create --name $NewHubName --resource-group $ResourceGroup --location $Location --sku GEN2 --mi-user-assigned $uamiId -o json" -IgnoreError
 if ($LASTEXITCODE -ne 0) {
-    $hubCreateFallback = Invoke-AzCommand "az iot hub create --name $NewHubName --resource-group $ResourceGroup --location $Location --sku GEN2 --ns-resource-id $adrNsId --ns-identity-id $uamiId -o json" -IgnoreError
-    if ($LASTEXITCODE -ne 0) {
-        throw "Failed to create GEN2 hub with ADR integration.`nPrimary:`n$hubCreatePrimary`nFallback:`n$hubCreateFallback"
-    }
+    throw "Failed to create GEN2 hub.`n$hubCreateOutput"
 }
 
 $newHubId = (Invoke-AzCommand "az iot hub show --name $NewHubName --resource-group $ResourceGroup --query id -o tsv").Trim()
 
-Write-Step "Grant ADR namespace identity access to new hub"
-Ensure-RoleAssignment -Assignee $adrPrincipalId -Role "Contributor" -Scope $newHubId
-Ensure-RoleAssignment -Assignee $adrPrincipalId -Role "IoT Hub Registry Contributor" -Scope $newHubId
-
-Write-Step "Create new DPS linked to ADR"
+Write-Step "Create new DPS"
 
 $existingDpsId = (Invoke-AzCommand "az iot dps show --name $NewDpsName --resource-group $ResourceGroup --query id -o tsv" -IgnoreError).Trim()
 if (-not [string]::IsNullOrWhiteSpace($existingDpsId)) {
     Write-Host "DPS '$NewDpsName' already exists in resource group '$ResourceGroup'. Reusing it."
 }
 else {
-    $dpsCreatePrimary = Invoke-AzCommand "az iot dps create --name $NewDpsName --resource-group $ResourceGroup --location $Location --mi-user-assigned $uamiId --ns-resource-id $adrNsId --ns-identity-id $uamiId -o json" -IgnoreError
+    $dpsCreateOutput = Invoke-AzCommand "az iot dps create --name $NewDpsName --resource-group $ResourceGroup --location $Location --mi-user-assigned $uamiId -o json" -IgnoreError
     if ($LASTEXITCODE -ne 0) {
-        $dpsCreateFallback = Invoke-AzCommand "az iot dps create --name $NewDpsName --resource-group $ResourceGroup --location $Location --ns-resource-id $adrNsId --ns-identity-id $uamiId -o json" -IgnoreError
-        if ($LASTEXITCODE -ne 0) {
-            if ($dpsCreatePrimary -match "IotDps name '.*' is not available|IH400307" -or $dpsCreateFallback -match "IotDps name '.*' is not available|IH400307") {
-                $suffix = Get-Random -Minimum 1000 -Maximum 9999
-                $candidateName = "$NewDpsName$suffix"
-                if ($candidateName.Length -gt 64) {
-                    $candidateName = $candidateName.Substring(0, 64)
-                }
-
-                Write-Warning "DPS name '$NewDpsName' is not available. Retrying with '$candidateName'."
-                $NewDpsName = $candidateName
-
-                $retryCreate = Invoke-AzCommand "az iot dps create --name $NewDpsName --resource-group $ResourceGroup --location $Location --mi-user-assigned $uamiId --ns-resource-id $adrNsId --ns-identity-id $uamiId -o json" -IgnoreError
-                if ($LASTEXITCODE -ne 0) {
-                    throw "Failed to create DPS with ADR integration after name retry.`nPrimary:`n$dpsCreatePrimary`nFallback:`n$dpsCreateFallback`nRetry:`n$retryCreate"
-                }
-            }
-            else {
-                throw "Failed to create DPS with ADR integration.`nPrimary:`n$dpsCreatePrimary`nFallback:`n$dpsCreateFallback"
-            }
-        }
+        throw "Failed to create DPS.`n$dpsCreateOutput"
     }
+}
+
+$newDpsId = (Invoke-AzCommand "az iot dps show --name $NewDpsName --resource-group $ResourceGroup --query id -o tsv").Trim()
+
+Write-Step "Link DPS and Hub to ADR namespace"
+# Link DPS first; 1.0.0b2 creates namespace links separately from Hub/DPS resources.
+$dpsEndpoint = Invoke-AzCommand "az iot adr ns link dps show --name $NewDpsName --namespace $AdrNamespace --resource-group $ResourceGroup -o json" -IgnoreError
+if ($LASTEXITCODE -ne 0) {
+    $dpsEndpoint = Invoke-AzCommand "az iot adr ns link dps add --name $NewDpsName --namespace $AdrNamespace --resource-group $ResourceGroup --dps-resource-id $newDpsId --user-assigned-mi $uamiId -o json"
+}
+
+$hubEndpoint = Invoke-AzCommand "az iot adr ns link hub show --name $NewHubName --namespace $AdrNamespace --resource-group $ResourceGroup -o json" -IgnoreError
+if ($LASTEXITCODE -ne 0) {
+    $hubEndpoint = Invoke-AzCommand "az iot adr ns link hub add --name $NewHubName --namespace $AdrNamespace --resource-group $ResourceGroup --hub-resource-id $newHubId --user-assigned-mi $uamiId -o json"
 }
 
 Write-Step "Link new DPS to new hub"
@@ -227,9 +170,6 @@ if ($LASTEXITCODE -ne 0) {
 }
 
 Ensure-AdrPolicy -Namespace $AdrNamespace -ResourceGroup $ResourceGroup -PolicyName $CredentialPolicyName
-
-Write-Step "Ensure ADR identity has access to all ADR endpoint hubs"
-Ensure-AdrEndpointHubPermissions -Namespace $AdrNamespace -ResourceGroup $ResourceGroup -AdrPrincipalId $adrPrincipalId
 
 Write-Step "Sync ADR credential to linked hubs"
 Invoke-AdrCredentialSyncWithRetry -Namespace $AdrNamespace -ResourceGroup $ResourceGroup

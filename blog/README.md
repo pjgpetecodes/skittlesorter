@@ -1,10 +1,10 @@
 # Blog Post Series: Building IoT Devices with Azure DPS, ADR, and Certificate Management
 
-A comprehensive 7-part series covering the latest Azure IoT features including Device Provisioning Service (DPS), Azure Device Registry (ADR), and Microsoft-managed certificate issuance.
+A comprehensive series covering Azure IoT Device Provisioning Service (DPS), Azure Device Registry (ADR), and certificate management. IoT Hub integration with ADR and certificate management are in public preview and aren't recommended for production; see [What's Changed since the Previous Preview](07-whats-changed-since-previous-preview.md) for current guidance.
 
 ## Series Overview
 
-This series teaches you how to build production-ready IoT devices using Azure's newest features (preview as of January 2026):
+This series demonstrates an IoT device sample using Azure services and preview features:
 - 🆕 **Microsoft Certificate Management** - Dynamic certificate issuance during provisioning
 - 🆕 **Azure Device Registry (ADR)** - Device identity and management layer
 - 🆕 **DPS MQTT Protocol** - Direct access to preview API features
