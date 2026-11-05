@@ -1,0 +1,10 @@
+{
+  "markdown": "01-introduction.md",
+  "html": "01-introduction.html",
+  "state": ".wp-md/01-introduction.sync.json",
+  "remoteState": "01-introduction.html.remote.json",
+  "wordpress": {
+    "site": "https://www.petecodes.co.uk",
+    "postId": 4984
+  }
+}

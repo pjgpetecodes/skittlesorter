@@ -1,14 +1,24 @@
 ## **A DPS Primer**
 
-> **Release baseline:** This series uses the latest Azure IoT CLI preview
-> extension, `azure-iot` **1.0.0b2**, released **6 October 2026**. Last
-> reviewed **29 October 2026**. [Release notes](https://github.com/Azure/azure-iot-cli-extension/releases/tag/v1.0.0b2).
+> **CLI baseline:** The examples use Azure IoT CLI preview extension
+> `azure-iot` **1.0.0b2**, released **6 October 2026**. Last
+> reviewed against current Microsoft Learn guidance **5 November 2026**.
+> [Release notes](https://github.com/Azure/azure-iot-cli-extension/releases/tag/v1.0.0b2).
 
-Welcome back to this series of posts exploring the latest features of Azure IoT Hub, Device Provisioning Service (DPS), and Azure Device Registration (ADR).
+Welcome back to this series of posts exploring the latest features of Azure IoT Hub, Device Provisioning Service (DPS), and Azure Device Registry (ADR).
 
 The previous post introduced the new features and gave an overview of what we can expect in this post series.
 
 In this post, we'll dive deeper in the Azure Device Provisioning Service and how we can use the new features.
+
+### What's new in this edition?
+
+One thing that's easy to mix up: the device first proves its identity to DPS;
+if you enable certificate management, ADR can then issue a separate
+certificate for use with IoT Hub. You don't need certificate management for
+the IoT Hub preview, but you do need DPS. I've updated the primer to make that
+distinction clearer. See the [Introduction](https://www.petecodes.co.uk/iot-hub-with-adr-and-certificate-management-part-1)
+for the series-wide changes.
 
 ---
 
@@ -16,35 +26,13 @@ In this post, we'll dive deeper in the Azure Device Provisioning Service and how
 
 ---
 
-```wordpress-block
-<!-- wp:heading {"textColor":"#f6f6f4"} -->
-<h2 class="wp-block-heading has-f-6-f-6-f-4-color has-text-color">Contents:</h2>
-<!-- /wp:heading -->
-```
+### Contents
 
-```wordpress-block
-<!-- wp:list {"ordered":true,"textColor":"#f6f6f4"} -->
-<ol class="wp-block-list has-f-6-f-6-f-4-color has-text-color"><!-- wp:list-item -->
-<li><a href="https://www.petecodes.co.uk/iot-hub-with-adr-and-certificate-management-part-1" target="_blank" rel="noreferrer noopener">Introduction</a></li>
-<!-- /wp:list-item -->
-
-<!-- wp:list-item -->
-<li><a href="https://www.petecodes.co.uk/iot-hub-with-adr-and-certificate-management-part-2" target="_blank" rel="noreferrer noopener">A DPS Primer</a> (This Post)</li>
-<!-- /wp:list-item -->
-
-<!-- wp:list-item -->
-<li><a href="https://www.petecodes.co.uk/iot-hub-with-adr-and-certificate-management-part-3" target="_blank" rel="noreferrer noopener">Creating DPS, IoT Hub and ADR Instances</a></li>
-<!-- /wp:list-item -->
-
-<!-- wp:list-item -->
-<li><a href="https://www.petecodes.co.uk/iot-hub-with-adr-and-certificate-management-part-4" target="_blank" rel="noreferrer noopener">Understanding X.509 and CSR Workflows</a></li>
-<!-- /wp:list-item -->
-
-<!-- wp:list-item -->
-<li><a href="https://www.petecodes.co.uk/iot-hub-with-adr-and-certificate-management-part-5" target="_blank" rel="noreferrer noopener">The Device Application</a></li>
-<!-- /wp:list-item --></ol>
-<!-- /wp:list -->
-```
+1. [Introduction](https://www.petecodes.co.uk/iot-hub-with-adr-and-certificate-management-part-1)
+2. [A DPS Primer (this post)](https://www.petecodes.co.uk/iot-hub-with-adr-and-certificate-management-part-2)
+3. [Creating DPS, IoT Hub and ADR Instances](https://www.petecodes.co.uk/iot-hub-with-adr-and-certificate-management-part-3)
+4. [Understanding X.509 and CSR Workflows](https://www.petecodes.co.uk/iot-hub-with-adr-and-certificate-management-part-4)
+5. [The Device Application](https://www.petecodes.co.uk/iot-hub-with-adr-and-certificate-management-part-5)
 
 ### What is Device Provisioning Service?
 
@@ -82,9 +70,9 @@ Now that you understand the difference, here are the concrete advantages of usin
 -   **Multi-tenancy:** Different devices can automatically be directed to different IoT Hubs based on enrollment configuration.
 -   **Separation:** Separation between bootstrap and operational credentials for devices.
 
-#### 🆕 Automated Certificate Management (2025 Feature)
+#### Optional ADR Certificate Management (Preview)
 
-DPS can now issue X.509 certificates dynamically during provisioning using Certificate Signing Requests (CSR). No need to run your own Certificate Authority!
+When certificate management is enabled, DPS can coordinate ADR issuance of operational X.509 certificates during provisioning using a Certificate Signing Request (CSR). This optional capability doesn't replace the device's onboarding credential. You can use a Microsoft-managed root CA or bring your own CA; DPS remains required for every IoT Hub preview scenario, whether certificate management is enabled or not. See the [certificate management overview](https://learn.microsoft.com/en-gb/azure/iot/iot-certificate-management-overview).
 
 ### What's New: Microsoft Certificate Management
 
@@ -136,7 +124,7 @@ Notes:
 ```plaintext
 ┌─────────────────────────────┐          ┌─────────────────────────────┐
 │     Azure Device Registry   │          │            DPS              │
-│ (Credential Policy: x509CA) │◄─────────┤   Enrollment Group exists   │
+│ (ICA certificate policy)    │◄─────────┤   DPS enrollment references │
 └──────────────┬──────────────┘  query   └──────────────┬──────────────┘
                │                                        ▲ validate
                │                                        │
@@ -149,7 +137,7 @@ Notes:
                ▼                 use
 ┌─────────────────────────────┐ policy   ┌─────────────────────────────┐
 │            ADR              │─────────►│  Microsoft-managed CA       │
-│ 2) Sign CSR per policy      │          │  3) Issue certificate chain │
+│ 2) Select policy's ICA      │          │  3) Issue certificate chain │
 └──────────────┬──────────────┘          └──────────────┬──────────────┘
                │ return cert chain                      │
                └────────────────────────────────────────┘
@@ -168,7 +156,8 @@ Notes:
 
 Notes:
 - Private key never leaves the device.
-- The certificate policy controls certificate validity.
+- The device's onboarding credential authenticates to DPS; the enrollment references the separate ADR certificate policy for operational issuance.
+- The policy belongs to an ADR intermediate CA and controls device-certificate validity. ADR synchronizes CA certificates with linked IoT Hubs.
 - Current IoT Hub workflows support operational-certificate renewal without
   reprovisioning; follow the current service documentation for the device flow.
 ```
@@ -190,8 +179,12 @@ cross-hub queries with Azure Resource Graph.
 
 ADR is generally available for Azure IoT Operations. Its integration with
 Azure IoT Hub is a separate **public preview**. Each IoT Hub links to one ADR
-namespace, while multiple hubs can share a namespace. An existing IoT Hub
-can't be upgraded to add ADR integration; create a new hub for the preview.
+namespace, while multiple hubs can share a namespace. You can create a new Hub
+or connect an eligible existing Hub. Connecting an existing Hub to a namespace
+is permanent and can't be reversed. This series' setup script creates a
+dedicated new Hub; see the [current getting-started
+guide](https://learn.microsoft.com/en-gb/azure/iot/device-registry/get-started-azure-device-registry)
+for the existing-resource path.
 
 #### What is ADR?
 
@@ -232,15 +225,16 @@ device to authenticate to IoT Hub after provisioning. It does not issue or
 manage the device's onboarding credential. A device first authenticates to DPS
 with an onboarding method such as a symmetric key, TPM, or an existing X.509
 certificate, then submits a CSR as part of the provisioning transaction.
-DPS validates the onboarding credential and selects the policy associated
-with the enrollment; the namespace's ADR issuing CA signs the operational
-certificate. The device private key remains on the device.
+DPS validates the onboarding credential and uses the ADR CA and certificate
+policy referenced by the enrollment; the policy's intermediate CA signs the
+operational certificate. The device private key remains on the device. Each
+ADR intermediate CA can have one certificate policy.
 
 Certificate management is optional, but **DPS is required for all IoT Hub
 preview scenarios**, even when certificate management isn't enabled.
 Operational certificates can be renewed and revoked, and ADR manages CA
-rotation. IoT Hub integration remains in public preview and isn't recommended
-for production workloads.
+lifecycle and rotation operations. IoT Hub integration remains in public
+preview and isn't recommended for production workloads.
 
 ### Attestation Methods
 
@@ -369,6 +363,8 @@ framework is this project's implementation choice; don't treat its API version
 or client-library assumptions as a general Microsoft SDK support statement.
 
 > **Note:** Check [Microsoft's current IoT Hub preview guidance](https://learn.microsoft.com/en-us/azure/iot-hub/iot-hub-what-is-new) before deployment.
+
+For the current setup, see Microsoft's [ADR connected-services guide](https://learn.microsoft.com/en-gb/azure/iot/device-registry/get-started-azure-device-registry), [CA hierarchy overview](https://learn.microsoft.com/en-gb/azure/iot/concept-managed-ca-hierarchy), [managed CA setup](https://learn.microsoft.com/en-gb/azure/iot/how-to-create-policy?tabs=cli), and [certificate-policy and DPS-enrollment guide](https://learn.microsoft.com/en-us/azure/iot/how-to-create-edit-certificate-policy?tabs=cli).
 
 ### Next Steps
 

@@ -4,9 +4,10 @@
 
 <!-- wp:quote -->
 <blockquote class="wp-block-quote"><!-- wp:paragraph -->
-<p><strong>Release baseline:</strong> This series uses the latest Azure IoT CLI preview
-extension, <code>azure-iot</code> <strong>1.0.0b2</strong>, released <strong>6 October 2026</strong>. Last
-reviewed <strong>29 October 2026</strong>. <a href="https://github.com/Azure/azure-iot-cli-extension/releases/tag/v1.0.0b2">Release notes</a>.</p>
+<p><strong>CLI baseline:</strong> The examples use Azure IoT CLI preview extension
+<code>azure-iot</code> <strong>1.0.0b2</strong>, released <strong>6 October 2026</strong>. Last
+reviewed against current Microsoft Learn guidance <strong>5 November 2026</strong>.
+<a href="https://github.com/Azure/azure-iot-cli-extension/releases/tag/v1.0.0b2">Release notes</a>.</p>
 <!-- /wp:paragraph --></blockquote>
 <!-- /wp:quote -->
 
@@ -21,21 +22,35 @@ reviewed <strong>29 October 2026</strong>. <a href="https://github.com/Azure/azu
 <!-- wp:paragraph -->
 <p>IoT Hub integration with Azure Device Registry (ADR) and certificate
 management remains in <strong>public preview</strong> and isn't recommended for production.
-Create a <strong>new IoT Hub</strong> for the integration; existing hubs have no upgrade
-path. DPS is required for every IoT Hub preview scenario. The current supported
-regions are Australia East, Japan East, Central US, and UK South. ADR
-integration and certificate management are free during preview, while IoT Hub
-and DPS are billed at standard rates.</p>
+The current getting-started guide supports creating a new Hub or connecting an
+eligible existing Hub; connecting an existing Hub is permanent and can't be
+reversed. The setup script in Part 3 creates a dedicated new Hub. DPS is
+required for every IoT Hub preview scenario. The current supported regions are
+Australia East, Japan East, Central US, and UK South. ADR integration and
+certificate management are free during preview, while IoT Hub and DPS are
+billed at standard rates.</p>
 <!-- /wp:paragraph -->
 
 <!-- wp:paragraph -->
 <p>Certificate management issues operational X.509 certificates after a device
-authenticates with a separate onboarding credential. The current service
-supports renewal and revocation of operational certificates and automatic CA
-rotation. The renewal code later in this article describes this repository's
-sample implementation, not the complete current Azure certificate-management
-workflow. See the <a href="https://learn.microsoft.com/en-us/azure/iot-hub/iot-hub-device-registry-setup">current Learn deployment guide</a>
-before creating or changing Azure resources.</p>
+authenticates with a separate onboarding credential. The certificate policy
+belongs to an ADR intermediate CA and is selected on the DPS enrollment. ADR
+synchronizes CA certificates with linked IoT Hubs and manages CA lifecycle and
+rotation operations. The renewal code later in this article describes this
+repository's sample implementation, not the complete current Azure
+certificate-management workflow. See Microsoft's <a href="https://learn.microsoft.com/en-gb/azure/iot/device-registry/get-started-azure-device-registry">ADR connected-services
+guide</a>, <a href="https://learn.microsoft.com/en-gb/azure/iot/concept-managed-ca-hierarchy">CA hierarchy</a>,
+<a href="https://learn.microsoft.com/en-gb/azure/iot/how-to-create-policy?tabs=cli">managed CA setup</a>,
+and <a href="https://learn.microsoft.com/en-us/azure/iot/how-to-create-edit-certificate-policy?tabs=cli">certificate-policy enrollment
+guide</a> before creating or changing Azure resources.</p>
+<!-- /wp:paragraph -->
+
+<!-- wp:heading {"level":3} -->
+<h3 class="wp-block-heading">What's new in this edition?</h3>
+<!-- /wp:heading -->
+
+<!-- wp:paragraph -->
+<p>This post still follows the custom MQTT application in this repository; it isn't a general guide to building an ADR client. I've updated the setup and cleanup notes to match Part 3, and called out where the Azure-managed certificate lifecycle ends and the sample's own code begins. See the <a href="https://www.petecodes.co.uk/iot-hub-with-adr-and-certificate-management-part-1">Introduction</a> for the series-wide changes.</p>
 <!-- /wp:paragraph -->
 
 <!-- wp:heading {"textColor":"#f6f6f4"} -->
@@ -74,7 +89,7 @@ before creating or changing Azure resources.</p>
 <!-- /wp:paragraph -->
 
 <!-- wp:paragraph {"className":"is-style-warning","fontSize":"medium"} -->
-<p class="is-style-warning has-medium-font-size"><strong><em>Note: While these features are in preview, It's super important that you don't try to use the Azure Portal to remove your resources.<br><br>For now I've created a couple of scripts to help you remove your resources, you'll find them at the end of this post.</em></strong></p>
+<p class="is-style-warning has-medium-font-size"><strong><em>Note: The cleanup commands in older versions of this post use a previous resource setup. For the refreshed deployment, follow the resource review and cleanup guidance in the Part 3 setup README.</em></strong></p>
 <!-- /wp:paragraph --></blockquote>
 <!-- /wp:quote -->
 
@@ -160,10 +175,12 @@ bootstrap certificate and enrollment steps in
 
 <!-- wp:paragraph -->
 <p>All IoT Hub preview scenarios require DPS. If using certificate management,
-configure the onboarding credential and certificate policy, link DPS to the
-namespace and new hub, sync the policy, and assign it to the enrollment. Keep
-the resulting DPS ID Scope, hub hostname, and onboarding credential for the
-application configuration.</p>
+configure a device onboarding credential separately from the ADR-managed
+operational issuer. Create an ADR intermediate CA and its certificate policy,
+then select that CA and policy on the DPS enrollment. Connect DPS before the
+Hub; ADR synchronizes CA certificates with linked Hubs. Keep the resulting DPS
+ID Scope, hub hostname, and onboarding credential for the application
+configuration.</p>
 <!-- /wp:paragraph -->
 
 <!-- wp:heading {"level":4} -->
@@ -611,10 +628,12 @@ dotnet run
 <li>Delete expired certificate and re-provision</li>
 <!-- /wp:list-item -->
 <!-- wp:list-item -->
-<li>Operational certificates are short-lived (30 days default)</li>
+<li>Operational certificate validity is set by the ADR certificate policy.</li>
 <!-- /wp:list-item -->
 <!-- wp:list-item -->
-<li>Application should auto-renew within 7-day window</li>
+<li>The sample's renewal behavior is application code, not a service-wide
+seven-day renewal requirement. See the <a href="https://learn.microsoft.com/en-us/azure/iot/how-to-create-edit-certificate-policy?tabs=cli">current certificate-policy
+guide</a> and the service's <a href="https://learn.microsoft.com/en-us/azure/iot/iot-certificate-management-overview">renewal documentation</a>.</li>
 <!-- /wp:list-item -->
 </ul>
 <!-- /wp:list -->
@@ -641,7 +660,7 @@ dotnet run
 <li>Verify certificate and CSR setup (<a href="https://www.petecodes.co.uk/iot-hub-with-adr-and-certificate-management-part-4/">Understanding X.509 and CSR Workflows</a>)</li>
 <!-- /wp:list-item -->
 <!-- wp:list-item -->
-<li>Review the current <a href="https://learn.microsoft.com/en-us/azure/iot-hub/iot-hub-device-registry-setup">Microsoft Learn deployment guide</a> for enrollment and credential-policy configuration</li>
+<li>Review Microsoft's <a href="https://learn.microsoft.com/en-gb/azure/iot/device-registry/get-started-azure-device-registry">ADR connected-services guide</a> and <a href="https://learn.microsoft.com/en-us/azure/iot/how-to-create-edit-certificate-policy?tabs=cli">certificate-policy enrollment guide</a> for current resource and enrollment configuration</li>
 <!-- /wp:list-item -->
 <!-- wp:list-item -->
 <li>Check DPS and IoT Hub logs in Azure Portal</li>
@@ -1535,114 +1554,18 @@ my-device   True       RPI4B-12345678     factory-1
 <!-- /wp:list -->
 
 <!-- wp:heading {"level":3} -->
-<h3 class="wp-block-heading">Removing your Resources and Clean Test Start Script</h3>
-<!-- /wp:heading -->
-
-<!-- wp:paragraph {"className":"is-style-warning","fontSize":"medium"} -->
-<p class="is-style-warning has-medium-font-size">Note: While these features are in preview, It's super important that you don't try to use the Portal to remove your resources.<br><br>For now I've created a couple of scripts to help you remove your resources.</p>
-<!-- /wp:paragraph -->
-
-<!-- wp:heading {"level":4} -->
-<h4 class="wp-block-heading"><strong>Remove Resources:</strong></h4>
+<h3 class="wp-block-heading">Safe Resource Cleanup</h3>
 <!-- /wp:heading -->
 
 <!-- wp:paragraph -->
-<p>To remove your resources, it's important that you remove them in teh right order, otherwise you may find that you have resources such as the ADR Namespace, which cannot be deleted.</p>
-<!-- /wp:paragraph -->
-
-<!-- wp:paragraph -->
-<p>You'll most certainly find this if you try to remove your resources using the portal, as it doesn't know yet to delete the resources in order.</p>
-<!-- /wp:paragraph -->
-
-<!-- wp:paragraph -->
-<p>This script will remove your resources safely.</p>
-<!-- /wp:paragraph -->
-
-<!-- wp:code {"className":"language-powershell"} -->
-<pre class="wp-block-code language-powershell"><code>cd scripts
-.\remove-resources.ps1 `
-  -DpsName &quot;&lt;your-dps-name&gt;&quot; `
-  -IotHubName &quot;&lt;your-iothub-name&gt;&quot; `
-  -ResourceGroup &quot;&lt;your-resource-group&gt;&quot; `
-  -EnrollmentGroupName &quot;&lt;your-enrollment-group-name&gt;&quot; `
-  -DeviceId &quot;&lt;your-device-id&gt;&quot; `
-  -AdrNamespace &quot;&lt;your-adr-namespace&gt;&quot; `
-  -UserIdentity &quot;&lt;your-user-assigned-identity-name&gt;&quot; `
-  -RootCertName &quot;&lt;your-root-cert-name&gt;&quot; `
-  -IntermediateCertName &quot;&lt;your-intermediate-cert-name&gt;&quot;
-</code></pre>
-<!-- /wp:code -->
-
-<!-- wp:paragraph -->
-<p><strong>What it does:</strong></p>
-<!-- /wp:paragraph -->
-
-<!-- wp:list {"ordered":true} -->
-<ol class="wp-block-list"><!-- wp:list-item -->
-<li>Stops running processes</li>
-<!-- /wp:list-item -->
-<!-- wp:list-item -->
-<li>Deletes issued certificates</li>
-<!-- /wp:list-item -->
-<!-- wp:list-item -->
-<li>Removes device from IoT Hub</li>
-<!-- /wp:list-item -->
-<!-- wp:list-item -->
-<li>Removes device from ADR</li>
-<!-- /wp:list-item -->
-<!-- wp:list-item -->
-<li>Waits for propagation</li>
-<!-- /wp:list-item -->
-</ol>
-<!-- /wp:list -->
-
-<!-- wp:heading {"level":4} -->
-<h4 class="wp-block-heading"><strong>Run clean test:</strong></h4>
-<!-- /wp:heading -->
-
-<!-- wp:code {"className":"language-powershell"} -->
-<pre class="wp-block-code language-powershell"><code>cd scripts
-.\clean-test-start.ps1 `
-  -DpsName &quot;&lt;your-dps-name&gt;&quot; `
-  -IotHubName &quot;&lt;your-iothub-name&gt;&quot; `
-  -ResourceGroup &quot;&lt;your-resource-group&gt;&quot; `
-  -EnrollmentGroupName &quot;&lt;your-enrollment-group-name&gt;&quot; `
-  -DeviceId &quot;&lt;your-device-id&gt;&quot; `
-  -AdrNamespace &quot;&lt;your-adr-namespace&gt;&quot; `
-  -RootCertName &quot;&lt;your-root-cert-name&gt;&quot; `
-  -IntermediateCertName &quot;&lt;your-intermediate-cert-name&gt;&quot; `
-  -RemoveCaCerts
-</code></pre>
-<!-- /wp:code -->
-
-<!-- wp:paragraph -->
-<p><strong>What it does:</strong></p>
-<!-- /wp:paragraph -->
-
-<!-- wp:list {"ordered":true} -->
-<ol class="wp-block-list"><!-- wp:list-item -->
-<li>Stops running processes</li>
-<!-- /wp:list-item -->
-<!-- wp:list-item -->
-<li>Deletes issued certificates</li>
-<!-- /wp:list-item -->
-<!-- wp:list-item -->
-<li>Removes device from IoT Hub</li>
-<!-- /wp:list-item -->
-<!-- wp:list-item -->
-<li>Removes device from ADR</li>
-<!-- /wp:list-item -->
-<!-- wp:list-item -->
-<li>Waits for propagation</li>
-<!-- /wp:list-item -->
-<!-- wp:list-item -->
-<li>Runs application fresh</li>
-<!-- /wp:list-item -->
-</ol>
-<!-- /wp:list -->
-
-<!-- wp:paragraph -->
-<p>This ensures clean provisioning from scratch every time.</p>
+<p>The older cleanup commands in this article refer to a previous resource and
+identity setup; don't use them for the refreshed Part 3 deployment. Stop the
+sorter first. If you used the Part 3 setup script, review the resource group
+and delete it only if it contains dedicated test resources you intend to
+remove. The <a href="https://github.com/pjgpetecodes/skittlesorter/blob/main/scripts/iot-hub-device-registry/README.md">setup README</a>
+describes the resources and costs. Connecting an existing Hub or DPS instance
+to a namespace is permanent, so don't use resource-group deletion as a
+substitute for reviewing what is linked and billable.</p>
 <!-- /wp:paragraph -->
 
 <!-- wp:heading {"level":3} -->
@@ -1689,6 +1612,15 @@ my-device   True       RPI4B-12345678     factory-1
 <!-- /wp:list-item -->
 <!-- wp:list-item -->
 <li><strong>X.509 Certificates</strong>: <a href="https://learn.microsoft.com/azure/iot-hub/iot-hub-x509ca-overview">learn.microsoft.com/azure/iot-hub/iot-hub-x509ca-overview</a></li>
+<!-- /wp:list-item -->
+<!-- wp:list-item -->
+<li><strong>ADR connected-services setup</strong>: <a href="https://learn.microsoft.com/en-gb/azure/iot/device-registry/get-started-azure-device-registry">Get started with Azure Device Registry</a></li>
+<!-- /wp:list-item -->
+<!-- wp:list-item -->
+<li><strong>ADR CA hierarchy</strong>: <a href="https://learn.microsoft.com/en-gb/azure/iot/concept-managed-ca-hierarchy">Certificate authorities hierarchy</a></li>
+<!-- /wp:list-item -->
+<!-- wp:list-item -->
+<li><strong>ADR certificate policy</strong>: <a href="https://learn.microsoft.com/en-us/azure/iot/how-to-create-edit-certificate-policy?tabs=cli">Create a certificate policy and select it in a DPS enrollment</a></li>
 <!-- /wp:list-item -->
 </ul>
 <!-- /wp:list -->

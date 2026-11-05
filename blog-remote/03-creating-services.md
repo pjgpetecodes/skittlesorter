@@ -1,42 +1,29 @@
 ## **Creating DPS, IoT Hub and ADR Instances**
 
-> **Release baseline:** This series uses the latest Azure IoT CLI preview
-> extension, `azure-iot` **1.0.0b2**, released **6 October 2026**. Last
-> reviewed **29 October 2026**. [Release notes](https://github.com/Azure/azure-iot-cli-extension/releases/tag/v1.0.0b2).
+> **CLI baseline:** The examples use Azure IoT CLI preview extension
+> `azure-iot` **1.0.0b2**, released **6 October 2026**. Last
+> reviewed against current Microsoft Learn guidance **5 November 2026**.
+> [Release notes](https://github.com/Azure/azure-iot-cli-extension/releases/tag/v1.0.0b2).
 
 Welcome back to this series of posts exploring the latest features of Azure IoT Hub, Device Provisioning Service (DPS), and Azure Device Registry (ADR).
 
 In the previous post we dove deeper into DPS and what's new.
 
-```wordpress-block
-<!-- wp:heading {"textColor":"#f6f6f4"} -->
-<h2 class="wp-block-heading has-f-6-f-6-f-4-color has-text-color">Contents:</h2>
-<!-- /wp:heading -->
-```
+### What's new in this edition?
 
-```wordpress-block
-<!-- wp:list {"ordered":true,"textColor":"#f6f6f4"} -->
-<ol class="wp-block-list has-f-6-f-6-f-4-color has-text-color"><!-- wp:list-item -->
-<li><a href="https://www.petecodes.co.uk/iot-hub-with-adr-and-certificate-management-part-1" target="_blank" rel="noreferrer noopener">Introduction </a></li>
-<!-- /wp:list-item -->
+I've refreshed the setup steps and script. They now use system-assigned
+identities, link DPS before the Hub, and connect the enrollment to the ADR
+certificate policy. The script creates dedicated resources and an enrollment
+group; it doesn't provision a device. See the [Introduction](https://www.petecodes.co.uk/iot-hub-with-adr-and-certificate-management-part-1)
+for the series-wide changes.
 
-<!-- wp:list-item -->
-<li><a href="https://www.petecodes.co.uk/iot-hub-with-adr-and-certificate-management-part-2" target="_blank" rel="noreferrer noopener">A DPS Primer</a></li>
-<!-- /wp:list-item -->
+### Contents
 
-<!-- wp:list-item -->
-<li><a href="https://www.petecodes.co.uk/iot-hub-with-adr-and-certificate-management-part-3" target="_blank" rel="noreferrer noopener">Creating DPS, IoT Hub and ADR Instances</a> (This Post)</li>
-<!-- /wp:list-item -->
-
-<!-- wp:list-item -->
-<li><a href="https://www.petecodes.co.uk/iot-hub-with-adr-and-certificate-management-part-4" target="_blank" rel="noreferrer noopener">Understanding X.509 and CSR Workflows</a></li>
-<!-- /wp:list-item -->
-
-<!-- wp:list-item -->
-<li><a href="https://www.petecodes.co.uk/iot-hub-with-adr-and-certificate-management-part-5" target="_blank" rel="noreferrer noopener">The Device Application</a></li>
-<!-- /wp:list-item --></ol>
-<!-- /wp:list -->
-```
+1. [Introduction](https://www.petecodes.co.uk/iot-hub-with-adr-and-certificate-management-part-1)
+2. [A DPS Primer](https://www.petecodes.co.uk/iot-hub-with-adr-and-certificate-management-part-2)
+3. [Creating DPS, IoT Hub and ADR Instances (this post)](https://www.petecodes.co.uk/iot-hub-with-adr-and-certificate-management-part-3)
+4. [Understanding X.509 and CSR Workflows](https://www.petecodes.co.uk/iot-hub-with-adr-and-certificate-management-part-4)
+5. [The Device Application](https://www.petecodes.co.uk/iot-hub-with-adr-and-certificate-management-part-5)
 
 ### Time to Build!
 
@@ -59,10 +46,12 @@ system-assigned identities.
 - One of the preview-supported regions: `australiaeast`, `japaneast`,
   `centralus`, or `uksouth`.
 
-The refreshed workflow creates a new standard S1 IoT Hub; it does not upgrade
-an existing Hub. DPS is required for the IoT Hub preview scenarios covered by
-the current guide. Certificate management is optional in the broader preview,
-but is included in this certificate-focused example.
+This series' script creates a dedicated standard S1 IoT Hub rather than
+connecting an existing one. Microsoft's current guide also supports connecting
+eligible existing Hubs; that connection is permanent and can't be reversed.
+DPS is required for the IoT Hub preview scenarios covered by the current
+guide. Certificate management is optional in the broader preview, but is
+included in this certificate-focused example.
 
 ### Run the end-to-end setup script
 
@@ -101,7 +90,12 @@ before proceeding.
 The complete parameter reference, costs, and verification instructions are in
 the [setup README](https://github.com/pjgpetecodes/skittlesorter/blob/main/scripts/iot-hub-device-registry/README.md).
 For manual commands and the latest API and CLI requirements, use Microsoft's
-[Azure CLI deployment guide](https://learn.microsoft.com/en-us/azure/iot-hub/iot-hub-device-registry-setup?pivots=azure-cli).
+[ADR connected-services guide](https://learn.microsoft.com/en-gb/azure/iot/device-registry/get-started-azure-device-registry)
+and [Azure CLI deployment guide](https://learn.microsoft.com/en-us/azure/iot-hub/iot-hub-device-registry-setup?pivots=azure-cli).
+The managed root and intermediate CA workflow is in Microsoft's
+[CA setup guide](https://learn.microsoft.com/en-gb/azure/iot/how-to-create-policy?tabs=cli);
+create the issuing CA's policy and select it in a DPS enrollment using the
+[certificate-policy guide](https://learn.microsoft.com/en-us/azure/iot/how-to-create-edit-certificate-policy?tabs=cli).
 
 ### What the workflow creates
 
@@ -134,4 +128,4 @@ CSR workflow in [Part 4](https://www.petecodes.co.uk/iot-hub-with-adr-and-certif
 
 ---
 
-[Next: Creating X.509 Certificates >](https://www.petecodes.co.uk/iot-hub-with-adr-and-certificate-management-part-4/)
+[Next: Understanding X.509 and CSR Workflows >](https://www.petecodes.co.uk/iot-hub-with-adr-and-certificate-management-part-4/)

@@ -1,8 +1,9 @@
 ## **Understanding X.509 and CSR Workflows**
 
-> **Release baseline:** This series uses the latest Azure IoT CLI preview
-> extension, `azure-iot` **1.0.0b2**, released **6 October 2026**. Last
-> reviewed **29 October 2026**. [Release notes](https://github.com/Azure/azure-iot-cli-extension/releases/tag/v1.0.0b2).
+> **CLI baseline:** The examples use Azure IoT CLI preview extension
+> `azure-iot` **1.0.0b2**, released **6 October 2026**. Last
+> reviewed against current Microsoft Learn guidance **5 November 2026**.
+> [Release notes](https://github.com/Azure/azure-iot-cli-extension/releases/tag/v1.0.0b2).
 
 ---
 
@@ -12,37 +13,24 @@ This series uses Microsoft's **new** certificate management (preview) that ena
 > public preview and isn't recommended for production workloads. For details,
 > see the [Certificate Management Overview](https://learn.microsoft.com/en-us/azure/iot/iot-certificate-management-overview).
 
+### What's new in this edition?
+
+The two certificate jobs were easy to confuse, so I've made the distinction
+clearer: the CA chain created in this walkthrough is for DPS onboarding;
+ADR's own CA and policy are used for operational certificates. I've updated
+the enrollment example to show where that policy fits. See the
+[Introduction](https://www.petecodes.co.uk/iot-hub-with-adr-and-certificate-management-part-1)
+for the series-wide changes.
+
 ---
 
-```wordpress-block
-<!-- wp:heading {"textColor":"#f6f6f4"} -->
-<h2 class="wp-block-heading has-f-6-f-6-f-4-color has-text-color">Contents:</h2>
-<!-- /wp:heading -->
-```
+### Contents
 
-```wordpress-block
-<!-- wp:list {"ordered":true,"textColor":"#f6f6f4"} -->
-<ol class="wp-block-list has-f-6-f-6-f-4-color has-text-color"><!-- wp:list-item -->
-<li><a href="https://www.petecodes.co.uk/iot-hub-with-adr-and-certificate-management-part-1" target="_blank" rel="noreferrer noopener">Introduction</a></li>
-<!-- /wp:list-item -->
-
-<!-- wp:list-item -->
-<li><a href="https://www.petecodes.co.uk/iot-hub-with-adr-and-certificate-management-part-2" target="_blank" rel="noreferrer noopener">A DPS Primer</a></li>
-<!-- /wp:list-item -->
-
-<!-- wp:list-item -->
-<li><a href="https://www.petecodes.co.uk/iot-hub-with-adr-and-certificate-management-part-3" target="_blank" rel="noreferrer noopener">Creating DPS, IoT Hub and ADR Instances</a></li>
-<!-- /wp:list-item -->
-
-<!-- wp:list-item -->
-<li><a href="https://www.petecodes.co.uk/iot-hub-with-adr-and-certificate-management-part-4" target="_blank" rel="noreferrer noopener">Understanding X.509 and CSR Workflows</a> (This Post)</li>
-<!-- /wp:list-item -->
-
-<!-- wp:list-item -->
-<li><a href="https://www.petecodes.co.uk/iot-hub-with-adr-and-certificate-management-part-5" target="_blank" rel="noreferrer noopener">The Device Application</a></li>
-<!-- /wp:list-item --></ol>
-<!-- /wp:list -->
-```
+1. [Introduction](https://www.petecodes.co.uk/iot-hub-with-adr-and-certificate-management-part-1)
+2. [A DPS Primer](https://www.petecodes.co.uk/iot-hub-with-adr-and-certificate-management-part-2)
+3. [Creating DPS, IoT Hub and ADR Instances](https://www.petecodes.co.uk/iot-hub-with-adr-and-certificate-management-part-3)
+4. [Understanding X.509 and CSR Workflows (this post)](https://www.petecodes.co.uk/iot-hub-with-adr-and-certificate-management-part-4)
+5. [The Device Application](https://www.petecodes.co.uk/iot-hub-with-adr-and-certificate-management-part-5)
 
 ## Two Types of Certificates
 
@@ -61,32 +49,31 @@ The new certificate management service makes use of a **two-phase approach**:
 -   **How it works:** DPS validates the onboarding credential and coordinates
     issuance by the namespace's ADR issuing CA when the device submits a CSR
 -   **Generated on:** Device itself (private key never leaves device)
--   **Lifespan:** Set by the assigned certificate policy (1–30 days in the
-    current setup guide); renewal is supported
+-   **Lifespan:** Set by the assigned ADR certificate policy (1–90 days;
+    this series' setup defaults to 30 days); renewal is supported
 -   **Security:** Higher security, no key transport
 
 ## How It Works
 
 The following diagram shows the complete provisioning flow:
 
-```wordpress-block
-<!-- wp:merpress/mermaidjs -->
-<div class="wp-block-merpress-mermaidjs diagram-source-mermaid"><pre class="mermaid">sequenceDiagram
+```mermaid
+sequenceDiagram
     participant Device as IoT Device
     participant DPS as DPS
     participant ADR as ADR
-    participant PKI as PKI-R&lt;br/>(Issuing CA)
+    participant PKI as PKI-R<br/>(Issuing CA)
     participant Hub as IoT Hub
 
-    Note over Device: Pre-configured with&lt;br/>onboarding credential&lt;br/>and DPS endpoint
+    Note over Device: Pre-configured with<br/>onboarding credential<br/>and DPS endpoint
 
-    Note over DPS: Configure enrollment:&lt;br/>1) Define onboarding method&lt;br/>2) Link to ADR policy
+    Note over DPS: Configure enrollment:<br/>1) Define onboarding method<br/>2) Link to ADR policy
 
-    Note over ADR: Configure credential&lt;br/>(Root CA) and&lt;br/>policies (ICAs)
+    Note over ADR: Configure CA hierarchy<br/>and ICA certificate policy
 
-    Note over PKI: Manage hierarchy of&lt;br/>Certificate&lt;br/>Authorities (CAs)
+    Note over PKI: Manage hierarchy of<br/>Certificate<br/>Authorities (CAs)
 
-    Note over Hub: Store CA and&lt;br/>validate leaf certs
+    Note over Hub: Store CA and<br/>validate leaf certs
 
     Device->>DPS: 1. Provisioning Request + CSR
     Note over Device,DPS: Device sends Certificate Signing Request
@@ -102,17 +89,15 @@ The following diagram shows the complete provisioning flow:
     DPS->>PKI: 4. Request operational certificate
     Note over DPS,PKI: Forward CSR to issuing CA
 
-    PKI->>PKI: 5. ICA signs and returns&lt;br/>operational certificate
+    PKI->>PKI: 5. ICA signs and returns<br/>operational certificate
     
     PKI-->>DPS: 6. Operational cert + chain
 
-    DPS-->>Device: 6. Return operational cert&lt;br/>+ Hub endpoint
+    DPS-->>Device: 6. Return operational cert<br/>+ Hub endpoint
 
-    Device->>Hub: 7. Authenticate with IoT Hub&lt;br/>using operational certificate chain
+    Device->>Hub: 7. Authenticate with IoT Hub<br/>using operational certificate chain
     
-    Note over Device,Hub: Device uses newly issued&lt;br/>operational certificate for&lt;br/>all future communications
-</pre></div>
-<!-- /wp:merpress/mermaidjs -->
+    Note over Device,Hub: Device uses newly issued<br/>operational certificate for<br/>all future communications
 ```
 
 **Key Steps:**
@@ -129,10 +114,10 @@ The following diagram shows the complete provisioning flow:
 
 Azure Device Registry (ADR) provides a private cloud PKI for each namespace.
 Certificate management supports one root CA and up to three intermediate CAs
-per namespace. Each intermediate CA has a certificate policy that controls
-the validity of issued device certificates. The default policy issues
-30-day certificates; the current setup guide allows a custom validity of
-1–30 days. The CA signing keys are hardware-protected by Azure Managed HSM.
+per namespace. Each intermediate CA can have one certificate policy that sets
+the validity of issued device certificates (1–90 days). This series' setup
+script defaults to a 30-day policy. The CA signing keys are hardware-protected
+by Azure Managed HSM.
 
 ADR synchronizes CA certificates with linked IoT Hubs so the hubs can trust
 operational device certificates. You can use a Microsoft cloud root CA or bring
@@ -144,7 +129,7 @@ your own external root CA and have ADR manage an intermediate CA.
 | :-- | :-- |
 | **Algorithms** | ECC (ECDSA) with NIST P-384 curve, SHA-384 hashing |
 | **HSM Keys** | Azure Managed HSM (no additional subscription required) |
-| **Certificate Validity** | 1–30 days in the current setup guide (configurable per policy) |
+| **Certificate Validity** | 1–90 days per ADR policy (30-day default in this series' setup script) |
 | **Protocols** | HTTP and MQTT during provisioning |
 | **Renewal** | Operational certificates can be renewed without reprovisioning |
 | **Revocation** | Device certificate revocation is supported; intermediate CA revocation has limits |
@@ -173,6 +158,15 @@ cd scripts
 If you prefer not to use the script, here are the manual steps to create **onboarding credentials** (bootstrap certs) and verify your CA with DPS.
 
 We'll start fresh here so that folks can run through these steps in isolation if needed.
+
+> **Keep the two CA roles separate:** The root and intermediate certificates
+> created below are your device's **onboarding** chain, which DPS uses to
+> authenticate the device. They are not the ADR-managed root and intermediate
+> CAs that issue the device's short-lived **operational** certificate. The
+> operational issuer and policy are created in [Part 3](https://www.petecodes.co.uk/iot-hub-with-adr-and-certificate-management-part-3/)
+> and selected separately on the DPS enrollment. See Microsoft's [CA hierarchy](https://learn.microsoft.com/en-gb/azure/iot/concept-managed-ca-hierarchy),
+> [managed CA setup](https://learn.microsoft.com/en-gb/azure/iot/how-to-create-policy?tabs=cli),
+> and [certificate-policy enrollment steps](https://learn.microsoft.com/en-us/azure/iot/how-to-create-edit-certificate-policy?tabs=cli).
 
 **Prerequisites:**
 
@@ -206,6 +200,9 @@ $dpsName = "$unique-skittlesorter-dps"      # must be globally unique
 $registrationId = "$unique-skittlesorter"
 $enrollmentGroupName = "$unique-skittlesorter-group"
 $certDir = ".\certs"
+$adrNamespace = "<adr-namespace>"
+$adrIntermediateCaName = "<adr-intermediate-ca-name>"
+$adrCertificatePolicyName = "<adr-certificate-policy-name>"
 ```
 
 **Create root CA folder:**
@@ -410,7 +407,7 @@ Write-Host "✓ Device bootstrap certificate created" -ForegroundColor Green
 **7) Create DPS enrollment group:**
 
 ```powershell
-az iot dps enrollment-group create --dps-name $dpsName --resource-group $resourceGroup --enrollment-id $enrollmentGroupName --ca-name "$registrationId-intermediate" --credential-policy "cert-policy" --provisioning-status enabled
+az iot dps enrollment-group create --dps-name $dpsName --resource-group $resourceGroup --enrollment-id $enrollmentGroupName --certificate-path "$certDir\ca\intermediate-ca.pem" --adr-namespace $adrNamespace --adr-ca-name $adrIntermediateCaName --adr-cert-policy-name $adrCertificatePolicyName --provisioning-status enabled
 
 Write-Host "✓ Enrollment group created with CSR-based certificate issuance" -ForegroundColor Green
 ```
@@ -429,16 +426,16 @@ Store keys securely (TPM/secure element if available).
 
 You've now completed all manual setup steps:
 
-**✓ Certificate Authority Chain Created:**
+**✓ Onboarding Certificate Authority Chain Created:**
 
--   Root CA (uploaded and verified in DPS)
--   Intermediate CA (uploaded and verified in DPS)
+-   Your root CA (uploaded and verified in DPS as the onboarding trust anchor)
+-   Your intermediate CA (used to authenticate devices to DPS)
 -   Device bootstrap certificate (signed by intermediate CA)
 
 **✓ DPS Enrollment Configured:**
 
--   Enrollment group linked to intermediate CA
--   CSR-based certificate issuance enabled
+-   Enrollment group uses the onboarding intermediate certificate
+-   Enrollment also references the separate ADR intermediate CA and certificate policy for operational issuance
 -   Ready for device provisioning
 
 **Certificate Files Created:**
@@ -455,12 +452,10 @@ You've now completed all manual setup steps:
 1.  Deploy `device.pem`, `device.key`, and `device-full-chain.pem` to your device
 2.  Device boots and authenticates to DPS with bootstrap certificate
 3.  Device generates new key pair and submits Certificate Signing Request (CSR)
-4.  DPS forwards CSR to ADR issuing CA (via credential policy)
+4.  DPS uses the ADR CA and certificate policy referenced by the enrollment
 5.  ADR issues operational certificate (Phase 2)
 6.  Device receives operational certificate from DPS
 7.  Device uses operational certificate for all IoT Hub connections
-
-**For Detailed Explanations:** See [Understanding X.509 and CSR Workflows (Deep Dive)](https://www.petecodes.co.uk/iot-hub-with-adr-and-certificate-management-part-4a) for complete technical details, certificate architecture, and advanced scenarios.
 
 ## Certificate Renewal and Revocation
 
@@ -473,14 +468,14 @@ and device workflow before relying on a fixed renewal interval.
 Certificate management also supports revoking individual device certificates.
 Revocation blocks the affected certificate from connecting until the device
 receives a replacement. Intermediate CA revocation is not supported when that
-intermediate is signed by an external CA. ADR automatically rotates CAs before
-expiry; devices that don't migrate to replacement certificates during the
-transition can lose connectivity.
+intermediate is signed by an external CA. ADR manages CA lifecycle and supports
+rotation operations; ensure devices migrate to replacement certificates during
+a rotation to avoid losing connectivity.
 
 ## Preview Limitations
 
 ⚠️ **Production Use:** IoT Hub integration and certificate management remain in public preview and aren't recommended for production workloads.
-⚠️ **Existing hubs:** There is no upgrade path to add ADR integration; use a new IoT Hub.
+⚠️ **Existing resources:** Eligible existing services can be connected to an ADR namespace, but the connection is permanent and can't be reversed. This series' setup script creates a dedicated new Hub.
 ⚠️ **DPS:** Required for all IoT Hub preview scenarios, even if certificate management is disabled.
 
 ## Learn More
@@ -489,20 +484,16 @@ transition can lose connectivity.
 
 -   [What's New in IoT Hub](https://learn.microsoft.com/en-us/azure/iot-hub/iot-hub-what-is-new)
 -   [Certificate Management Overview](https://learn.microsoft.com/en-us/azure/iot/iot-certificate-management-overview)
+-   [Certificate authority hierarchy](https://learn.microsoft.com/en-gb/azure/iot/concept-managed-ca-hierarchy)
+-   [Set up a managed root and intermediate CA](https://learn.microsoft.com/en-gb/azure/iot/how-to-create-policy?tabs=cli)
+-   [Create a certificate policy and select it in a DPS enrollment](https://learn.microsoft.com/en-us/azure/iot/how-to-create-edit-certificate-policy?tabs=cli)
+-   [Get started with ADR and connect services](https://learn.microsoft.com/en-gb/azure/iot/device-registry/get-started-azure-device-registry)
 -   [Certificate Management Concepts](https://learn.microsoft.com/en-us/azure/iot/iot-certificate-management-concepts)
 -   [Azure IoT Hub Device Registry setup](https://learn.microsoft.com/en-us/azure/iot-hub/iot-hub-device-registry-setup)
 
-**Deep Dive:**
-
--   [Understanding X.509 and CSR Workflows (Deep Dive)](https://www.petecodes.co.uk/iot-hub-with-adr-and-certificate-management-part-4a) - Detailed technical explanation with manual steps
-
 ## Next Steps
 
-Now that you understand the certificate workflow, you'll configure enrollment groups to use these certificates:
-
--   Creating X.509 enrollment groups
--   Linking ADR policies for operational certificate issuance
--   Testing provisioning with certificates
+Now that we've covered the certificate workflow, the [next post](https://www.petecodes.co.uk/iot-hub-with-adr-and-certificate-management-part-5/) follows the device application.
 
 ---
 
