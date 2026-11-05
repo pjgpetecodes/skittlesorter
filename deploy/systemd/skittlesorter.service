@@ -1,0 +1,26 @@
+[Unit]
+Description=Skittle Sorter
+After=network.target
+
+[Service]
+Type=simple
+User=skittlesorter
+Group=skittlesorter
+SupplementaryGroups=gpio i2c
+WorkingDirectory=/var/lib/skittlesorter
+ExecStartPre=+/usr/bin/python3 /usr/lib/skittlesorter/installer.py recover --root /opt/skittlesorter --ready-file /var/lib/skittlesorter/ready.json
+ExecStart=/opt/skittlesorter/current/skittlesorter --config /etc/skittlesorter/appsettings.json --ready-file /var/lib/skittlesorter/ready.json
+Restart=on-failure
+RestartSec=2s
+KillSignal=SIGTERM
+TimeoutStopSec=45s
+SendSIGKILL=no
+UMask=0077
+NoNewPrivileges=yes
+ProtectSystem=strict
+ProtectHome=yes
+PrivateTmp=yes
+ReadWritePaths=/opt/skittlesorter /var/lib/skittlesorter
+
+[Install]
+WantedBy=multi-user.target

@@ -1,0 +1,90 @@
+<!-- wp:heading {"level":1} -->
+<h1 class="wp-block-heading">Part 6: Fail safely and repeat the demonstration</h1>
+<!-- /wp:heading -->
+
+<!-- wp:quote -->
+<blockquote class="wp-block-quote"><!-- wp:paragraph -->
+<p><strong>Release baseline, reviewed 30 October 2026:</strong> latest GA agent release inspected: <strong>1.4.0, 25 June 2026</strong>; Azure IoT CLI <strong>1.0.0b2, 6 October 2026</strong>. Sorter <strong>1.0.0/1.1.0</strong> are demonstration build versions, not published releases. Draft: automated local tests are distinct from outstanding physical-Pi failure demonstrations.</p>
+<!-- /wp:paragraph --></blockquote>
+<!-- /wp:quote -->
+
+<!-- wp:paragraph -->
+<p>A successful update is only half the demonstration. Run these scenarios first with mock hardware and a known-good prior release, then repeat applicable cases on an attended, safe Pi setup.</p>
+<!-- /wp:paragraph -->
+
+<!-- wp:table -->
+<figure class="wp-block-table"><table class="has-fixed-layout">
+<thead>
+<tr>
+<th>Scenario</th>
+<th>Expected boundary</th>
+</tr>
+</thead>
+<tbody>
+<tr>
+<td>Modify downloaded payload bytes</td>
+<td>Agent/download verification rejects tampering before installation</td>
+</tr>
+<tr>
+<td>Traversal, links or wrong runtime in an archive</td>
+<td>Local installer rejects it without switching the active release</td>
+</tr>
+<tr>
+<td>Sorter cannot stop safely</td>
+<td>Installation fails; never force-kill the running hardware process</td>
+</tr>
+<tr>
+<td>New release fails startup/readiness</td>
+<td>Restore and verify the previous release; target is not installed</td>
+</tr>
+<tr>
+<td>Installer interrupted near activation</td>
+<td>Durable journal recovery resolves the unfinished transaction</td>
+</tr>
+<tr>
+<td>Cloud disconnect after local success</td>
+<td>Inspect local version and agent recovery; do not infer a second installation is necessary</td>
+</tr>
+</tbody>
+</table></figure>
+<!-- /wp:table -->
+
+<!-- wp:paragraph -->
+<p>Use the installer's documented recovery command after interruption. Never manually delete the journal to turn an unresolved transaction into success. Keep the prior healthy release until the update and reboot evidence are complete.</p>
+<!-- /wp:paragraph -->
+
+<!-- wp:paragraph -->
+<p>The GA script handler's adapter reports actual local installer failures. Its <code>is-installed</code> check uses release metadata, while transaction health verification checks running readiness. Cloud-initiated rollback policies are a separate service feature; they do not replace the local installer's immediate safety rollback.</p>
+<!-- /wp:paragraph -->
+
+<!-- wp:heading {"level":2} -->
+<h2 class="wp-block-heading">Preserve the interesting evidence</h2>
+<!-- /wp:heading -->
+
+<!-- wp:paragraph -->
+<p>Compare protected configuration/certificate checksums before and after each exercise. Verify the selected release, readiness process/version, service logs and resumed telemetry. If the previous release cannot become healthy, leave a visible operator-action-required state instead of claiming either version succeeded.</p>
+<!-- /wp:paragraph -->
+
+<!-- wp:paragraph -->
+<p>Power loss and actual motor dynamics are not reproduced by mocked process tests. The checked-in test suites document local automated coverage; physical power-interruption evidence remains a separate acceptance gate.</p>
+<!-- /wp:paragraph -->
+
+<!-- wp:heading {"level":2} -->
+<h2 class="wp-block-heading">Reset and clean up deliberately</h2>
+<!-- /wp:heading -->
+
+<!-- wp:paragraph -->
+<p>To repeat the demonstration, explicitly reinstall the known-good baseline using the trusted installer and verify it before submitting another deployment. Use new cloud deployment IDs. Do not edit the installed-version marker by hand.</p>
+<!-- /wp:paragraph -->
+
+<!-- wp:paragraph -->
+<p>Stop update controllers before switching to the ADR lab. Keep only one mechanism in charge of the sorter. Cleanup should target only the new tagged GA resource group after reviewing its contents and stopping its devices; never delete the original ADR lab to make this tutorial work. No script here deletes cloud resources automatically.</p>
+<!-- /wp:paragraph -->
+
+<!-- wp:paragraph -->
+<p>Continue with <a href="../adr-software-updates/README.md">ADR Software Updates</a>: the same C# feature and local transaction boundary, but a different cloud service connection and a custom preview protocol client.</p>
+<!-- /wp:paragraph -->
+
+<!-- wp:paragraph -->
+<p><a href="05-deployment.md">Previous</a> | <a href="README.md">Series index</a></p>
+<!-- /wp:paragraph -->

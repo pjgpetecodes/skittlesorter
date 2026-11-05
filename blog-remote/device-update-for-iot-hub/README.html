@@ -1,0 +1,43 @@
+<!-- wp:heading {"level":1} -->
+<h1 class="wp-block-heading">Updating the Skittle Sorter with Device Update for IoT Hub</h1>
+<!-- /wp:heading -->
+
+<!-- wp:quote -->
+<blockquote class="wp-block-quote"><!-- wp:paragraph -->
+<p><strong>Release baseline, reviewed 30 October 2026:</strong> latest GA agent release inspected: <strong>1.4.0, 25 June 2026</strong>; Azure IoT CLI <strong>1.0.0b2, 6 October 2026</strong>. Sorter <strong>1.0.0/1.1.0</strong> are demonstration build versions, not published releases. These are local drafts; Azure deployment and physical Raspberry Pi validation are outstanding.</p>
+<!-- /wp:paragraph --></blockquote>
+<!-- /wp:quote -->
+
+<!-- wp:paragraph -->
+<p>This is a separate application-update series, not another instalment of the unfinished ADR certificate-management series. The same C# sorter moves from a version-visible baseline to a session-count feature release. The standard Linux Device Update agent handles the GA cloud protocol; a narrowly scoped local installer handles safe replacement and rollback.</p>
+<!-- /wp:paragraph -->
+
+<!-- wp:list {"ordered":true} -->
+<ol class="wp-block-list"><!-- wp:list-item -->
+<li><a href="01-architecture.md">Architecture and boundaries</a></li>
+<!-- /wp:list-item -->
+<!-- wp:list-item -->
+<li><a href="02-lab-and-pi.md">An independent Azure lab and Pi preparation</a></li>
+<!-- /wp:list-item -->
+<!-- wp:list-item -->
+<li><a href="03-safe-application.md">A safely updateable sorter</a></li>
+<!-- /wp:list-item -->
+<!-- wp:list-item -->
+<li><a href="04-packaging-and-import.md">Packaging and importing the feature</a></li>
+<!-- /wp:list-item -->
+<!-- wp:list-item -->
+<li><a href="05-deployment.md">Deploying and collecting evidence</a></li>
+<!-- /wp:list-item -->
+<!-- wp:list-item -->
+<li><a href="06-recovery.md">Failures, recovery and repeatable demonstrations</a></li>
+<!-- /wp:list-item -->
+</ol>
+<!-- /wp:list -->
+
+<!-- wp:paragraph -->
+<p>Follow the <a href="../adr-software-updates/README.md">ADR Software Updates series</a> only after proving this path. ADR requires a different Hub and client. A successful build or mocked installer test is not a successful OTA deployment.</p>
+<!-- /wp:paragraph -->
+
+<!-- wp:paragraph -->
+<p>Source and operational details: <a href="../../docs/Application-Updates.md">application-update runbook</a>. Markdown here is the source for adjacent WordPress HTML; matching draft copies under <code>blog</code> are generated locally. Nothing in this series publishes to WordPress.</p>
+<!-- /wp:paragraph -->

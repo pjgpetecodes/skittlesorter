@@ -1,0 +1,67 @@
+<!-- wp:heading {"level":1} -->
+<h1 class="wp-block-heading">Part 4: Package the session-count feature and import real hashes</h1>
+<!-- /wp:heading -->
+
+<!-- wp:quote -->
+<blockquote class="wp-block-quote"><!-- wp:paragraph -->
+<p><strong>Release baseline, reviewed 30 October 2026:</strong> latest GA agent release inspected: <strong>1.4.0, 25 June 2026</strong>; Azure IoT CLI <strong>1.0.0b2, 6 October 2026</strong>. Sorter <strong>1.0.0/1.1.0</strong> are demonstration build versions, not published releases. Draft: payloads can be built locally; service import remains unverified.</p>
+<!-- /wp:paragraph --></blockquote>
+<!-- /wp:quote -->
+
+<!-- wp:paragraph -->
+<p>Both releases come from the same C# application. The build flag removes session counting from the baseline while keeping version/lifecycle support:</p>
+<!-- /wp:paragraph -->
+
+<!-- wp:code {"className":"language-powershell"} -->
+<pre class="wp-block-code language-powershell"><code>.\scripts\updates\common\publish-release.ps1 -Runtime linux-arm64 -Version 1.0.0 -SessionCounts $false
+.\scripts\updates\common\publish-release.ps1 -Runtime linux-arm64 -Version 1.1.0 -SessionCounts $true
+</code></pre>
+<!-- /wp:code -->
+
+<!-- wp:paragraph -->
+<p>Substitute <code>linux-arm</code> only if the Pi userland requires it. These are self-contained .NET publishes, not OS images. Use fresh output directories for rebuilds; the script refuses stale publish output. The archive has a Linux executable and generated <code>release.json</code> containing version, runtime and feature list. The packager rejects application configuration, certificate/private-key files and symbolic links.</p>
+<!-- /wp:paragraph -->
+
+<!-- wp:paragraph -->
+<p>In the feature build, a completed red/red/green sequence produces total 3 and per-colour counts red 2, green 1. Restarting the process starts a new session. We deliberately avoid changing the meaning of this data into durable production totals.</p>
+<!-- /wp:paragraph -->
+
+<!-- wp:heading {"level":2} -->
+<h2 class="wp-block-heading">Generate, don't hand-type, payload metadata</h2>
+<!-- /wp:heading -->
+
+<!-- wp:code {"className":"language-powershell"} -->
+<pre class="wp-block-code language-powershell"><code>python .\scripts\updates\common\new-import-manifest.py `
+  --channel ga --runtime linux-arm64 --version 1.1.0 `
+  --payload .\artifacts\updates\skittlesorter-1.1.0-linux-arm64.tar.gz `
+  --output .\artifacts\updates\ga-1.1.0.importmanifest.json
+</code></pre>
+<!-- /wp:code -->
+
+<!-- wp:paragraph -->
+<p>The schema-5 manifest hashes actual files using base64 SHA-256 and records byte sizes. The GA manifest imports both the archive and <code>install-sorter.py</code>, selecting <code>microsoft/script:1</code>. Its compatibility includes architecture so an ARM32 device cannot accidentally receive an ARM64 app.</p>
+<!-- /wp:paragraph -->
+
+<!-- wp:paragraph -->
+<p>The adapter understands the standard handler's appended action/work-folder/result-file arguments. It invokes only the fixed local installer; phase results are written as ADUC result JSON. Its installed check compares version/runtime metadata. The local installer performs the stronger running-version/readiness check during installation.</p>
+<!-- /wp:paragraph -->
+
+<!-- wp:heading {"level":2} -->
+<h2 class="wp-block-heading">Stage and import</h2>
+<!-- /wp:heading -->
+
+<!-- wp:paragraph -->
+<p>Run <code>scripts\updates\device-update\import-update.ps1</code> with subscription, account, instance, storage and manifest. Preview is the default; <code>-Apply</code> invokes <code>az iot du update stage --then-import true</code>. All listed files must be alongside the manifest.</p>
+<!-- /wp:paragraph -->
+
+<!-- wp:paragraph -->
+<p>The CLI staging workflow uses storage-account-key access and generates temporary read SAS URLs. Protect logs and do not add <code>--debug</code> to demonstrations containing credentials. The wrapper suppresses routine import output; inspect the update in the portal or with <code>az iot du update show</code> and verify it is deployable before proceeding. An accepted import is not yet a deployment.</p>
+<!-- /wp:paragraph -->
+
+<!-- wp:paragraph -->
+<p><a href="03-safe-application.md">Previous</a> | <a href="05-deployment.md">Next: deployment evidence</a></p>
+<!-- /wp:paragraph -->
+
+<!-- wp:paragraph -->
+<p>Source: <a href="https://github.com/Azure/iot-hub-device-update/blob/1.4.0/src/extensions/step_handlers/script_handler/README.md">script handler contract, agent 1.4.0</a>.</p>
+<!-- /wp:paragraph -->

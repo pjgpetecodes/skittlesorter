@@ -1,9 +1,10 @@
 # Remote-synced WordPress articles
 
 These are separate working copies imported from the live WordPress posts. The
-original Markdown under `blog\` is unchanged. Each article has its downloaded
-raw Gutenberg HTML, a remote-content baseline, a per-article config, and a local
-sync baseline in `.wp-md\`.
+Markdown under `blog\` is maintained separately and isn't overwritten by this
+sync workflow. Each article has its downloaded raw Gutenberg HTML, a
+remote-content baseline, a per-article config, and a local sync baseline in
+`.wp-md\`.
 
 ## Workflow
 
@@ -14,7 +15,11 @@ sync baseline in `.wp-md\`.
    node C:\repos\petecodes\wordpress-markdown-sync\bin\wp-md.mjs sync --config C:\repos\skittlesorter\blog-remote\00-introduction.wp-md.json
    ```
 
-3. Review the plan, then apply it locally with `sync --apply`.
+3. Review the plan, then apply it locally with `sync --apply`. If an
+   intentional rewrite changes the Gutenberg block structure and sync refuses,
+   review the Markdown and regenerate its paired HTML locally with
+   `wp-md export <markdown> <html> --force`. Export creates a backup and does
+   not contact WordPress.
 4. Preview the WordPress update:
 
    ```powershell

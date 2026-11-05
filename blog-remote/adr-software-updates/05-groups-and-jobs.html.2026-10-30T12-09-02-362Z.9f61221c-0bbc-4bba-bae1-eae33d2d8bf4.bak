@@ -1,0 +1,73 @@
+<!-- wp:heading {"level":1} -->
+<h1 class="wp-block-heading">Part 5: Deliver the same feature through a namespace group and job</h1>
+<!-- /wp:heading -->
+
+<!-- wp:quote -->
+<blockquote class="wp-block-quote"><!-- wp:paragraph -->
+<p><strong>Preview baseline, reviewed 30 October 2026:</strong> Azure IoT CLI <strong>1.0.0b2, released 6 October 2026</strong>; DPS update API <strong>2026-11-02-preview</strong>; SDK reference <strong>3f347e4b7687745cc2c43d1e75e5da5a1a4e35f5</strong>, inspected 30 October 2026. Client and sorter <strong>1.0.0/1.1.0</strong> are unpublished demo builds. Draft procedure: no real group/job rollout is claimed.</p>
+<!-- /wp:paragraph --></blockquote>
+<!-- /wp:quote -->
+
+<!-- wp:paragraph -->
+<p>Reuse the versioned sorter archives from the GA series, but generate an ADR-specific import manifest:</p>
+<!-- /wp:paragraph -->
+
+<!-- wp:code {"className":"language-powershell"} -->
+<pre class="wp-block-code language-powershell"><code>python .\scripts\updates\common\new-import-manifest.py `
+  --channel adr --runtime linux-arm64 --version 1.1.0 `
+  --payload .\artifacts\updates\skittlesorter-1.1.0-linux-arm64.tar.gz `
+  --output .\artifacts\updates\adr-1.1.0.importmanifest.json
+</code></pre>
+<!-- /wp:code -->
+
+<!-- wp:paragraph -->
+<p>This manifest selects the custom <code>skittlesorter/application:1</code> handler, not <code>microsoft/script:1</code>, and imports only the application archive. The archive is shared; the handler contract and service import are not.</p>
+<!-- /wp:paragraph -->
+
+<!-- wp:paragraph -->
+<p>Run <code>scripts\updates\adr\import-update.ps1</code> with the separate namespace, resource group, subscription, storage and manifest. Preview is the default. <code>-Apply</code> uses namespace Software Updates staging/import commands. Verify the import appears and is deployable; the CLI returning successfully is not device delivery.</p>
+<!-- /wp:paragraph -->
+
+<!-- wp:heading {"level":2} -->
+<h2 class="wp-block-heading">Group membership is cached</h2>
+<!-- /wp:heading -->
+
+<!-- wp:paragraph -->
+<p>Set registered-device properties that identify the intended Pi cohort and architecture. Create a namespace group whose query selects only the demo device. Group queries are immutable: use a new group when the query changes.</p>
+<!-- /wp:paragraph -->
+
+<!-- wp:paragraph -->
+<p>Refresh membership after property changes. Wait for group status <strong>Ready</strong> and inspect the resolved filter, count and intended device identity. A preview of ten members is not a complete fleet list. For this demonstration the expected count is one.</p>
+<!-- /wp:paragraph -->
+
+<!-- wp:paragraph -->
+<p><code>scripts\updates\adr\group-job.bicep</code> declares a group and a regular <code>SoftwareUpdate</code> job using API <code>2026-11-02-preview</code>. It takes the exact group query and runtime as inputs; it deliberately does not choose a broad default query. Deploying the template does not run the job.</p>
+<!-- /wp:paragraph -->
+
+<!-- wp:paragraph -->
+<p>Jobs are immutable too. Change their group/update by creating a new job, not by assuming an update-in-place changes a pending rollout. Use the portal compatibility review and the actual imported update identity <code>SkittleSorter/sorter-&lt;runtime&gt;/1.1.0</code>.</p>
+<!-- /wp:paragraph -->
+
+<!-- wp:heading {"level":2} -->
+<h2 class="wp-block-heading">Run, monitor and compare local state</h2>
+<!-- /wp:heading -->
+
+<!-- wp:paragraph -->
+<p><code>scripts\updates\adr\job.ps1</code> defaults to read-only run inspection. <code>-Action Run</code> still previews unless <code>-Apply</code> is supplied; actual execution invokes the documented schedule action with a one-hour timeout.</p>
+<!-- /wp:paragraph -->
+
+<!-- wp:paragraph -->
+<p>Inspect the run's device-level results, not just its aggregate end status. On the Pi compare the active release, running readiness version/process, persisted installed identity, owed reports and resumed 1.1.0 count telemetry. Capture redacted evidence that the GA controller was stopped and sorter telemetry coexisted with DPS update sessions.</p>
+<!-- /wp:paragraph -->
+
+<!-- wp:paragraph -->
+<p>If any prerequisite or trust proof is missing, stop before running the job. Unit tests are not a substitute for these missing cloud and physical-device observations.</p>
+<!-- /wp:paragraph -->
+
+<!-- wp:paragraph -->
+<p><a href="04-trust-and-recovery.md">Previous</a> | <a href="06-failures-and-sdk.md">Next: failure handling and future SDK</a></p>
+<!-- /wp:paragraph -->
+
+<!-- wp:paragraph -->
+<p>Source: <a href="https://learn.microsoft.com/en-us/azure/iot/device-registry/how-to-deploy-software-update-group">deploying a software update to a group</a>.</p>
+<!-- /wp:paragraph -->

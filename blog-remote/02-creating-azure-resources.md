@@ -40,398 +40,97 @@ In the previous post we dove deeper into DPS and what's new.
 
 ### Time to Build!
 
-Now that you know what DPS does, let's stand up the Azure resources. We'll
-create a resource group, a user-assigned managed identity, an ADR namespace, a
-new IoT Hub, and DPS. The walkthrough below retains our Azure CLI approach,
-updated to match the current Microsoft Learn
-[Azure CLI deployment method](https://learn.microsoft.com/en-us/azure/iot-hub/iot-hub-device-registry-setup?pivots=azure-cli).
-We'll run the commands in PowerShell 7, using backticks for line continuation.
-The Learn guide is the reference for the commands, not a replacement for the
-steps here.
+The refreshed public preview brings Device Registry, IoT Hub, DPS, and
+certificate management together in a new setup flow. This article updates the
+previous resource-creation steps to use the current Azure CLI commands and
+system-assigned identities.
 
----
-
-### Step-by-Step Azure CLI Tutorial
-
-Follow along post-by-post to understand **why** and **how** everything works. You'll learn:
-
--   DPS concepts and architecture
--   Azure resource setup
--   X.509 certificate workflows
--   .NET implementation details
+> **Preview and cost warning:** IoT Hub integration with ADR and certificate
+> management is still in public preview and isn't recommended for production.
+> Standard S1 IoT Hub and DPS resources incur normal Azure charges. Review
+> pricing and clean up dedicated test resources when you're finished.
 
 ### Prerequisites
 
--   Azure subscription
--   Azure CLI 2.73.0 or later, Python 3.10 or later, and `azure-iot`
-    extension version 1.0.0b2 or later, installed with preview support
-    (`az extension add --name azure-iot --allow-preview`)
--   PowerShell 7+
--   Rights to create resources and assign roles at the required scopes, such
-    as Owner, or Contributor together with User Access Administrator
--   A supported region: Australia East, Japan East, Central US, or UK South
+- An Azure subscription and permission to create resources and role
+  assignments at the required scopes.
+- Azure CLI 2.73.0 or later, Python 3.10 or later, and PowerShell 7 or later.
+- The preview-enabled `azure-iot` extension, version 1.0.0b2 or later.
+- One of the preview-supported regions: `australiaeast`, `japaneast`,
+  `centralus`, or `uksouth`.
 
-### What We're Building
+The refreshed workflow creates a new standard S1 IoT Hub; it does not upgrade
+an existing Hub. DPS is required for the IoT Hub preview scenarios covered by
+the current guide. Certificate management is optional in the broader preview,
+but is included in this certificate-focused example.
 
-1.  Resource group and user-assigned managed identity
-2.  ADR namespace with certificate management and a policy
-3.  New IoT Hub linked to the namespace
-4.  DPS linked to both the namespace and IoT Hub
-5.  Role assignments, policy synchronization, and enrollment configuration
+### Run the end-to-end setup script
 
-> **Preview warning:** These features are in public preview and aren't
-> recommended for production. Existing IoT Hubs can't be upgraded to ADR
-> integration; create a new hub. DPS is required for every IoT Hub preview
-> scenario. Starting October 2026, ADR integration and certificate management
-> are free during preview, while IoT Hub and DPS are billed at standard rates.
+The repository includes a resumable PowerShell script that creates the
+resource group, ADR namespace, Microsoft-managed root and intermediate CAs,
+certificate policy, DPS, S1 IoT Hub, namespace links, and a policy-bound DPS
+enrollment group. It leaves device records untouched: creating an enrollment
+group does not enroll or provision a device.
 
----
-
-### Prepare the CLI Environment
-
-First, sign in and select the subscription where you want to create the
-preview resources:
+From the repository root, sign in, select your subscription, and preview the
+parameters with `-WhatIf`:
 
 ```powershell
 az login
-az account list --output table
-az account set --subscription "<your-subscription-name-or-id>"
-az account show --output table
+az account set --subscription "<subscription-id>"
+
+.\scripts\iot-hub-device-registry\setup.ps1 `
+  -SubscriptionId "<subscription-id>" `
+  -ResourceGroupName "my-iot-preview-rg" `
+  -Location "uksouth" `
+  -NamespaceName "my-iot-adr-namespace-002" `
+  -HubName "my-iot-hub-002" `
+  -DpsName "my-iot-dps-002" `
+  -EnrollmentId "my-enrollment-group-002" `
+  -WhatIf
 ```
 
-Check the installed extensions:
-
-```powershell
-az extension list --output table
-```
-
-If `azure-iot` is already installed, remove it before installing the
-preview-enabled version, as directed by the current Learn guide:
-
-```powershell
-az extension remove --name azure-iot
-```
-
-If it isn't installed, skip the removal. Install it with preview support and
-check that the installed version is **1.0.0b2 or later**:
-
-```powershell
-az extension add --name azure-iot --allow-preview
-az extension list --output table
-```
-
-### Step 1: Set Variables and Create the Resource Group
-
-Declare names once so the commands use the same resources throughout. Choose
-unique names before running the creation commands; this is a new-environment
-walkthrough, not an in-place upgrade of an existing hub.
-
-```powershell
-$subscriptionId = az account show --query id -o tsv
-$location = "uksouth" # Or australiaeast, japaneast, or centralus
-$unique = "dev001"             # make it unique
-
-$resourceGroup = "$unique-skittlesorter-rg"
-$iotHubName = "$unique-skittlesorter-hub"   # must be globally unique
-$dpsName = "$unique-skittlesorter-dps"      # must be globally unique
-$adrNamespace = "skittlesorter-preview" # choose a unique lowercase, letters-and-hyphens name
-$credentialPolicyName = "cert-policy"
-$userIdentity = "$unique-skittlesorter-uami"
-$enrollmentGroupName = "$unique-skittlesorter-group"
-$registrationId = "$unique-skittlesorter"
-```
-
-The namespace name must contain only lowercase letters and internal hyphens,
-not digits or leading/trailing hyphens. Keep personal or sensitive information
-out of the publicly discoverable IoT Hub name.
-
-Now we create the container for everything.
-
-```powershell
-az group create --name $resourceGroup --location $location
-```
-
-### Step 2: Configure App Privileges
-
-Now we configure the IoT Hub service principal permissions at the resource
-group scope, as required by the current deployment guide.
-
-```powershell
-az role assignment create `
-        --assignee "89d10474-74af-4874-99a7-c23c2f643083" `
-        --role "Contributor" `
-        --scope "/subscriptions/$subscriptionId/resourceGroups/$resourceGroup" `
-        --output none
-```
-
-### Step 3: Create a User-Assigned Managed Identity
-
-First we create a reusable Azure managed identity so IoT Hub and DPS can securely access ADR without storing secrets.
-
-```powershell
-az identity create `
-        --name $userIdentity `
-        --resource-group $resourceGroup `
-        --location $location `
-        --output none
-```
-
-Now we retrieve the managed identity’s resource ID and save it to `$uamiResourceId` so we can attach that identity to IoT Hub and DPS in the next steps.
-
-```powershell
-$uamiResourceId = az identity show `
-        --name $userIdentity `
-        --resource-group $resourceGroup `
-        --query id -o tsv
-```
-
-Now we retrieve the managed identity’s principal ID and store it in `$uamiPrincipalId` so we can grant it RBAC permissions on ADR.
-
-```powershell
-$uamiPrincipalId = az identity show `
-        --name $userIdentity `
-        --resource-group $resourceGroup `
-        --query principalId -o tsv
-```
-
-### Step 4: Create ADR Namespace + Credential Policy
-
-ADR backs certificate issuance. We create the namespace and a policy that uses Microsoft-managed CA.
-
-**Create ADR namespace:**
-
-```powershell
-az iot adr ns create `
-  --name $adrNamespace `
-  --resource-group $resourceGroup `
-  --location $location `
-  --enable-certificate-management true `
-  --policy-name $credentialPolicyName
-```
-
-Certificate management creates a namespace root CA and an issuing-CA policy.
-The default certificate validity is 30 days; custom policies can set a
-1–30-day validity period.
-
-Namespace creation also configures a system-assigned managed identity and
-can take up to five minutes. Verify the identity, root CA credential, and
-named policy before continuing:
-
-```powershell
-az iot adr ns show `
-        --name $adrNamespace `
-        --resource-group $resourceGroup
-
-az iot adr ns credential show `
-        --namespace $adrNamespace `
-        --resource-group $resourceGroup
-
-az iot adr ns policy show `
-        --namespace $adrNamespace `
-        --resource-group $resourceGroup `
-        --name $credentialPolicyName
-```
-
-Retrieve the namespace resource ID and assign the managed identity the Azure
-Device Registry Contributor and Onboarding roles:
-
-```powershell
-$namespaceResourceId = az iot adr ns show `
-        --name $adrNamespace `
-        --resource-group $resourceGroup `
-        --query id -o tsv
-
-az role assignment create `
-        --assignee $uamiPrincipalId `
-        --role "a5c3590a-3a1a-4cd4-9648-ea0a32b15137" `
-        --scope $namespaceResourceId
-
-az role assignment create `
-        --assignee $uamiPrincipalId `
-        --role "547f7f0a-69c0-4807-bd9e-0321dfb66a84" `
-        --scope $namespaceResourceId
-```
-
-### Step 5: Create IoT Hub
-
-Create a **new** IoT Hub. In `azure-iot` 1.0.0b2, ADR namespace links are
-created separately after both the Hub and DPS exist. The preview uses the
-`GEN2` SKU; existing hubs have no upgrade path to ADR integration.
-
-```powershell
-az iot hub create `
-        --name $iotHubName `
-        --resource-group $resourceGroup `
-        --location $location `
-        --sku GEN2 `
-        --mi-user-assigned $uamiResourceId `
-        --output none
-
-$hubResourceId = az iot hub show `
-        --name $iotHubName `
-        --resource-group $resourceGroup `
-        --query id -o tsv
-```
-
-Verify that the hub has the managed identity and namespace properties
-configured:
-
-```powershell
-az iot hub show `
-        --name $iotHubName `
-        --resource-group $resourceGroup `
-        --output json
-```
-
-### Step 6: Create DPS
-
-DPS is the front door. It will handle attestation and hand out hubs.
-
-```powershell
-az iot dps create `
-        --name $dpsName `
-        --resource-group $resourceGroup `
-        --location $location `
-        --mi-user-assigned $uamiResourceId `
-        --output none
-
-$dpsResourceId = az iot dps show `
-        --name $dpsName `
-        --resource-group $resourceGroup `
-        --query id -o tsv
-```
-
-**Get DPS ID Scope:**
-
-First verify its managed identity and namespace properties, then capture the
-ID Scope for the device application:
-
-```powershell
-az iot dps show `
-  --name $dpsName `
-  --resource-group $resourceGroup `
-  --output json
-
-$idScope = az iot dps show `
-  --name $dpsName `
-  --resource-group $resourceGroup `
-  --query properties.idScope -o tsv
-
-Write-Host "DPS ID Scope: $idScope" -ForegroundColor Green
-```
-
-### Step 7: Link DPS and IoT Hub to the ADR Namespace
-
-The 1.0.0b2 extension moved namespace linking out of the Hub and DPS create
-commands. Link DPS first, then the Hub. This command also validates and
-configures the required service roles; the signed-in user needs permission to
-create role assignments.
-
-```powershell
-az iot adr ns link add `
-        --namespace $adrNamespace `
-        --resource-group $resourceGroup `
-        --dps-endpoint-name $dpsName `
-        --dps-resource-id $dpsResourceId `
-        --dps-user-assigned-mi $uamiResourceId `
-        --hub-endpoint-name $iotHubName `
-        --hub-resource-id $hubResourceId `
-        --hub-user-assigned-mi $uamiResourceId `
-        --output none
-```
-
-### Step 8: Link DPS to IoT Hub
-
-The ADR namespace link above is separate from DPS's provisioning link to the
-Hub. Create the DPS-to-Hub link, then verify it appears in DPS:
-
-```powershell
-az iot dps linked-hub create `
-        --dps-name $dpsName `
-        --resource-group $resourceGroup `
-        --hub-name $iotHubName `
-        --output none
-
-az iot dps linked-hub list `
-        --dps-name $dpsName `
-        --resource-group $resourceGroup
-```
-
-### Step 9: Sync Credential Policy
-
-Next up we sync ADR credentials into IoT Hub so certs verify correctly.
-
-**Sync credential policy to IoT Hub:**
-
-```powershell
-az iot adr ns credential sync `
-        --namespace $adrNamespace `
-        --resource-group $resourceGroup `
-        --output json
-```
-
-**List certificates in IoT Hub:**
-
-```powershell
-az iot hub certificate list `
-  --hub-name $iotHubName `
-  --resource-group $resourceGroup
-```
-
-Verify the hub has registered the CA certificate.
-
-### Step 10: Create an Enrollment Group
-
-Create an enrollment group and assign the namespace policy. This example uses
-the default symmetric-key attestation; the onboarding credential is distinct
-from the operational certificate issued by the policy.
-Because our policy is named `cert-policy` rather than `default`, pass its name
-explicitly:
-
-```powershell
-az iot dps enrollment-group create `
-        --dps-name $dpsName `
-        --resource-group $resourceGroup `
-        --enrollment-id $enrollmentGroupName `
-        --credential-policy $credentialPolicyName
-```
-
-This completes the current Learn CLI setup using symmetric-key onboarding.
-The X.509 onboarding path used by the device application needs the bootstrap
-CA and enrollment configuration in
-[Part 4](https://www.petecodes.co.uk/iot-hub-with-adr-and-certificate-management-part-4/).
-Keep the operational-certificate policy attached when configuring that
-enrollment; creating a namespace policy alone doesn't assign it to devices.
-
-### Verify in Portal
-
-Now we check:
-
--   Resource Group shows IoT Hub, DPS, ADR
--   DPS → Linked IoT hubs lists your hub
--   DPS → Overview shows the ID Scope
--   IoT Hub → Certificates includes the synced CA
-
-### Troubleshooting
-
--   **Name already exists**: Pick a new `$unique`.
--   **Unsupported region**: Use one of the supported regions listed above for
-    IoT Hub, ADR, and DPS.
--   **Role assignment fails**: Wait 1–2 minutes, then retry.
--   **No CA in IoT Hub**: Re-run the credential-policy sync.
-
-### What We Finished
-
-- Resource group created
-- New IoT Hub created with ADR integration (`GEN2`)
-- DPS created and ID Scope captured
-- ADR namespace + credential policy ready
-- Links and roles wired up
-- Enrollment group linked to the ADR certificate policy
+After checking the names, subscription, and region, run the same command
+without `-WhatIf`. The script installs/upgrades the preview-enabled Azure IoT
+CLI extension, registers the required resource providers, creates missing
+resources, links DPS first and then IoT Hub to the namespace, and waits for
+both links. It can resume after a partial run by keeping existing named
+resources, but it doesn't reconcile their settings; inspect reused resources
+before proceeding.
+
+The complete parameter reference, costs, and verification instructions are in
+the [setup README](https://github.com/pjgpetecodes/skittlesorter/blob/main/scripts/iot-hub-device-registry/README.md).
+For manual commands and the latest API and CLI requirements, use Microsoft's
+[Azure CLI deployment guide](https://learn.microsoft.com/en-us/azure/iot-hub/iot-hub-device-registry-setup?pivots=azure-cli).
+
+### What the workflow creates
+
+1. A resource group and ADR namespace with a system-assigned identity.
+2. A Microsoft-managed root CA, intermediate CA, and certificate policy.
+3. Standard S1 DPS and a new standard S1 IoT Hub, both with system-assigned
+   identities.
+4. A namespace link to DPS, followed by a namespace link to IoT Hub.
+5. A DPS enrollment group attached to the ADR certificate policy.
+
+The setup script does not create device records, device certificates, or
+provision a device. The enrollment group is only a template for future
+provisioning. The operational certificate policy is separate from the
+onboarding credential a device will use with DPS.
+
+### Verify the setup
+
+The script waits for both namespace links and prints the configured links and
+certificate authorities. In the Azure portal, confirm that the resource group
+contains the new resources, the namespace shows both connected services, DPS
+shows the enrollment group, and IoT Hub lists the linked CA certificate.
+
+To confirm that no ADR devices were created, list the devices in the namespace;
+a fresh environment should return an empty list. Keep the resource group only
+if you intend to retain the billable S1 services. Before deleting it, verify
+that it contains only resources you intend to remove.
 
 Next up we explain onboarding credentials, operational certificates, and the
-CSR workflow. For the current complete setup walkthrough, see the
-[Microsoft Learn deployment guide](https://learn.microsoft.com/en-us/azure/iot-hub/iot-hub-device-registry-setup?pivots=azure-cli).
+CSR workflow in [Part 4](https://www.petecodes.co.uk/iot-hub-with-adr-and-certificate-management-part-4/).
 
 ---
 

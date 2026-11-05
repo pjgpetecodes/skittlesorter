@@ -1,0 +1,66 @@
+<!-- wp:heading {"level":1} -->
+<h1 class="wp-block-heading">Part 3: Implement the observed DPS update contract in C#</h1>
+<!-- /wp:heading -->
+
+<!-- wp:quote -->
+<blockquote class="wp-block-quote"><!-- wp:paragraph -->
+<p><strong>Preview baseline, reviewed 30 October 2026:</strong> Azure IoT CLI <strong>1.0.0b2, released 6 October 2026</strong>; DPS update API <strong>2026-11-02-preview</strong>; SDK reference <strong>3f347e4b7687745cc2c43d1e75e5da5a1a4e35f5</strong>, inspected 30 October 2026. Client and sorter <strong>1.0.0/1.1.0</strong> are unpublished demo builds. Draft: wire compatibility requires real-service proof.</p>
+<!-- /wp:paragraph --></blockquote>
+<!-- /wp:quote -->
+
+<!-- wp:paragraph -->
+<p><code>AzureSoftwareUpdatesFramework</code> is intentionally separate from the existing provisioning transport. The old CSR transport's hard-coded API version is not a general-purpose update-channel version selector. Nor does editing a printed JSON <code>ApiVersion</code> prove the MQTT protocol changed.</p>
+<!-- /wp:paragraph -->
+
+<!-- wp:paragraph -->
+<p>The small host under <code>tools\SkittleSorter.Updater</code> composes update transport, signed-manifest verification, download, persistent workflow and a local installer boundary. It can later be replaced behind that boundary without changing how the sorter counts colours.</p>
+<!-- /wp:paragraph -->
+
+<!-- wp:heading {"level":2} -->
+<h2 class="wp-block-heading">Correlation and status are part of the protocol</h2>
+<!-- /wp:heading -->
+
+<!-- wp:paragraph -->
+<p>Regular update checks publish the documented operation:</p>
+<!-- /wp:paragraph -->
+
+<!-- wp:code {"className":"language-text"} -->
+<pre class="wp-block-code language-text"><code>$dps/registrations/POST/iotdps-get-deviceupdate/?$rid=&lt;request-id&gt;
+</code></pre>
+<!-- /wp:code -->
+
+<!-- wp:paragraph -->
+<p>The updater subscribes to <code>$dps/registrations/res/#</code>, correlates responses and reads their status/retry information. Result reports use <code>iotdps-report-deviceupdatestatus</code>. Checks include agent/profile/capability information, compatibility properties and installed identity; cached ETags must only represent the state actually retained.</p>
+<!-- /wp:paragraph -->
+
+<!-- wp:paragraph -->
+<p>A <code>200</code> response with no offered update metadata is a successful <strong>no-update</strong> result, not a malformed installation request. Authentication/configuration failures are not no-update. Transient errors respect retry guidance and bounded request timeouts; do not hammer DPS.</p>
+<!-- /wp:paragraph -->
+
+<!-- wp:paragraph -->
+<p>Use the same logical registered device as the sorter, but serialize DPS sessions through the shared provisioning lock. The sorter can keep sending Hub telemetry while the updater checks DPS. Service restart and reprovisioning coexistence still need real verification.</p>
+<!-- /wp:paragraph -->
+
+<!-- wp:heading {"level":2} -->
+<h2 class="wp-block-heading">Deliberately narrow capability</h2>
+<!-- /wp:heading -->
+
+<!-- wp:paragraph -->
+<p>The custom application handler accepts the documented single inline sorter archive. It does not interpret arbitrary manifest commands. Unsupported handlers, reference steps and multistep content must fail before installation. Advertising an unimplemented capability is worse than declining an offer.</p>
+<!-- /wp:paragraph -->
+
+<!-- wp:paragraph -->
+<p>Workflow state must survive process restart. The client preserves terminal reports until acknowledged and keeps an installed update ID separate from an offered target. Duplicate offers should not reinstall a completed update. A replacement offer must not interrupt an application transaction already in progress.</p>
+<!-- /wp:paragraph -->
+
+<!-- wp:paragraph -->
+<p>A report accepted as <code>200</code> may have an empty body. A <code>409</code> conflict is <strong>not</strong> interchangeable with acknowledgement; preserve the owed result and surface reconciliation rather than silently discarding it.</p>
+<!-- /wp:paragraph -->
+
+<!-- wp:paragraph -->
+<p>Read source comments alongside the <a href="https://github.com/Azure/azure-iot-sdk/blob/3f347e4b7687745cc2c43d1e75e5da5a1a4e35f5/c/docs/eng/software-updates.md">pinned C design</a>. The repository's custom persistence format is not a claim of binary compatibility with the C SDK's private state blob.</p>
+<!-- /wp:paragraph -->
+
+<!-- wp:paragraph -->
+<p><a href="02-preview-lab.md">Previous</a> | <a href="04-trust-and-recovery.md">Next: trust and recovery</a></p>
+<!-- /wp:paragraph -->

@@ -19,7 +19,7 @@ namespace skittle_sorter
             _config = config;
         }
 
-        public async Task SendSkittleColorTelemetryAsync(string detectedColor)
+        public async Task SendSkittleColorTelemetryAsync(string detectedColor, SessionCounts? counts = null)
         {
             if (!_config.SendTelemetry)
             {
@@ -28,22 +28,18 @@ namespace skittle_sorter
 
             try
             {
-                var telemetryData = new Dictionary<string, object>
-                {
-                    { "color", detectedColor },
-                    { "timestamp", DateTime.UtcNow },
-                    { "deviceId", _deviceId }
-                };
+                var telemetryData = CreateTelemetry(detectedColor, _deviceId, counts);
 
                 string json = JsonSerializer.Serialize(telemetryData);
-                var message = new Message(System.Text.Encoding.UTF8.GetBytes(json))
+                using var message = new Message(System.Text.Encoding.UTF8.GetBytes(json))
                 {
                     ContentType = "application/json",
                     ContentEncoding = "utf-8"
                 };
 
                 Console.WriteLine($"[Telemetry] Sending color: {detectedColor}");
-                await _deviceClient.SendEventAsync(message);
+                using var timeout = new CancellationTokenSource(TimeSpan.FromSeconds(10));
+                await _deviceClient.SendEventAsync(message, timeout.Token);
                 Console.WriteLine($"[Telemetry] Message sent successfully");
             }
             catch (Exception ex)
@@ -60,6 +56,23 @@ namespace skittle_sorter
         public void LogColorDetected(string color)
         {
             Console.WriteLine($"[Color Detected] {color}");
+        }
+
+        public static Dictionary<string, object> CreateTelemetry(string detectedColor, string deviceId, SessionCounts? counts)
+        {
+            var data = new Dictionary<string, object>
+            {
+                { "color", detectedColor },
+                { "timestamp", DateTime.UtcNow },
+                { "deviceId", deviceId },
+                { "appVersion", ApplicationRelease.Version }
+            };
+            if (counts != null)
+            {
+                data["sessionTotal"] = counts.Total;
+                data["sessionCounts"] = new Dictionary<string, long>(counts.PerColour, StringComparer.OrdinalIgnoreCase);
+            }
+            return data;
         }
     }
 }

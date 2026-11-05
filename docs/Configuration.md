@@ -4,6 +4,26 @@ Complete configuration guide for hardware, Azure IoT Hub, DPS, and ADR settings.
 
 ## Configuration File
 
+Service deployments use `--config /etc/skittlesorter/appsettings.json`; the default
+repository invocation still reads `appsettings.json`. Published releases deliberately
+exclude the real configuration. `--self-test --config PATH` checks its JSON structure
+without moving hardware or making network requests; `--version` prints the running
+assembly version. `--ready-file PATH` enables service readiness and requires an
+explicit `Hardware` section.
+
+For GA Device Update, start from
+`src/configuration/appsettings.device-update.template.json`. Set
+`IoTHub.DpsProvisioning.RequestOperationalCertificate` to `false` for standard DPS
+without CSR issuance; it defaults to `true` for compatibility with existing ADR
+profiles. Standard symmetric-key mode accepts `DeviceKeyBase64` directly. Do not
+distribute a group master key when an individual enrollment key is available.
+`ProvisioningLockPath` optionally coordinates app provisioning with the separate ADR
+updater; both must use the same path. Certificate paths resolve relative to the
+selected configuration file. Keep all keys and state outside application releases.
+
+`Adr.DeviceUpdate` remains registry metadata, not OTA configuration. The optional
+custom updater has its own configuration; see [application updates](Application-Updates.md).
+
 Create an `appsettings.json` file at the project root. You can start from the template:
 
 ```bash

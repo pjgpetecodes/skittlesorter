@@ -1,0 +1,20 @@
+[Unit]
+Description=Skittle Sorter Software Updates client
+After=network-online.target
+Wants=network-online.target
+
+[Service]
+Type=simple
+User=skittlesorter
+Group=skittlesorter
+ExecStart=/usr/lib/skittlesorter/updater/SkittleSorter.Updater --config /etc/skittlesorter/software-updates.json
+Restart=on-failure
+RestartSec=15s
+UMask=0077
+ProtectSystem=strict
+ProtectHome=yes
+PrivateTmp=yes
+ReadWritePaths=/opt/skittlesorter /var/lib/skittlesorter /var/lib/skittlesorter-installer /var/lib/skittlesorter-updater /var/cache/skittlesorter-updates
+
+[Install]
+WantedBy=multi-user.target

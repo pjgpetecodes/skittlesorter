@@ -1,0 +1,3 @@
+scripts/updates/**/*.py text eol=lf
+scripts/updates/**/*.sh text eol=lf
+deploy/** text eol=lf

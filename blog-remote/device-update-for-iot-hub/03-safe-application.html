@@ -1,0 +1,64 @@
+<!-- wp:heading {"level":1} -->
+<h1 class="wp-block-heading">Part 3: Stop at a safe cycle boundary, then replace the application</h1>
+<!-- /wp:heading -->
+
+<!-- wp:quote -->
+<blockquote class="wp-block-quote"><!-- wp:paragraph -->
+<p><strong>Release baseline, reviewed 30 October 2026:</strong> latest GA agent release inspected: <strong>1.4.0, 25 June 2026</strong>; Azure IoT CLI <strong>1.0.0b2, 6 October 2026</strong>. Sorter <strong>1.0.0/1.1.0</strong> are demonstration build versions, not published releases. Draft: physical servo shutdown and systemd behaviour still require Pi evidence.</p>
+<!-- /wp:paragraph --></blockquote>
+<!-- /wp:quote -->
+
+<!-- wp:paragraph -->
+<p>An application update must not kill a servo movement halfway through a drop. <code>src\Program.cs</code> now handles console cancellation and Linux <code>SIGTERM</code> cooperatively: stop admitting cycles, finish the current cycle, then stop PWM and dispose connections. The service must not convert an expired stop timeout into permission to force-kill hardware.</p>
+<!-- /wp:paragraph -->
+
+<!-- wp:paragraph -->
+<p>The actual running loop is in <code>Program.cs</code>, not the separate <code>SkittleSorterService</code> example. That distinction matters when adapting older code snippets.</p>
+<!-- /wp:paragraph -->
+
+<!-- wp:heading {"level":2} -->
+<h2 class="wp-block-heading">Stable paths</h2>
+<!-- /wp:heading -->
+
+<!-- wp:paragraph -->
+<p>Keep application releases under <code>/opt/skittlesorter/releases</code>, selected through <code>/opt/skittlesorter/current</code>. Keep configuration under <code>/etc/skittlesorter</code> and state/readiness under <code>/var/lib/skittlesorter</code>. Certificates and credentials stay outside the release directories.</p>
+<!-- /wp:paragraph -->
+
+<!-- wp:paragraph -->
+<p>The service invokes:</p>
+<!-- /wp:paragraph -->
+
+<!-- wp:code {"className":"language-bash"} -->
+<pre class="wp-block-code language-bash"><code>/opt/skittlesorter/current/skittlesorter \
+  --config /etc/skittlesorter/appsettings.json \
+  --ready-file /var/lib/skittlesorter/ready.json
+</code></pre>
+<!-- /wp:code -->
+
+<!-- wp:paragraph -->
+<p>The app also supports <code>--version</code> and a non-moving <code>--self-test --config PATH</code>. The self-test checks the configuration document without accessing GPIO or the network; it is not proof of working hardware. Runtime readiness is written atomically after initialization, with the running version, process ID and timestamp, and removed on orderly exit.</p>
+<!-- /wp:paragraph -->
+
+<!-- wp:heading {"level":2} -->
+<h2 class="wp-block-heading">Installation is a transaction</h2>
+<!-- /wp:heading -->
+
+<!-- wp:paragraph -->
+<p>The trusted local installer validates the release archive and metadata before stopping the sorter. Unsafe archive paths, links, architecture mismatches and invalid releases must fail without changing the active app. It serializes installation, stages a versioned directory, records recovery state, stops the service, switches the active release, starts the service and verifies expected readiness.</p>
+<!-- /wp:paragraph -->
+
+<!-- wp:paragraph -->
+<p>If startup fails, it restores the prior release and checks that recovery, rather than claiming that a running PID proves the target is healthy. If recovery cannot restore a healthy release, stop for operator attention.</p>
+<!-- /wp:paragraph -->
+
+<!-- wp:paragraph -->
+<p>Read <code>deploy\updates\README.md</code> and the <a href="../../docs/Application-Updates.md">runbook</a> for the actual bootstrap and recovery commands. Install the systemd units from <code>deploy\systemd</code> only after reviewing their user, GPIO/I2C groups, paths and timeout. The sorter and network updater should not need unrestricted root business logic; the local installation boundary has the privileges required to switch releases and control the service.</p>
+<!-- /wp:paragraph -->
+
+<!-- wp:paragraph -->
+<p>Test an empty, unpowered or mocked sorter first. Before a live update, capture the current symlink, version and protected-config checksum. After both upgrade and rollback, confirm configuration and keys are unchanged.</p>
+<!-- /wp:paragraph -->
+
+<!-- wp:paragraph -->
+<p><a href="02-lab-and-pi.md">Previous</a> | <a href="04-packaging-and-import.md">Next: packaging</a></p>
+<!-- /wp:paragraph -->

@@ -22,6 +22,8 @@ namespace AzureDpsFramework
         public string ApiVersion { get; set; } = "2025-07-01-preview";
         public int MqttPort { get; set; } = 8883;
         public bool AutoGenerateCsr { get; set; } = true;
+        public bool RequestOperationalCertificate { get; set; } = true;
+        public string? ProvisioningLockPath { get; set; }
         public string CsrFilePath { get; set; } = "certs/device.csr";
         public string CsrKeyFilePath { get; set; } = "certs/device.key";
         public string IssuedCertFilePath { get; set; } = "certs/issued/issued.pem";
@@ -93,6 +95,10 @@ namespace AzureDpsFramework
             cfg.ApiVersion = GetString(dps, nameof(ApiVersion), cfg.ApiVersion);
             cfg.MqttPort = GetInt(dps, nameof(MqttPort), cfg.MqttPort);
             cfg.AutoGenerateCsr = GetBool(dps, nameof(AutoGenerateCsr), cfg.AutoGenerateCsr);
+            cfg.RequestOperationalCertificate = GetBool(dps, nameof(RequestOperationalCertificate), cfg.RequestOperationalCertificate);
+            var lockPath = GetString(dps, nameof(ProvisioningLockPath));
+            cfg.ProvisioningLockPath = string.IsNullOrWhiteSpace(lockPath)
+                ? null : ResolveRelativePath(lockPath, appSettingsPath);
             cfg.CsrFilePath = ResolveRegistrationIdToken(
                 GetString(dps, nameof(CsrFilePath), cfg.CsrFilePath),
                 cfg.RegistrationId);
@@ -135,8 +141,9 @@ namespace AzureDpsFramework
                 throw new InvalidOperationException($"Invalid AttestationMethod: {AttestationMethod}. Must be 'SymmetricKey' or 'X509'");
             }
 
-            if (string.IsNullOrWhiteSpace(IssuedCertFilePath)) throw new InvalidOperationException("IssuedCertFilePath is required");
-            if (AutoGenerateCsr)
+            if (RequestOperationalCertificate && string.IsNullOrWhiteSpace(IssuedCertFilePath))
+                throw new InvalidOperationException("IssuedCertFilePath is required");
+            if (RequestOperationalCertificate && AutoGenerateCsr)
             {
                 if (string.IsNullOrWhiteSpace(CsrFilePath) || string.IsNullOrWhiteSpace(CsrKeyFilePath))
                     throw new InvalidOperationException("CsrFilePath and CsrKeyFilePath are required when AutoGenerateCsr is true");

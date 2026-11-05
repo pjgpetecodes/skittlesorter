@@ -1,0 +1,76 @@
+<!-- wp:heading {"level":1} -->
+<h1 class="wp-block-heading">Part 2: A separate update lab and the right Raspberry Pi payload</h1>
+<!-- /wp:heading -->
+
+<!-- wp:quote -->
+<blockquote class="wp-block-quote"><!-- wp:paragraph -->
+<p><strong>Release baseline, reviewed 30 October 2026:</strong> latest GA agent release inspected: <strong>1.4.0, 25 June 2026</strong>; Azure IoT CLI <strong>1.0.0b2, 6 October 2026</strong>. Sorter <strong>1.0.0/1.1.0</strong> are demonstration build versions, not published releases. Draft: actual OS/package compatibility and Azure execution are unverified.</p>
+<!-- /wp:paragraph --></blockquote>
+<!-- /wp:quote -->
+
+<!-- wp:paragraph -->
+<p>A Raspberry Pi 4 can run 32-bit or 64-bit userland. Detect that before building:</p>
+<!-- /wp:paragraph -->
+
+<!-- wp:code {"className":"language-bash"} -->
+<pre class="wp-block-code language-bash"><code>cat /etc/os-release
+dpkg --print-architecture
+getconf LONG_BIT
+uname -m
+</code></pre>
+<!-- /wp:code -->
+
+<!-- wp:paragraph -->
+<p>Debian <code>arm64</code> userland maps to <code>linux-arm64</code>; <code>armhf</code> maps to <code>linux-arm</code>. Kernel architecture alone is insufficient. Check the detected OS against both the .NET 10 requirements and the selected Device Update agent package. A Debian base appearing in the service support table does not mean every Raspberry Pi OS image is Microsoft-validated. The support page and GitHub release list currently identify different latest agent versions; pin the actual tested package, not just this article's research baseline.</p>
+<!-- /wp:paragraph -->
+
+<!-- wp:heading {"level":2} -->
+<h2 class="wp-block-heading">Create, rather than repurpose</h2>
+<!-- /wp:heading -->
+
+<!-- wp:paragraph -->
+<p>Install Azure CLI 2.73.0+ and explicitly install the preview Azure IoT extension on the operator computer. Record the actual versions:</p>
+<!-- /wp:paragraph -->
+
+<!-- wp:code {"className":"language-powershell"} -->
+<pre class="wp-block-code language-powershell"><code>az extension add --name azure-iot --version 1.0.0b2 --allow-preview true
+az version
+az extension show --name azure-iot --query version
+</code></pre>
+<!-- /wp:code -->
+
+<!-- wp:paragraph -->
+<p>The <code>scripts\updates\device-update\new-lab.ps1</code> script takes subscription, new resource-group name, region, Hub, DPS, Device Update account/instance, storage name and operator object ID. Without <code>-Apply</code> it only describes the operation. Read its parameters before executing; creating resources costs money. It refuses to reuse an existing resource group.</p>
+<!-- /wp:paragraph -->
+
+<!-- wp:paragraph -->
+<p>The script creates an individual symmetric-key enrollment, links standard DPS to the Hub, grants the update account identity Hub data access and grants the operator Device Update Administrator. It does not distribute an enrollment-group master key. It creates a private <code>updates</code> container; account-key staging later requires suitable management permissions. Allow RBAC propagation before testing.</p>
+<!-- /wp:paragraph -->
+
+<!-- wp:heading {"level":2} -->
+<h2 class="wp-block-heading">Separate identities and configuration</h2>
+<!-- /wp:heading -->
+
+<!-- wp:paragraph -->
+<p>Copy <code>src\configuration\appsettings.device-update.template.json</code> to a protected external configuration file. Supply the DPS scope, registration ID and <strong>individual enrollment device key</strong>. Leave mock hardware enabled until wiring, servo ranges and permissions have been verified. Enable telemetry only when ready to provision.</p>
+<!-- /wp:paragraph -->
+
+<!-- wp:paragraph -->
+<p>After the sorter has registered, run <code>initialize-module.ps1</code> with that assigned device ID. This explicitly creates module <code>adu</code> and sets its <strong>module twin</strong> <code>ADUGroup</code> tag. Use the module connection string, not the sorter device connection string, in the standard agent's protected configuration.</p>
+<!-- /wp:paragraph -->
+
+<!-- wp:paragraph -->
+<p>Install the selected official agent and its script handler using Microsoft's package instructions. Set the agent's compatibility properties to match the import manifest: manufacturer <code>SkittleSorter</code>, model <code>Pi4</code>, architecture <code>linux-arm</code> or <code>linux-arm64</code>. Check the <strong>reported</strong> module properties before importing anything. Do not paste credentials into either article, a release archive or source control.</p>
+<!-- /wp:paragraph -->
+
+<!-- wp:paragraph -->
+<p>The next step installs our local application service. Azure success and a real Pi smoke test are explicit gates, not results already obtained here.</p>
+<!-- /wp:paragraph -->
+
+<!-- wp:paragraph -->
+<p><a href="01-architecture.md">Previous</a> | <a href="03-safe-application.md">Next: safe lifecycle</a></p>
+<!-- /wp:paragraph -->
+
+<!-- wp:paragraph -->
+<p>Sources: <a href="https://learn.microsoft.com/en-us/azure/iot-hub-device-update/support">supported platforms</a>, <a href="https://github.com/Azure/iot-hub-device-update/releases">agent releases</a>.</p>
+<!-- /wp:paragraph -->

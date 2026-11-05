@@ -2,7 +2,7 @@
 
 > **Release baseline:** This series uses the latest Azure IoT CLI preview
 > extension, `azure-iot` **1.0.0b2**, released **6 October 2026**. Last
-> reviewed **29 October 2026**. [Release notes](https://github.com/Azure/azure-iot-cli-extension/releases/tag/v1.0.0b2).
+> reviewed **30 October 2026**. [Release notes](https://github.com/Azure/azure-iot-cli-extension/releases/tag/v1.0.0b2).
 
 The earlier posts in this series captured an earlier view of Azure IoT Hub's
 integration with Azure Device Registry (ADR) and Microsoft-backed X.509
@@ -22,12 +22,14 @@ The current guidance requires Device Provisioning Service (DPS) for all IoT
 Hub preview scenarios, including deployments that use ADR without certificate
 management. Certificate management is optional; DPS is not.
 
-### Existing IoT Hubs can't be upgraded
+### Eligible existing resources can be connected
 
-To try ADR integration, create a new IoT Hub. Existing hubs continue operating,
-but Microsoft documents no upgrade path to add the integration to an existing
-hub. Deploy IoT Hub, ADR, and DPS in one of the currently supported regions:
-Australia East, Japan East, Central US, or UK South.
+The current getting-started guide supports connecting eligible existing DPS and
+standard-tier IoT Hub resources, or creating new ones. Connecting them to a
+namespace is permanent. Connect DPS first, then the Hub, and verify the current
+supported-region list before creating the lab. For the new update demonstrations,
+use dedicated resources; a Hub associated with GA Device Update cannot also be
+used for ADR Software Updates.
 
 Starting in October 2026, ADR integration and certificate management are
 available at no cost during preview. IoT Hub and DPS are billed at their
@@ -50,36 +52,36 @@ limitations for intermediate CAs signed by an external CA.
 
 ### Updated CLI walkthrough
 
-Microsoft's current setup guide covers the namespace, certificate policy,
-managed identities and role assignments, new IoT Hub, DPS links, policy
-synchronization, and enrollment configuration. The series uses
+Microsoft's current setup guide covers the namespace, connected services,
+managed identities and role assignments, with optional certificate management and
+software updates. The series uses
 `azure-iot` 1.0.0b2 or later with Azure CLI 2.73.0+ and Python 3.10+.
-In this extension version, create Hub and DPS first, then link DPS followed by
-the Hub with `az iot adr ns link add`; the create commands no longer take
-namespace-link inputs. The series retains its own step-by-step Azure CLI walkthrough in
-[Part 3](https://www.petecodes.co.uk/iot-hub-with-adr-and-certificate-management-part-3/),
-updated to use that workflow. It covers preview-extension installation,
-namespace certificate management, a `GEN2` hub, managed identities, namespace
-linking, DPS-to-Hub linking, credential synchronization, and enrollment-policy
-assignment, with verification commands along the way.
+The refreshed certificate walkthrough in
+[Part 3](https://www.petecodes.co.uk/iot-hub-with-adr-and-certificate-management-part-3/)
+uses system-assigned identities, a new standard S1 Hub and DPS, Microsoft-managed
+root and intermediate CAs, and separate namespace-link commands. Its
+[PowerShell setup script](https://github.com/pjgpetecodes/skittlesorter/blob/main/scripts/iot-hub-device-registry/setup.ps1)
+links DPS first, then the Hub, and creates a policy-bound enrollment group
+without creating device records. Its
+[README](https://github.com/pjgpetecodes/skittlesorter/blob/main/scripts/iot-hub-device-registry/README.md)
+documents prerequisites, supported regions, costs, and verification.
 
 ## What changed in this article series
 
-The earlier posts included a quick-start path using the repository's setup
-scripts, described some sample implementation details as requirements of the
-preview, and stated that certificate revocation wasn't supported. The revised
-articles now:
+The earlier posts included a quick-start path using retired setup commands,
+described some sample implementation details as requirements of the preview,
+and stated that certificate revocation wasn't supported. The revised articles
+now:
 
-- Keep the CLI walkthrough in the series and update its commands and
-  verification steps for `azure-iot` 1.0.0b2, including the supported-region
-  list and the separate DPS-first namespace-link workflow.
-- Update the PowerShell setup scripts to validate `azure-iot` 1.0.0b2 or
-  later, restrict the full-setup script to supported regions, enable
-  certificate management when creating ADR, and link newly created DPS and Hub
-  resources to the namespace. The X.509 attestation helper now defaults to the
-  `cert-policy` name created by the full-setup script.
+- Replace the retired `GEN2`, user-assigned-identity, and combined-link
+  commands in Part 3 with the refreshed standard-S1, system-assigned-identity,
+  separate-link workflow.
+- Add a resumable end-to-end PowerShell setup script and instructions. It
+  restricts deployment to supported preview regions, creates the managed CA
+  hierarchy and policy, links DPS before IoT Hub, and creates an enrollment
+  group without creating devices.
 - Clarify that DPS is required even when certificate management isn't enabled,
-  and that existing IoT Hubs have no upgrade path.
+  and correct the older claim that eligible existing IoT Hubs cannot be linked.
 - Separate the device's onboarding credential from its ADR-issued operational
   certificate.
 - Reflect the documented renewal and revocation lifecycle, while noting the
@@ -88,11 +90,32 @@ articles now:
   this repository's sample, not a general requirement or a verified statement
   about all official client SDKs.
 
-These edits align the articles to current documentation; they don't establish
-that every documented capability was newly introduced in this preview.
+These edits do not establish that every documented capability was newly
+introduced in this preview, or that the downstream certificate-issuance
+walkthrough and device protocol have been verified against every newer preview
+API.
+
+## Separate application-update demonstrations
+
+The sorter now also has an application-update workstream: a
+[six-part GA Device Update series](device-update-for-iot-hub/README.md), followed by
+a [separate ADR Software Updates series](adr-software-updates/README.md).
+They share the same C# sorter, versioned releases and local transactional
+installer, but use separate Azure resources and update clients.
+
+The app adds safe cycle-boundary shutdown, external configuration, readiness,
+version telemetry and an optional session-count feature release. GA provisioning
+can explicitly opt out of operational certificate issuance. The custom C# ADR
+update client is isolated from the older provisioning transport and does not
+claim official .NET SDK support or finish the older certificate-lifecycle work.
+
+Both series are local implementation-backed drafts: real Azure/Pi update and
+failure evidence is still required. Their Markdown and adjacent local WordPress
+HTML are generated together; nothing is automatically published.
 
 ## Official references
 
+- [Current ADR connected-services setup](https://learn.microsoft.com/en-us/azure/iot/device-registry/get-started-azure-device-registry)
 - [What's new in Azure IoT Hub?](https://learn.microsoft.com/en-us/azure/iot-hub/iot-hub-what-is-new)
 - [Azure Device Registry integration with IoT Hub](https://learn.microsoft.com/en-us/azure/iot-hub/iot-hub-device-registry-overview)
 - [Deploy IoT Hub with Device Registry integration and certificate management](https://learn.microsoft.com/en-us/azure/iot-hub/iot-hub-device-registry-setup)

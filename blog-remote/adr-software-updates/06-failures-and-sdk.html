@@ -1,0 +1,94 @@
+<!-- wp:heading {"level":1} -->
+<h1 class="wp-block-heading">Part 6: Demonstrate recovery without claiming production readiness</h1>
+<!-- /wp:heading -->
+
+<!-- wp:quote -->
+<blockquote class="wp-block-quote"><!-- wp:paragraph -->
+<p><strong>Preview baseline, reviewed 30 October 2026:</strong> Azure IoT CLI <strong>1.0.0b2, released 6 October 2026</strong>; DPS update API <strong>2026-11-02-preview</strong>; SDK reference <strong>3f347e4b7687745cc2c43d1e75e5da5a1a4e35f5</strong>, inspected 30 October 2026. Client and sorter <strong>1.0.0/1.1.0</strong> are unpublished demo builds. Draft: real service and physical-Pi failures remain unverified.</p>
+<!-- /wp:paragraph --></blockquote>
+<!-- /wp:quote -->
+
+<!-- wp:paragraph -->
+<p>The custom updater should fail loudly at the correct boundary, rather than producing a success-shaped fallback. Exercise it with deterministic local tests first, then obtain independent service/Pi evidence.</p>
+<!-- /wp:paragraph -->
+
+<!-- wp:table -->
+<figure class="wp-block-table"><table class="has-fixed-layout">
+<thead>
+<tr>
+<th>Exercise</th>
+<th>Evidence needed</th>
+</tr>
+</thead>
+<tbody>
+<tr>
+<td>Invalid JWS, disabled/unknown key or signed digest mismatch</td>
+<td>Rejection before payload installation</td>
+</tr>
+<tr>
+<td>Payload corruption or HTTPS downgrade</td>
+<td>Bounded download failure; current app unchanged</td>
+</tr>
+<tr>
+<td>Unsupported handler/reference/multistep content</td>
+<td>Refusal before invoking the local installer</td>
+</tr>
+<tr>
+<td>Repeated completed workflow</td>
+<td>No second installation; correct installed identity</td>
+</tr>
+<tr>
+<td>Report disconnect/restart</td>
+<td>Terminal result remains durable and is replayed</td>
+</tr>
+<tr>
+<td>Report conflict</td>
+<td>Visible reconciliation requirement, not false acknowledgement</td>
+</tr>
+<tr>
+<td>New release not ready</td>
+<td>Verified rollback; failed target not recorded as installed</td>
+</tr>
+<tr>
+<td>Replacement during a transaction</td>
+<td>No interruption of the active local install</td>
+</tr>
+<tr>
+<td>Repeated failed workflow</td>
+<td>Persisted backoff and jitter; no tight polling loop</td>
+</tr>
+</tbody>
+</table></figure>
+<!-- /wp:table -->
+
+<!-- wp:paragraph -->
+<p>Use mock hardware for interruption exercises. A root-key fixture signed by a generated test key demonstrates cryptographic validation logic; it does not prove a Microsoft-signed service offer was accepted. Likewise a simulated transport cannot demonstrate concurrent real Hub telemetry and serialized DPS sessions.</p>
+<!-- /wp:paragraph -->
+
+<!-- wp:paragraph -->
+<p>For unresolved local recovery, stop and preserve diagnostics. Do not delete the workflow state, transaction journal or old release just to make a job appear green. Preserve configuration and key checksums throughout.</p>
+<!-- /wp:paragraph -->
+
+<!-- wp:heading {"level":2} -->
+<h2 class="wp-block-heading">Adopting an official .NET implementation later</h2>
+<!-- /wp:heading -->
+
+<!-- wp:paragraph -->
+<p>When official .NET support arrives, first read its actual software-update capability matrix, current package version and migration contract. Do not predict class names or assume today's custom state format is compatible.</p>
+<!-- /wp:paragraph -->
+
+<!-- wp:paragraph -->
+<p>Keep the application payload and trusted local installation boundary. Replace protocol, trust/state machinery and host integration explicitly, then repeat authentication, no-update, signed offer, rollback, duplicate and report-replay proofs. Avoid running two update clients simultaneously as a “migration test.”</p>
+<!-- /wp:paragraph -->
+
+<!-- wp:paragraph -->
+<p>The older <code>AzureDpsFramework</code> CSR issuance implementation remains a separate concern. This series does not silently upgrade that protocol or declare unfinished certificate renewal complete.</p>
+<!-- /wp:paragraph -->
+
+<!-- wp:paragraph -->
+<p>Before publishing either series, replace outstanding validation notes with real, redacted observations: target OS/architecture, exact agent/client versions, actual service/API availability, successful update, rejected tampering, healthy rollback and restart evidence. Until then these are implementation-backed drafts, not a production deployment guide.</p>
+<!-- /wp:paragraph -->
+
+<!-- wp:paragraph -->
+<p><a href="05-groups-and-jobs.md">Previous</a> | <a href="README.md">Series index</a></p>
+<!-- /wp:paragraph -->

@@ -14,11 +14,12 @@ namespace skittle_sorter
 {
     public class DpsInitializationService
     {
-        public static DeviceClient? Initialize(IoTHubConfig iotConfig)
+        public static DeviceClient? Initialize(IoTHubConfig iotConfig, string configurationPath = "appsettings.json",
+            CancellationToken cancellationToken = default)
         {
             try
             {
-                var dpsCfg = DpsConfiguration.Load();
+                var dpsCfg = DpsConfiguration.Load(configurationPath);
 
                 WriteSection("DPS Configuration");
                 Console.WriteLine($"IdScope: {dpsCfg.IdScope}");
@@ -34,10 +35,13 @@ namespace skittle_sorter
                 // ==============================
                 // SYMMETRIC KEY ATTESTATION
                 // ==============================
-                if (dpsCfg.AttestationMethod == "SymmetricKey")
+                if (!dpsCfg.RequestOperationalCertificate)
+                {
+                    security = CreateStandardSecurity(dpsCfg);
+                }
+                else if (dpsCfg.AttestationMethod == "SymmetricKey")
                 {
                     WriteSection("DPS Registration (Symmetric Key)");
-                    Console.WriteLine($"EnrollmentGroupKeyBase64 (first 30 chars): {dpsCfg.EnrollmentGroupKeyBase64?.Substring(0, Math.Min(30, dpsCfg.EnrollmentGroupKeyBase64.Length))}...");
 
                     if (string.IsNullOrWhiteSpace(dpsCfg.EnrollmentGroupKeyBase64))
                     {
@@ -129,6 +133,8 @@ namespace skittle_sorter
                 // COMMON PROVISIONING FLOW
                 // ==============================
 
+                using var securityLifetime = security;
+
                 // Create transport handler
                 using var transport = new ProvisioningTransportHandlerMqtt(
                     dpsCfg.ProvisioningHost,
@@ -145,7 +151,9 @@ namespace skittle_sorter
                 Console.WriteLine($"Connecting to {dpsCfg.ProvisioningHost}:{dpsCfg.MqttPort}...");
 
                 // Register the device
-                var result = provisioningClient.RegisterAsync(CancellationToken.None).GetAwaiter().GetResult();
+                // The separate preview updater uses this lock too: DPS registrations must not race its session.
+                using var provisioningLock = AcquireProvisioningLock(dpsCfg.ProvisioningLockPath, cancellationToken);
+                var result = provisioningClient.RegisterAsync(cancellationToken).GetAwaiter().GetResult();
                 
                 WriteSection("DPS Registration Result");
                 Console.WriteLine($"DPS Response Status: {result.Status}");
@@ -162,6 +170,11 @@ namespace skittle_sorter
                 if (result.Status == ProvisioningRegistrationStatusType.Assigned &&
                     !string.IsNullOrWhiteSpace(result.DeviceId) && !string.IsNullOrWhiteSpace(result.AssignedHub))
                 {
+                    iotConfig.DeviceId = result.DeviceId;
+                    if (dpsCfg.RequestOperationalCertificate &&
+                        (result.IssuedCertificateChain == null || result.IssuedCertificateChain.Length == 0))
+                        throw new InvalidOperationException("The selected profile requires an issued operational certificate, but DPS did not return one.");
+
                     // If certificate chain is issued, use X.509 authentication
                     if (result.IssuedCertificateChain != null && result.IssuedCertificateChain.Length > 0)
                     {
@@ -172,7 +185,7 @@ namespace skittle_sorter
                         
                         var x509 = CertificateManager.LoadX509WithPrivateKey(dpsCfg.IssuedCertFilePath, dpsCfg.CsrKeyFilePath);
                         // Optional: list ADR devices after successful provisioning
-                        TryListAdrDevices(result.DeviceId);
+                        TryListAdrDevices(result.DeviceId, configurationPath);
 
                         WriteSection("IoT Hub Connection (X.509)");
                         var deviceClient = DeviceClient.Create(
@@ -182,19 +195,22 @@ namespace skittle_sorter
                         Console.WriteLine($"✅ Connected to IoT Hub via X.509. Hub={result.AssignedHub}, DeviceId={result.DeviceId}\n");
                         return deviceClient;
                     }
+                    else if (dpsCfg.AttestationMethod == "X509")
+                    {
+                        var certificate = CertificateManager.LoadX509WithPrivateKey(
+                            dpsCfg.AttestationCertPath!, dpsCfg.AttestationKeyPath!);
+                        TryListAdrDevices(result.DeviceId, configurationPath);
+                        return DeviceClient.Create(result.AssignedHub,
+                            new DeviceAuthenticationWithX509Certificate(result.DeviceId, certificate), TransportType.Mqtt);
+                    }
                     else
                     {
                         // No certificate issued - use symmetric key authentication for IoT Hub
                         // The symmetric key is the derived device key from DPS provisioning
-                        if (string.IsNullOrWhiteSpace(dpsCfg.EnrollmentGroupKeyBase64))
-                        {
-                            throw new InvalidOperationException("EnrollmentGroupKeyBase64 is required for symmetric key authentication");
-                        }
-                        
-                        var derivedDeviceKey = DpsSasTokenGenerator.DeriveDeviceKey(result.DeviceId, dpsCfg.EnrollmentGroupKeyBase64);
+                        var derivedDeviceKey = dpsCfg.GetDeviceKeyOrDerive();
                         
                         // Optional: list ADR devices after successful provisioning
-                        TryListAdrDevices(result.DeviceId);
+                        TryListAdrDevices(result.DeviceId, configurationPath);
 
                         WriteSection("IoT Hub Connection (Symmetric Key)");
                         var deviceClient = DeviceClient.Create(
@@ -217,6 +233,11 @@ namespace skittle_sorter
                     iotConfig.SendTelemetry = false;
                     return null;
                 }
+            }
+            catch (OperationCanceledException) when (cancellationToken.IsCancellationRequested)
+            {
+                Console.WriteLine("DPS initialization cancelled during shutdown.");
+                return null;
             }
             catch (InvalidOperationException ex)
             {
@@ -241,6 +262,42 @@ namespace skittle_sorter
                 Console.WriteLine("Continuing without telemetry.\n");
                 iotConfig.SendTelemetry = false;
                 return null;
+            }
+        }
+
+        public static SecurityProvider CreateStandardSecurity(DpsConfiguration configuration)
+        {
+            if (configuration.RequestOperationalCertificate)
+                throw new InvalidOperationException("The standard provisioning profile must explicitly disable operational certificate issuance.");
+            configuration.Validate();
+            if (configuration.AttestationMethod == "SymmetricKey")
+                return new SecurityProviderSymmetricKey(configuration.RegistrationId, configuration.GetDeviceKeyOrDerive());
+
+            var chain = new System.Security.Cryptography.X509Certificates.X509Certificate2Collection();
+            if (!string.IsNullOrWhiteSpace(configuration.AttestationCertChainPath))
+                chain.ImportFromPemFile(configuration.AttestationCertChainPath);
+            return new SecurityProviderX509Certificate(configuration.RegistrationId,
+                CertificateManager.LoadX509WithPrivateKey(configuration.AttestationCertPath!, configuration.AttestationKeyPath!),
+                chain);
+        }
+
+        private static FileStream? AcquireProvisioningLock(string? path, CancellationToken cancellationToken)
+        {
+            if (path == null) return null;
+            Directory.CreateDirectory(Path.GetDirectoryName(Path.GetFullPath(path))!);
+            var deadline = DateTime.UtcNow.AddSeconds(60);
+            while (true)
+            {
+                cancellationToken.ThrowIfCancellationRequested();
+                try
+                {
+                    return new FileStream(path, FileMode.OpenOrCreate, FileAccess.ReadWrite, FileShare.None);
+                }
+                catch (IOException) when (DateTime.UtcNow < deadline)
+                {
+                    if (cancellationToken.WaitHandle.WaitOne(250))
+                        cancellationToken.ThrowIfCancellationRequested();
+                }
             }
         }
 
@@ -274,11 +331,11 @@ namespace skittle_sorter
             Console.WriteLine($"\n=== {title} ===\n");
         }
 
-        private static void TryListAdrDevices(string? deviceName = null)
+        private static void TryListAdrDevices(string? deviceName = null, string configurationPath = "appsettings.json")
         {
             try
             {
-                var adrCfg = AdrConfiguration.Load();
+                var adrCfg = AdrConfiguration.Load(configurationPath);
                 if (!adrCfg.IsConfigured())
                 {
                     return; // disabled or not configured
@@ -305,7 +362,7 @@ namespace skittle_sorter
                 if (!string.IsNullOrWhiteSpace(deviceName))
                 {
                     // Optional config-driven update before fetching details so changes are visible
-                    var updCfg = AdrDeviceUpdateConfiguration.Load();
+                    var updCfg = AdrDeviceUpdateConfiguration.Load(configurationPath);
                     if (updCfg.Enabled)
                     {
                         Console.WriteLine("[ADR] Updating device attributes from configuration before fetching details...");
@@ -314,7 +371,8 @@ namespace skittle_sorter
                             updCfg.Attributes ?? new Dictionary<string, object>(),
                             updCfg.Tags,
                             updCfg.DeviceEnabled,
-                            updCfg.OperatingSystemVersion
+                            updCfg.OperatingSystemVersion,
+                            configurationPath
                         );
                     }
 
@@ -401,11 +459,12 @@ namespace skittle_sorter
             IDictionary<string, object> attributes,
             IDictionary<string, string>? tags = null,
             bool? enabled = null,
-            string? operatingSystemVersion = null)
+            string? operatingSystemVersion = null,
+            string configurationPath = "appsettings.json")
         {
             try
             {
-                var adrCfg = AdrConfiguration.Load();
+                var adrCfg = AdrConfiguration.Load(configurationPath);
                 if (!adrCfg.IsConfigured())
                 {
                     Console.WriteLine("[ADR] Update skipped: ADR configuration is not set.");

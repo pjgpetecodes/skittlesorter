@@ -6,9 +6,17 @@
     <ImplicitUsings>enable</ImplicitUsings>
     <Nullable>enable</Nullable>
     <NoWarn>$(NoWarn);0436;2001</NoWarn>
-    <GenerateAssemblyInfo>false</GenerateAssemblyInfo>
-    <GenerateTargetFrameworkAttribute>false</GenerateTargetFrameworkAttribute>
+    <EnableDefaultCompileItems>false</EnableDefaultCompileItems>
+    <GenerateAssemblyInfo>true</GenerateAssemblyInfo>
+    <GenerateTargetFrameworkAttribute>true</GenerateTargetFrameworkAttribute>
+    <Version Condition="'$(Version)' == ''">1.1.0</Version>
+    <SessionCountsEnabled Condition="'$(SessionCountsEnabled)' == ''">true</SessionCountsEnabled>
+    <DefineConstants Condition="'$(SessionCountsEnabled)' == 'true'">$(DefineConstants);SESSION_COUNTS</DefineConstants>
   </PropertyGroup>
+
+  <ItemGroup>
+    <Compile Include="src\**\*.cs" />
+  </ItemGroup>
 
   <ItemGroup>
     <PackageReference Include="Iot.Device.Bindings" Version="4.0.1" />
@@ -20,7 +28,8 @@
 
   <ItemGroup>
     <None Update="appsettings.json">
-      <CopyToOutputDirectory>Always</CopyToOutputDirectory>
+      <CopyToOutputDirectory>Never</CopyToOutputDirectory>
+      <CopyToPublishDirectory>Never</CopyToPublishDirectory>
     </None>
   </ItemGroup>
 

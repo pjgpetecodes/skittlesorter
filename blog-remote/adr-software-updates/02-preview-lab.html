@@ -1,0 +1,67 @@
+<!-- wp:heading {"level":1} -->
+<h1 class="wp-block-heading">Part 2: Prepare an independent ADR Software Updates environment</h1>
+<!-- /wp:heading -->
+
+<!-- wp:quote -->
+<blockquote class="wp-block-quote"><!-- wp:paragraph -->
+<p><strong>Preview baseline, reviewed 30 October 2026:</strong> Azure IoT CLI <strong>1.0.0b2, released 6 October 2026</strong>; DPS update API <strong>2026-11-02-preview</strong>; SDK reference <strong>3f347e4b7687745cc2c43d1e75e5da5a1a4e35f5</strong>, inspected 30 October 2026. Client and sorter <strong>1.0.0/1.1.0</strong> are unpublished demo builds. Draft: resource creation and real authentication remain unverified.</p>
+<!-- /wp:paragraph --></blockquote>
+<!-- /wp:quote -->
+
+<!-- wp:paragraph -->
+<p>Do not run the old certificate-management setup blindly. Current guidance creates a standard S-tier Hub, connects DPS first, then connects the Hub and optional software-update instance to the namespace. Existing eligible resources can be connected, but linking is irreversible. This demonstration intentionally creates only new resources.</p>
+<!-- /wp:paragraph -->
+
+<!-- wp:heading {"level":2} -->
+<h2 class="wp-block-heading">Operator setup</h2>
+<!-- /wp:heading -->
+
+<!-- wp:paragraph -->
+<p>Use Azure CLI 2.73.0+ and explicitly install the pinned Azure IoT preview extension:</p>
+<!-- /wp:paragraph -->
+
+<!-- wp:code {"className":"language-powershell"} -->
+<pre class="wp-block-code language-powershell"><code>az extension add --name azure-iot --version 1.0.0b2 --allow-preview true
+az extension show --name azure-iot --query version
+</code></pre>
+<!-- /wp:code -->
+
+<!-- wp:paragraph -->
+<p>Read <code>scripts\updates\adr\new-lab.ps1</code>. Supply an explicit subscription, new resource group, supported common region, namespace, DPS, separate Hub, update-instance name, storage name and operator object ID. Default execution is descriptive only; <code>-Apply</code> creates billable resources.</p>
+<!-- /wp:paragraph -->
+
+<!-- wp:paragraph -->
+<p>The script enables system-assigned identities, uses <code>az iot adr ns link dps add</code> before <code>link hub add</code>, creates the update instance with <code>az iot adr ns su instance create</code>, links it using <code>link su add</code> and waits for links. It creates private artifact storage and operator content/storage roles.</p>
+<!-- /wp:paragraph -->
+
+<!-- wp:paragraph -->
+<p>The link workflow handles required service-to-service grants when the operator can create role assignments. That is different from granting the signed-in operator content permissions. Inspect all links and allow identity/RBAC propagation. Confirm the Hub has <strong>no GA Device Update instance</strong>.</p>
+<!-- /wp:paragraph -->
+
+<!-- wp:heading {"level":2} -->
+<h2 class="wp-block-heading">X.509 and the first proof</h2>
+<!-- /wp:heading -->
+
+<!-- wp:paragraph -->
+<p>The custom update channel requires a registered device and supported X.509 authentication. Do not copy the GA symmetric-key profile and assume update checks support it. Use a valid enrollment/bootstrap chain following the pinned regular-update sample and current DPS instructions; verify certificate identity, private-key matching, trust and assignment.</p>
+<!-- /wp:paragraph -->
+
+<!-- wp:paragraph -->
+<p>This work does not finish the older ADR operational-certificate issuance/renewal series. The new lab must demonstrate its own minimal supported bootstrap without pretending those older drafts are complete.</p>
+<!-- /wp:paragraph -->
+
+<!-- wp:paragraph -->
+<p>Store app configuration, updater configuration, device certificates and trust anchors outside releases. Both the sorter provisioning profile and updater must use <code>/var/lib/skittlesorter/provisioning.lock</code> or another identical, appropriately permissioned path.</p>
+<!-- /wp:paragraph -->
+
+<!-- wp:paragraph -->
+<p>Before any job, prove a real authenticated check and accepted report against the target service/API. Check the <code>2026-11-02-preview</code> contract is actually available in that environment. A mocked MQTT test or a successful namespace link does not establish that. This is currently an outstanding gate.</p>
+<!-- /wp:paragraph -->
+
+<!-- wp:paragraph -->
+<p><a href="01-architecture.md">Previous</a> | <a href="03-custom-client.md">Next: custom C# channel</a></p>
+<!-- /wp:paragraph -->
+
+<!-- wp:paragraph -->
+<p>Sources: <a href="https://learn.microsoft.com/en-us/azure/iot/device-registry/get-started-azure-device-registry">current setup</a>, <a href="https://github.com/Azure/azure-iot-sdk/blob/3f347e4b7687745cc2c43d1e75e5da5a1a4e35f5/c/samples/software_update/pc/simulated_regular/README.md">pinned regular-update sample</a>.</p>
+<!-- /wp:paragraph -->

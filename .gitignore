@@ -19,6 +19,7 @@ appsettings.*.json
 !appsettings.template.json
 !appsettings.sas.template.json
 !appsettings.x509.template.json
+!appsettings.device-update.template.json
 
 # User-specific files
 *.rsuser

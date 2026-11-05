@@ -1,0 +1,73 @@
+<!-- wp:heading {"level":1} -->
+<h1 class="wp-block-heading">Part 4: Verify trust before trusting a payload hash</h1>
+<!-- /wp:heading -->
+
+<!-- wp:quote -->
+<blockquote class="wp-block-quote"><!-- wp:paragraph -->
+<p><strong>Preview baseline, reviewed 30 October 2026:</strong> Azure IoT CLI <strong>1.0.0b2, released 6 October 2026</strong>; DPS update API <strong>2026-11-02-preview</strong>; SDK reference <strong>3f347e4b7687745cc2c43d1e75e5da5a1a4e35f5</strong>, inspected 30 October 2026. Client and sorter <strong>1.0.0/1.1.0</strong> are unpublished demo builds. Draft: trusted service fixtures and real Pi recovery remain validation gates.</p>
+<!-- /wp:paragraph --></blockquote>
+<!-- /wp:quote -->
+
+<!-- wp:paragraph -->
+<p>A SHA-256 value in untrusted JSON only proves that two attacker-controlled values agree. Before downloading or installing anything, verify the manifest's signed digest through the published RS256/JWS signing chain and an independently trusted root-key baseline.</p>
+<!-- /wp:paragraph -->
+
+<!-- wp:paragraph -->
+<p>Keep the trust baseline out of band. A root-key URL returned by the service is input, not permission to trust a new root. Local generated test keys prove verifier behaviour; they are not Microsoft service trust anchors. Reject unsupported algorithms, unknown or disabled keys, malformed signatures and mismatched manifest digests.</p>
+<!-- /wp:paragraph -->
+
+<!-- wp:paragraph -->
+<p>The first custom client intentionally fails closed rather than bootstrapping trust from an arbitrary network response. Review its README for supported key-baseline handling and limitations; root rotation requires an authenticated trust update, not a “disable verification” demonstration switch.</p>
+<!-- /wp:paragraph -->
+
+<!-- wp:heading {"level":2} -->
+<h2 class="wp-block-heading">Bound the download</h2>
+<!-- /wp:heading -->
+
+<!-- wp:paragraph -->
+<p>After signature verification, validate the known application manifest shape. Require HTTPS, including any redirect destination, bounded download time/size and exact payload SHA-256/size. Never print SAS URLs in normal logs. Hash/signature failure must occur before calling the privileged installer.</p>
+<!-- /wp:paragraph -->
+
+<!-- wp:paragraph -->
+<p>The installer receives one verified archive and explicit expected version/runtime:</p>
+<!-- /wp:paragraph -->
+
+<!-- wp:code {"className":"language-bash"} -->
+<pre class="wp-block-code language-bash"><code>python3 /usr/lib/skittlesorter/installer.py install \
+  --root /opt/skittlesorter \
+  --payload /protected/staging/skittlesorter-1.1.0-linux-arm64.tar.gz \
+  --version 1.1.0 --runtime linux-arm64
+</code></pre>
+<!-- /wp:code -->
+
+<!-- wp:paragraph -->
+<p>The unprivileged updater does not invoke that root CLI directly. It downloads into <code>/var/cache/skittlesorter-updates/incoming</code> and calls the fixed <code>sudo -n /usr/lib/skittlesorter/installer-helper install --payload BASENAME --version VERSION --runtime RUNTIME</code> boundary. The root-owned helper snapshots the file before invoking the fixed installer. Do not run the network client as root merely to make a demonstration work. Follow <code>deploy\updates\README.md</code> and <code>install-installer-helper.sh</code> for bootstrap and narrowly scoped sudo authorization.</p>
+<!-- /wp:paragraph -->
+
+<!-- wp:heading {"level":2} -->
+<h2 class="wp-block-heading">Two recovery boundaries</h2>
+<!-- /wp:heading -->
+
+<!-- wp:paragraph -->
+<p>The local transaction journal resolves application staging, activation, readiness and rollback. The updater state resolves offered workflow, installed identity, retry schedule and reports owed to DPS. Neither replaces the other.</p>
+<!-- /wp:paragraph -->
+
+<!-- wp:paragraph -->
+<p>If local startup fails and the previous release is restored, retain the previous installed update ID. If installation succeeds but reporting disconnects, persist the successful result before retrying the report; do not reinstall just to generate another status message.</p>
+<!-- /wp:paragraph -->
+
+<!-- wp:paragraph -->
+<p>This initial client stops for journal/active-release reconciliation if restarted at an ambiguous installer boundary; it does not automatically infer that transaction's outcome. MQTT reconnect recovery and corrective polling after report conflict are also incomplete. These are tracked demonstration limitations, not completed production recovery features.</p>
+<!-- /wp:paragraph -->
+
+<!-- wp:paragraph -->
+<p>The published failed-workflow policy uses a minimum one-hour retry, doubling toward 24 hours with jitter. Normal polling defaults to four hours. A bounded manual check is for an attended demonstration, not a permanent tight loop.</p>
+<!-- /wp:paragraph -->
+
+<!-- wp:paragraph -->
+<p>Job cancellation is service-side: stopping future offers does not guarantee aborting a payload already being installed. Never interrupt a physical drop in response to a cloud “cancel” label.</p>
+<!-- /wp:paragraph -->
+
+<!-- wp:paragraph -->
+<p><a href="03-custom-client.md">Previous</a> | <a href="05-groups-and-jobs.md">Next: groups and jobs</a></p>
+<!-- /wp:paragraph -->

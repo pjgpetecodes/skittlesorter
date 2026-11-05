@@ -1,0 +1,66 @@
+<!-- wp:heading {"level":1} -->
+<h1 class="wp-block-heading">Part 5: Prove the update on one sorter</h1>
+<!-- /wp:heading -->
+
+<!-- wp:quote -->
+<blockquote class="wp-block-quote"><!-- wp:paragraph -->
+<p><strong>Release baseline, reviewed 30 October 2026:</strong> latest GA agent release inspected: <strong>1.4.0, 25 June 2026</strong>; Azure IoT CLI <strong>1.0.0b2, 6 October 2026</strong>. Sorter <strong>1.0.0/1.1.0</strong> are demonstration build versions, not published releases. Draft procedure: no successful Azure/Pi rollout is claimed.</p>
+<!-- /wp:paragraph --></blockquote>
+<!-- /wp:quote -->
+
+<!-- wp:paragraph -->
+<p>Start with a healthy 1.0.0 baseline installed locally. Check <code>current</code>, the app's <code>--version</code>, readiness, service logs and sorter telemetry. Confirm the standard update agent is connected <strong>as the <code>adu</code> module</strong>, while the sorter remains connected as its parent device.</p>
+<!-- /wp:paragraph -->
+
+<!-- wp:paragraph -->
+<p>In Device Update, inspect the group created from the module twin's <code>ADUGroup</code> tag. Check member identities, device classes and architecture compatibility. This demonstration targets one Pi; it is not evidence of a multi-device canary rollout.</p>
+<!-- /wp:paragraph -->
+
+<!-- wp:paragraph -->
+<p>Only after import is deployable and the resolved group contains the intended module, invoke:</p>
+<!-- /wp:paragraph -->
+
+<!-- wp:code {"className":"language-powershell"} -->
+<pre class="wp-block-code language-powershell"><code>.\scripts\updates\device-update\deploy-update.ps1 `
+  -Subscription &quot;&lt;subscription&gt;&quot; -Account &quot;&lt;GA-account&gt;&quot; -Instance &quot;&lt;GA-instance&gt;&quot; `
+  -Group skittlesorter-pi4 -Deployment sorter-110 `
+  -Runtime linux-arm64 -Version 1.1.0
+</code></pre>
+<!-- /wp:code -->
+
+<!-- wp:paragraph -->
+<p>That is a preview. Review the selected group and add <code>-Apply</code> to submit the deployment. The wrapper requires HTTPS downloads and then reads cloud deployment status. A cloud status query returning successfully is not the same as the device having completed installation.</p>
+<!-- /wp:paragraph -->
+
+<!-- wp:heading {"level":2} -->
+<h2 class="wp-block-heading">Evidence to collect</h2>
+<!-- /wp:heading -->
+
+<!-- wp:paragraph -->
+<p>Record the import/update identity, group membership, module identity, start time, agent result and device-level deployment status. On the Pi collect:</p>
+<!-- /wp:paragraph -->
+
+<!-- wp:code {"className":"language-bash"} -->
+<pre class="wp-block-code language-bash"><code>readlink -f /opt/skittlesorter/current
+/opt/skittlesorter/current/skittlesorter --version
+cat /var/lib/skittlesorter/ready.json
+systemctl status skittlesorter --no-pager
+journalctl -u skittlesorter --since &quot;10 minutes ago&quot; --no-pager
+</code></pre>
+<!-- /wp:code -->
+
+<!-- wp:paragraph -->
+<p>The active target should identify 1.1.0, readiness should describe the actual running process, and new telemetry should contain <code>appVersion</code>, <code>sessionTotal</code> and <code>sessionCounts</code>. Observe actual sorter operation with known colours; compare total to the sum of per-colour counts.</p>
+<!-- /wp:paragraph -->
+
+<!-- wp:paragraph -->
+<p>Save redacted evidence in the operator's lab records, not fabricated screenshots in this draft. Remove connection strings, SAS URLs and private keys from captures. Reboot or restart deliberately and confirm a healthy selected release returns; new session counts start from zero.</p>
+<!-- /wp:paragraph -->
+
+<!-- wp:paragraph -->
+<p>The next article exercises failure handling. Do not treat this happy-path checklist as permission to skip rollback testing.</p>
+<!-- /wp:paragraph -->
+
+<!-- wp:paragraph -->
+<p><a href="04-packaging-and-import.md">Previous</a> | <a href="06-recovery.md">Next: recovery</a></p>
+<!-- /wp:paragraph -->

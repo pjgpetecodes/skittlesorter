@@ -6,6 +6,7 @@ using System.Security.Cryptography.X509Certificates;
 using System.Threading;
 using Microsoft.Azure.Devices.Client;
 using Iot.Device.ServoMotor;
+using System.Runtime.InteropServices;
 
 namespace skittle_sorter
 {
@@ -13,14 +14,48 @@ namespace skittle_sorter
     {
         static async Task Main(string[] args)
         {
-            Console.WriteLine("Skittle sorter starting…\n");
+            var options = RuntimeOptions.Parse(args);
+            if (options.ShowVersion)
+            {
+                Console.WriteLine(ApplicationRelease.Version);
+                return;
+            }
+            if (options.SelfTest)
+            {
+                options.ValidateConfiguration();
+                Console.WriteLine($"Skittle Sorter {ApplicationRelease.Version}: configuration self-test passed (no hardware or network accessed).");
+                return;
+            }
+
+            if (options.ReadyFile != null)
+            {
+                options.ValidateConfiguration();
+                File.Delete(options.ReadyFile);
+            }
+
+            using var shutdown = new CancellationTokenSource();
+            ConsoleCancelEventHandler onCancel = (_, e) =>
+            {
+                e.Cancel = true;
+                shutdown.Cancel();
+            };
+            Console.CancelKeyPress += onCancel;
+            using var terminate = OperatingSystem.IsLinux()
+                ? PosixSignalRegistration.Create(PosixSignal.SIGTERM, context =>
+                {
+                    context.Cancel = true;
+                    shutdown.Cancel();
+                })
+                : null;
+
+            Console.WriteLine($"Skittle sorter {ApplicationRelease.Version} starting…\n");
 
             PrintSection("Configuration");
-            var mockConfig = ConfigurationLoader.LoadMockConfiguration();
-            var iotConfig = ConfigurationLoader.LoadIoTHubConfiguration();
-            var chutePositions = ConfigurationLoader.LoadChutePositions();
-            var servoPositions = ConfigurationLoader.LoadServoPositions();
-            var servoHardwareConfig = ConfigurationLoader.LoadServoSystemHardwareConfiguration();
+            var mockConfig = ConfigurationLoader.LoadMockConfiguration(options.ConfigurationPath);
+            var iotConfig = ConfigurationLoader.LoadIoTHubConfiguration(options.ConfigurationPath);
+            var chutePositions = ConfigurationLoader.LoadChutePositions(options.ConfigurationPath);
+            var servoPositions = ConfigurationLoader.LoadServoPositions(options.ConfigurationPath);
+            var servoHardwareConfig = ConfigurationLoader.LoadServoSystemHardwareConfiguration(options.ConfigurationPath);
 
             Console.WriteLine($"Mock Mode - Color Sensor: {mockConfig.EnableMockColorSensor}, Servos: {mockConfig.EnableMockServos}");
             Console.WriteLine($"IoT Hub Telemetry Enabled: {iotConfig.SendTelemetry}\n");
@@ -38,21 +73,29 @@ namespace skittle_sorter
             DeviceClient? deviceClient = null;
             TelemetryService? telemetryService = null;
 
-            if (iotConfig.SendTelemetry)
-            {
-                deviceClient = DpsInitializationService.Initialize(iotConfig);
-                if (deviceClient != null)
-                {
-                    telemetryService = new TelemetryService(deviceClient, iotConfig.DeviceId, iotConfig);
-                }
-            }
-
-            PrintSection("Sorting Loop");
-            int currentChuteAngle = chutePositions.TryGetValue("red", out int defaultAngle) ? defaultAngle : 22;
-
             try
             {
-                while (true)
+                if (iotConfig.SendTelemetry && !shutdown.IsCancellationRequested)
+                {
+                    deviceClient = DpsInitializationService.Initialize(iotConfig, options.ConfigurationPath, shutdown.Token);
+                    if (deviceClient == null && !shutdown.IsCancellationRequested && options.ReadyFile != null)
+                        throw new InvalidOperationException("The selected service profile requires telemetry, but provisioning failed.");
+                    if (deviceClient != null)
+                    {
+                        await deviceClient.OpenAsync(shutdown.Token);
+                        telemetryService = new TelemetryService(deviceClient, iotConfig.DeviceId, iotConfig);
+                    }
+                }
+
+                if (options.ReadyFile != null && !shutdown.IsCancellationRequested)
+                    ApplicationRelease.WriteReadiness(options.ReadyFile);
+
+                PrintSection("Sorting Loop");
+                int currentChuteAngle = chutePositions.TryGetValue("red", out int defaultAngle) ? defaultAngle : 22;
+                var sessionCounts = ApplicationRelease.SessionCountsEnabled ? new SessionCounts() : null;
+
+                // A service stop prevents the next cycle, but never interrupts an arm holding a Skittle.
+                while (!shutdown.IsCancellationRequested)
                 {
                     // Step 1: Pick skittle
                     servo.MoveArmToAngle(servoPositions.PickAngle);
@@ -90,7 +133,8 @@ namespace skittle_sorter
                     if (telemetryService != null)
                     {
                         telemetryService.LogColorDetected(colour);
-                        await telemetryService.SendSkittleColorTelemetryAsync(colour);
+                        if (sessionCounts == null)
+                            await telemetryService.SendSkittleColorTelemetryAsync(colour);
                     }
 
                     // Step 7: Move servo2 only if needed
@@ -109,13 +153,28 @@ namespace skittle_sorter
                     servo.MoveArmToAngle(servoPositions.DropAngle);
                     Thread.Sleep(1500);
 
+                    if (sessionCounts != null)
+                    {
+                        sessionCounts.RecordCompletedDrop(colour);
+                        Console.WriteLine($"Session count: {colour}={sessionCounts.PerColour[colour.ToLowerInvariant()]}, total={sessionCounts.Total}");
+                        if (telemetryService != null)
+                            await telemetryService.SendSkittleColorTelemetryAsync(colour, sessionCounts);
+                    }
+
                     Console.WriteLine("Sorted.\n");
                 }
+            }
+            catch (OperationCanceledException) when (shutdown.IsCancellationRequested)
+            {
+                Console.WriteLine("Startup cancelled during service stop.");
             }
             finally
             {
                 servo.Stop();
                 deviceClient?.Dispose();
+                Console.CancelKeyPress -= onCancel;
+                if (options.ReadyFile != null)
+                    File.Delete(options.ReadyFile);
             }
             static void PrintSection(string title)
             {

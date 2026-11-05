@@ -1,0 +1,43 @@
+<!-- wp:heading {"level":1} -->
+<h1 class="wp-block-heading">Updating the Skittle Sorter with ADR Software Updates</h1>
+<!-- /wp:heading -->
+
+<!-- wp:quote -->
+<blockquote class="wp-block-quote"><!-- wp:paragraph -->
+<p><strong>Preview baseline, reviewed 30 October 2026:</strong> Azure IoT CLI <strong>1.0.0b2, released 6 October 2026</strong>; DPS update API <strong>2026-11-02-preview</strong>; SDK reference commit <strong>3f347e4b7687745cc2c43d1e75e5da5a1a4e35f5</strong>, inspected 30 October 2026. Custom C# client and sorter <strong>1.0.0/1.1.0</strong> are unpublished demonstration builds. Local drafts: service availability, real X.509 check/report and physical-Pi rollout are unverified.</p>
+<!-- /wp:paragraph --></blockquote>
+<!-- /wp:quote -->
+
+<!-- wp:paragraph -->
+<p>This follow-on reuses the C# Skittle Sorter and local installer from the <a href="../device-update-for-iot-hub/README.md">GA Device Update series</a>. It does <strong>not</strong> reuse that Hub, the standard update agent or its cloud protocol.</p>
+<!-- /wp:paragraph -->
+
+<!-- wp:list {"ordered":true} -->
+<ol class="wp-block-list"><!-- wp:list-item -->
+<li><a href="01-architecture.md">What changes from GA Device Update?</a></li>
+<!-- /wp:list-item -->
+<!-- wp:list-item -->
+<li><a href="02-preview-lab.md">A separate preview lab</a></li>
+<!-- /wp:list-item -->
+<!-- wp:list-item -->
+<li><a href="03-custom-client.md">A custom C# DPS update client</a></li>
+<!-- /wp:list-item -->
+<!-- wp:list-item -->
+<li><a href="04-trust-and-recovery.md">Trust, installation and recovery</a></li>
+<!-- /wp:list-item -->
+<!-- wp:list-item -->
+<li><a href="05-groups-and-jobs.md">Deploying through groups and jobs</a></li>
+<!-- /wp:list-item -->
+<!-- wp:list-item -->
+<li><a href="06-failures-and-sdk.md">Failures and future official SDK adoption</a></li>
+<!-- /wp:list-item -->
+</ol>
+<!-- /wp:list -->
+
+<!-- wp:paragraph -->
+<p>The current .NET SDK feature matrix does not implement software updates via DPS. This repository demonstrates an unofficial, replaceable client against a pinned published protocol, not Microsoft's unannounced future .NET API. It is not a Microsoft-supported production agent.</p>
+<!-- /wp:paragraph -->
+
+<!-- wp:paragraph -->
+<p>The source is isolated under <code>AzureSoftwareUpdatesFramework</code> and <code>tools\SkittleSorter.Updater</code>. See the <a href="../../docs/Application-Updates.md">runbook</a> for executable boundaries and validation gates. These articles need real service/Pi evidence before publication. Markdown and adjacent local WordPress HTML stay synchronized; there are no remote post IDs or automatic pushes.</p>
+<!-- /wp:paragraph -->

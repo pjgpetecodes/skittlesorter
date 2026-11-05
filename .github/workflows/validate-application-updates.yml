@@ -1,0 +1,45 @@
+name: Validate application updates
+
+on:
+  pull_request:
+    paths:
+      - 'src/**'
+      - 'AzureDpsFramework/**'
+      - 'AzureSoftwareUpdatesFramework/**'
+      - 'tools/SkittleSorter.Updater/**'
+      - 'deploy/**'
+      - 'scripts/updates/**'
+      - 'tests/**'
+      - 'blog/device-update-for-iot-hub/**'
+      - 'blog/adr-software-updates/**'
+      - 'blog-remote/device-update-for-iot-hub/**'
+      - 'blog-remote/adr-software-updates/**'
+      - 'skittlesorter.csproj'
+      - '.github/workflows/validate-application-updates.yml'
+  workflow_dispatch:
+
+permissions:
+  contents: read
+
+jobs:
+  validate:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-dotnet@v4
+        with:
+          dotnet-version: '10.0.x'
+      - uses: actions/setup-python@v5
+        with:
+          python-version: '3.12'
+      - run: dotnet test tests/SkittleSorter.Tests/SkittleSorter.Tests.csproj --verbosity quiet
+      - run: dotnet test tests/AzureSoftwareUpdatesFramework.Tests/AzureSoftwareUpdatesFramework.Tests.csproj --verbosity quiet
+      - run: python -m unittest discover -s tests/installer -v
+      - run: dotnet publish skittlesorter.csproj -c Release -r linux-x64 --self-contained true -p:InvariantGlobalization=true -o artifacts/linux-smoke --verbosity quiet
+      - run: python -m unittest discover -s tests/updates -v
+        env:
+          SKITTLESORTER_TEST_EXECUTABLE: ${{ github.workspace }}/artifacts/linux-smoke/skittlesorter
+      - shell: pwsh
+        run: |
+          ./scripts/updates/common/publish-release.ps1 -Runtime linux-arm64 -Version 1.0.0 -SessionCounts $false
+          ./scripts/updates/common/publish-release.ps1 -Runtime linux-arm64 -Version 1.1.0 -SessionCounts $true
