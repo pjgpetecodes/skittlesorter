@@ -2,15 +2,15 @@
 
 `setup.ps1` provisions a new IoT Hub, DPS, and Azure Device Registry
 certificate-management environment using the refreshed public-preview CLI
-workflow. It also writes a local sorter configuration using the DPS ID scope
-and a device-specific symmetric key. It does not create device records or
+workflow. It creates a self-signed demo bootstrap CA, an X.509 enrollment and
+a local device certificate, and writes a CSR-enabled sorter configuration. It does not create device records or
 provision a device until the sorter itself is run.
 
 ## What's changed?
 
 The generated configuration works with the sorter's unified
 `Microsoft.Azure.Iot.Device` **2.0.0-preview4** adapter on .NET 10. Setup now
-generates a CSR-enabled symmetric-key onboarding profile
+generates a CSR-enabled X.509 onboarding profile
 (`RequestOperationalCertificate: true`) with durable CSR/key/issued-chain paths.
 Set that option explicitly to `false` for standard symmetric-key or X.509
 provisioning without issuance. Both X.509 profiles are also retained.
@@ -77,20 +77,34 @@ the setup command. Do not pass an application ID in place of the Entra object ID
 
 The script is resumable: it keeps existing named resources, checks the
 resource-group, namespace, DPS, and Hub locations against the requested region,
-and creates missing resources. It does not reconcile settings on existing
-resources, so review their configuration before reusing them. Namespace links
-and enrollment groups with the script's names are also kept if already present.
-The default `appsettings.002.json` is created only if it does not already exist;
-an existing file is never overwritten. The file is git-ignored and contains a
-device-specific symmetric key. Keep it private. Use `-AppConfigPath` to choose
-another output path.
+and creates missing resources. It enables Hub shared access policies, including
+on an existing Hub, so IoT Explorer and shared-access-based service clients can
+connect. This allows Hub policy keys to authenticate service clients; protect
+the keys and use a dedicated demo Hub. Azure Policy can block or override this
+setting, in which case setup stops. Other settings on existing resources are not
+reconciled, so review their configuration before reusing them. Namespace links
+are kept if already present, and setup checks that they target the requested
+DPS and Hub. The default `appsettings.002.json` is created only
+if it does not already exist. Existing configs and enrollments are never
+overwritten: a reused config must match the X.509 enrollment, issuer, DPS scope
+and ADR policy. For an older symmetric-key config or enrollment, choose a new
+`-AppConfigPath` and enrollment ID. If an interrupted first run left bootstrap
+files or an enrollment without its config, inspect them before retrying; setup
+will not silently replace them.
 
-### Optional X.509 F5 profile
+The self-signed bootstrap CA and device key are stored under the ignored
+`certs\x509-bootstrap` directory. This CA is only for demonstrations: its
+private key must be protected and must not be used in production. It is
+separate from the Microsoft-managed ADR operational issuer. Setup marks the
+demo CA verified in DPS, establishing trust for certificates it issues.
+The generated profile also keeps its CSR, operational key, issued chain and
+assignment sidecar under that enrollment's device directory, separate from
+other profiles. Preserve these files across restarts.
 
-The symmetric-key enrollment cannot authenticate an X.509 bootstrap
-certificate. To add a separate X.509 enrollment for the same demo device, use
-an existing intermediate CA certificate, its private key and its full issuer
-chain:
+### Additional X.509 profile with an existing issuer
+
+To add another X.509 enrollment for the same demo device using an existing
+intermediate CA, provide its certificate, private key and full issuer chain:
 
 ```powershell
 .\scripts\iot-hub-device-registry\setup-x509-demo.ps1 `
@@ -108,8 +122,10 @@ and creates an ignored `appsettings.x509-002.json` with an ignored bootstrap
 key and certificate under `certs\x509-demo`; existing files or an existing
 enrollment are never overwritten. Trust only a CA you control: verified DPS CAs
 establish trust for certificate-based enrollment. Protect the issuer and device private keys.
-The profile uses standard X.509 attestation and does not request an operational
-certificate. The issuer chain must start with the supplied intermediate CA.
+The profile defaults to X.509 attestation and requests an operational
+certificate using a CSR. Pass `-RequestOperationalCertificate $false` only for
+standard X.509 provisioning without issuance. The issuer chain must start with
+the supplied intermediate CA.
 Reset the device registration from the **previous** enrollment before
 switching profiles; see [Clean Test Start](../../docs/Clean-Test-Start.md).
 
@@ -125,10 +141,10 @@ In the selected resource group and region, the script creates or reuses:
    both links to complete.
 5. A DPS enrollment group attached to the ADR certificate policy.
 
-No device records, device certificates, or device provisioning actions are
-created during setup. The enrollment group is a template for future
-provisioning only. The local config uses a device-specific symmetric key for DPS
-onboarding and requests an operational certificate through the policy. ADR ARM
+No cloud device records or provisioning actions are created during setup. The
+local bootstrap device certificate is created for X.509 DPS attestation; the
+enrollment group is a template for future provisioning. The config requests an
+operational certificate through the ADR policy. ADR ARM
 metadata calls remain disabled; the sorter creates the device record and obtains
 the operational certificate only when you run it.
 Existing resources from another resource group or region are not modified.
@@ -232,6 +248,26 @@ and [unified samples](https://github.com/Azure/azure-iot-sdk/tree/releases/publi
 
 ### Validation status — 6 November 2026
 
+- A dedicated resource group was deleted and recreated with the full setup
+  script, using a fresh config and bootstrap directory. Both namespace links
+  succeeded, Hub shared access policies were enabled, and the X.509 enrollment
+  referenced the ADR certificate policy. Before provisioning, the namespace
+  had no devices. A subsequent setup run retained the resources and verified
+  the namespace-link targets and existing enrollment.
+- The generated profile completed a fresh CSR cloud self-test, with a matching
+  key and a three-certificate issued chain, and a second process reconnected
+  with the persisted assignment and acknowledged telemetry. The normal debug
+  profile's executable and arguments also connected with mock hardware and
+  completed a sort. These commands were run directly, not through an attached
+  VS Code debugger.
+- The existing X.509 enrollment completed a fresh CSR cloud self-test, with a
+  newly issued certificate matching the generated key and an acknowledged Hub
+  telemetry message. The X.509 F5 profile was then configured for CSR and
+  passed the same bounded cloud test. A newly generated demo bootstrap CA and
+  X.509 enrollment also completed CSR issuance, telemetry and a reconnect
+  against the then-existing demo environment. Only the temporary test device,
+  enrollment and CA were removed afterward. That earlier check did not test a
+  new resource group or the entire lab-creation script against Azure.
 - Standard unified symmetric-key provisioning, Hub connection, one telemetry
   acknowledgement and graceful disconnect passed against Azure.
 - All 17 sorter and 17 updater unit tests passed; the build completed without

@@ -142,7 +142,9 @@ DPS protocol is gone. Our adapter keeps configuration, durable CSR/key/issued
 chain files and ADR ARM helpers; <code>ConnectionClient</code> owns provisioning and the
 Hub connection and <code>TelemetryClient</code> shares it. Both CSR onboarding flows and
 standard non-CSR symmetric-key/X.509 profiles remain on .NET 10 and our existing
-Hub, with its endpoint/profile discovered through DPS.</p>
+Hub, with its endpoint/profile discovered through DPS.
+The setup defaults to an X.509 bootstrap credential and an ADR-issued
+operational certificate requested by CSR; the two CA roles remain separate.</p>
 <!-- /wp:paragraph -->
 
 <!-- wp:paragraph -->
@@ -308,19 +310,16 @@ your own external root CA and have ADR manage an intermediate CA.</p>
 <!-- /wp:quote -->
 
 <!-- wp:heading {"level":3} -->
-<h3 class="wp-block-heading">Quick Setup: Automated X.509 Bootstrap Certificates (if you didn't already run the full setup script!)</h3>
+<h3 class="wp-block-heading">Quick Setup: Automated X.509 Bootstrap Certificates</h3>
 <!-- /wp:heading -->
 
-<!-- wp:code {"className":"language-powershell"} -->
-<pre class="wp-block-code language-powershell"><code>cd scripts
-
-.\setup-x509-attestation.ps1 `
-  -RegistrationId &quot;my-device&quot; `
-  -DpsName &quot;my-dps-001&quot; `
-  -ResourceGroup &quot;my-iot-rg&quot; `
-  -enrollmentGroupName &quot;my-device-group&quot;
-</code></pre>
-<!-- /wp:code -->
+<!-- wp:paragraph -->
+<p>The <a href="https://www.petecodes.co.uk/iot-hub-with-adr-and-certificate-management-part-3/">Part 3 setup script</a>
+already creates the demo bootstrap CA, device certificate, policy-bound X.509
+enrollment and CSR-enabled configuration. You don't need to repeat those steps.
+For an existing issuer, see the alternative X.509 profile in the
+<a href="https://github.com/pjgpetecodes/skittlesorter/blob/main/scripts/iot-hub-device-registry/README.md">setup README</a>.</p>
+<!-- /wp:paragraph -->
 
 <!-- wp:heading {"level":3} -->
 <h3 class="wp-block-heading">Manual Setup: Step-by-Step (X.509 Bootstrap Certificates)</h3>
@@ -331,7 +330,9 @@ your own external root CA and have ADR manage an intermediate CA.</p>
 <!-- /wp:paragraph -->
 
 <!-- wp:paragraph -->
-<p>We'll start fresh here so that folks can run through these steps in isolation if needed.</p>
+<p>This optional walkthrough uses a separate enrollment and onboarding CA. It
+assumes the services and ADR certificate policy from Part 3 already exist; do
+not reuse the automated setup's enrollment name or overwrite its certificates.</p>
 <!-- /wp:paragraph -->
 
 <!-- wp:quote -->
@@ -387,11 +388,11 @@ openssl version                 # OpenSSL
 <!-- wp:code {"className":"language-powershell"} -->
 <pre class="wp-block-code language-powershell"><code>$unique = &quot;dev001&quot;             # make it unique
 
-$resourceGroup = &quot;$unique-skittlesorter-rg&quot;
-$dpsName = &quot;$unique-skittlesorter-dps&quot;      # must be globally unique
+$resourceGroup = &quot;&lt;existing-resource-group&gt;&quot;
+$dpsName = &quot;&lt;existing-dps-name&gt;&quot;
 $registrationId = &quot;$unique-skittlesorter&quot;
 $enrollmentGroupName = &quot;$unique-skittlesorter-group&quot;
-$certDir = &quot;.\certs&quot;
+$certDir = &quot;.\certs\manual-x509-demo&quot;       # choose an unused directory
 $adrNamespace = &quot;&lt;adr-namespace&gt;&quot;
 $adrIntermediateCaName = &quot;&lt;adr-intermediate-ca-name&gt;&quot;
 $adrCertificatePolicyName = &quot;&lt;adr-certificate-policy-name&gt;&quot;

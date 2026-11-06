@@ -366,14 +366,26 @@ if (-not $SkipAzureSetup) {
 
     # Create the Hub separately; extension 1.0.0b2 links resources with the ADR namespace afterward.
     Write-Log "Creating IoT Hub: $IoTHubName (this may take a few minutes...)" "INFO"
+    Write-Log "Hub shared access policies will be enabled, including on an existing Hub. Protect the Hub policy keys." "WARNING"
     az iot hub create `
         --name $IoTHubName `
         --resource-group $ResourceGroup `
         --location $Location `
         --sku $IoTHubSku `
         --mi-user-assigned $uamiResourceId `
+        --disable-local-auth false `
         --output none
-    
+    if ($LASTEXITCODE -ne 0) {
+        throw "Failed to create or update IoT Hub '$IoTHubName' with shared access enabled."
+    }
+    $localAuthDisabled = az iot hub show `
+        --name $IoTHubName `
+        --resource-group $ResourceGroup `
+        --query properties.disableLocalAuth -o tsv
+    if ($LASTEXITCODE -ne 0 -or "$localAuthDisabled".Trim().ToLowerInvariant() -ne "false") {
+        throw "IoT Hub shared access policies could not be verified as enabled. Check Azure Policy and Hub permissions."
+    }
+
     $hubResourceId = az iot hub show `
         --name $IoTHubName `
         --resource-group $ResourceGroup `

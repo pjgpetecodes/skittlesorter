@@ -200,9 +200,9 @@ cd skittlesorter
 to create the ADR namespace, a <strong>new</strong> IoT Hub, and DPS in a supported region.
 The commands are aligned with the current
 <a href="https://learn.microsoft.com/en-us/azure/iot-hub/iot-hub-device-registry-setup?pivots=azure-cli">Microsoft Learn Azure CLI deployment method</a>.
-For this application's X.509 onboarding credentials, also complete the
-bootstrap certificate and enrollment steps in
-<a href="https://www.petecodes.co.uk/iot-hub-with-adr-and-certificate-management-part-4/">Part 4</a>.</p>
+The script also creates the X.509 bootstrap certificate and enrollment. Part 4
+explains those credentials and the separate operational issuer; its manual
+walkthrough is optional.</p>
 <!-- /wp:paragraph -->
 
 <!-- wp:paragraph -->
@@ -220,58 +220,12 @@ configuration.</p>
 <!-- /wp:heading -->
 
 <!-- wp:paragraph -->
-<p>Update <code>appsettings.json</code> with the values from your reviewed setup:</p>
+<p>Use the config written by Part 3: <code>appsettings.002.json</code> by default, or the
+path passed to <code>-AppConfigPath</code>. It already contains the DPS ID scope,
+registration ID, bootstrap certificate paths and CSR settings. Mock hardware is
+enabled, and the SDK discovers the assigned Hub through DPS. Review the
+configuration before running it; don't copy private keys into source control.</p>
 <!-- /wp:paragraph -->
-
-<!-- wp:code {"className":"language-json"} -->
-<pre class="wp-block-code language-json"><code>{
-  &quot;Hardware&quot;: {
-    &quot;MockMode&quot;: {
-      &quot;EnableMockColorSensor&quot;: true,
-      &quot;EnableMockServos&quot;: true,
-      &quot;MockColorSequence&quot;: &#91;
-        &quot;Red&quot;,
-        &quot;Green&quot;,
-        &quot;Yellow&quot;,
-        &quot;Purple&quot;,
-        &quot;Orange&quot;,
-        &quot;Red&quot;,
-        &quot;Green&quot;
-      ]
-    }
-  },
-  &quot;IoTHub&quot;: {
-    &quot;DpsProvisioning&quot;: {
-      &quot;ProvisioningHost&quot;: &quot;global.azure-devices-provisioning.net&quot;,
-      &quot;IdScope&quot;: &quot;YOUR_DPS_ID_SCOPE&quot;,
-      &quot;RegistrationId&quot;: &quot;YOUR_DEVICE_REGISTRATION_ID&quot;,
-      &quot;AttestationMethod&quot;: &quot;X509&quot;,
-      &quot;RequestOperationalCertificate&quot;: true,
-      &quot;AttestationCertPath&quot;: &quot;scripts/certs/device/{RegistrationId}-device.pem&quot;,
-      &quot;AttestationKeyPath&quot;: &quot;scripts/certs/device/{RegistrationId}-device.key&quot;,
-      &quot;AttestationCertChainPath&quot;: &quot;scripts/certs/ca/{RegistrationId}-chain.pem&quot;,
-      &quot;CsrFilePath&quot;: &quot;certs/device/{RegistrationId}-device.csr&quot;,
-      &quot;CsrKeyFilePath&quot;: &quot;certs/device/{RegistrationId}-device.key&quot;,
-      &quot;IssuedCertFilePath&quot;: &quot;certs/issued/{RegistrationId}-issued.pem&quot;,
-      &quot;ApiVersion&quot;: &quot;2025-07-01-preview&quot;,
-      &quot;SasExpirySeconds&quot;: 3600,
-      &quot;AutoGenerateCsr&quot;: true,
-      &quot;MqttPort&quot;: 8883,
-      &quot;EnableDebugLogging&quot;: true
-    },
-    &quot;DeviceId&quot;: &quot;{RegistrationId}&quot;,
-    &quot;SendTelemetry&quot;: true,
-    &quot;TelemetryIntervalMs&quot;: 5000
-  },
-  &quot;Adr&quot;: {
-    &quot;Enabled&quot;: true,
-    &quot;SubscriptionId&quot;: &quot;&lt;YOUR_SUBSCRIPTION_ID&gt;&quot;,
-    &quot;ResourceGroupName&quot;: &quot;&lt;YOUR_RESOURCE_GROUP&gt;&quot;,
-    &quot;NamespaceName&quot;: &quot;&lt;YOUR_ADR_NAMESPACE_NAME&gt;&quot;
-  }  
-}
-</code></pre>
-<!-- /wp:code -->
 
 <!-- wp:paragraph -->
 <p><strong>Key Configuration Sections:</strong></p>
@@ -302,12 +256,12 @@ stays <code>true</code> for compatibility with the earlier CSR examples.</p>
 <!-- /wp:paragraph -->
 
 <!-- wp:paragraph -->
-<p>Keep the CSR, matching key and issued chain across restarts. Paths retain the
+<p>Keep the CSR, matching key, issued chain and assignment sidecar across restarts.
+The generated profile keeps these separate from other enrollments. Paths retain the
 existing <a href="https://github.com/pjgpetecodes/skittlesorter/blob/main/docs/Configuration.md">configuration resolution rules</a>;
 don't package those files with an
 application release. The Part 3 setup script produces unified-compatible
-configuration with symmetric-key onboarding and CSR issuance enabled; select
-X.509 explicitly for this Part 4 profile.</p>
+configuration with X.509 onboarding and CSR issuance enabled by default.</p>
 <!-- /wp:paragraph -->
 
 <!-- wp:heading {"level":4} -->
@@ -319,7 +273,7 @@ X.509 explicitly for this Part 4 profile.</p>
 <!-- /wp:paragraph -->
 
 <!-- wp:code {"className":"language-powershell"} -->
-<pre class="wp-block-code language-powershell"><code>dotnet run --project .\skittlesorter.csproj -- --config .\appsettings.json
+<pre class="wp-block-code language-powershell"><code>dotnet run --project .\skittlesorter.csproj -- --config .\appsettings.002.json
 </code></pre>
 <!-- /wp:code -->
 
@@ -373,7 +327,7 @@ Detected: green (R:50 G:255 B:50 C:1180)
 
 <!-- wp:list {"ordered":true} -->
 <ol class="wp-block-list"><!-- wp:list-item -->
-<li><strong>DPS Configuration</strong> - Loads settings from <code>appsettings.json</code></li>
+<li><strong>DPS Configuration</strong> - Loads the generated settings</li>
 <!-- /wp:list-item -->
 <!-- wp:list-item -->
 <li><strong>DPS Provisioning</strong> - Authenticates with bootstrap certificate and generates CSR</li>
@@ -400,10 +354,10 @@ Detected: green (R:50 G:255 B:50 C:1180)
 
 <!-- wp:code {"className":"language-powershell"} -->
 <pre class="wp-block-code language-powershell"><code># Offline configuration check
-dotnet run --project .\skittlesorter.csproj -- --self-test --config .\appsettings.json
+dotnet run --project .\skittlesorter.csproj -- --self-test --config .\appsettings.002.json
 
 # Real provisioning + Hub + representative telemetry, then disconnect
-dotnet run --project .\skittlesorter.csproj -- --cloud-self-test --config .\appsettings.json
+dotnet run --project .\skittlesorter.csproj -- --cloud-self-test --config .\appsettings.002.json
 </code></pre>
 <!-- /wp:code -->
 
@@ -452,58 +406,13 @@ RBAC unilaterally to force the reset through.</p>
 <!-- /wp:heading -->
 
 <!-- wp:paragraph -->
-<p>Should you want to set up more devices, this is how you go about provisioning them.</p>
-<!-- /wp:paragraph -->
-
-<!-- wp:paragraph -->
-<p>Navigate to the Scripts folder and run the setup script with the following parameters;</p>
-<!-- /wp:paragraph -->
-
-<!-- wp:code {"className":"language-powershell"} -->
-<pre class="wp-block-code language-powershell"><code>cd ./scripts
-./setup-x509-attestation.ps1 -RegistrationId &quot;&lt;new-device-id&gt;&quot; -ReuseCa -CaRegistrationId &quot;skittlesorter&quot; -SkipEnrollment
-</code></pre>
-<!-- /wp:code -->
-
-<!-- wp:paragraph -->
-<p>Then, you can copy the following three files to your device to the scripts/certs folder;</p>
-<!-- /wp:paragraph -->
-
-<!-- wp:list -->
-<ul class="wp-block-list"><!-- wp:list-item -->
-<li><code>scripts/certs/device/&lt;new-device-id&gt;-device.pem</code></li>
-<!-- /wp:list-item -->
-<!-- wp:list-item -->
-<li><code>scripts/certs/device/&lt;new-device-id&gt;-device.key</code></li>
-<!-- /wp:list-item -->
-<!-- wp:list-item -->
-<li><code>scripts/certs/ca/&lt;new-device-id&gt;-chain.pem</code></li>
-<!-- /wp:list-item -->
-</ul>
-<!-- /wp:list -->
-
-<!-- wp:paragraph -->
-<p>Then, along with your IdScope and other related settings, you need to modify the device's appsettings.json with the following values;</p>
-<!-- /wp:paragraph -->
-
-<!-- wp:list -->
-<ul class="wp-block-list"><!-- wp:list-item -->
-<li><code>RegistrationId = &quot;&lt;new-device-id&gt;&quot;</code></li>
-<!-- /wp:list-item -->
-<!-- wp:list-item -->
-<li><code>AttestationCertPath</code> to <code>&lt;new-device-id&gt;-device.pem</code></li>
-<!-- /wp:list-item -->
-<!-- wp:list-item -->
-<li><code>AttestationKeyPath</code> to <code>&lt;new-device-id&gt;-device.key</code></li>
-<!-- /wp:list-item -->
-<!-- wp:list-item -->
-<li><code>AttestationCertChainPath</code> to <code>&lt;new-device-id&gt;-chain.pem</code></li>
-<!-- /wp:list-item -->
-</ul>
-<!-- /wp:list -->
-
-<!-- wp:paragraph -->
-<p>Finally, you can start the application, and you should have a newly provisioning device in your DPS, IoT Hub and in ADR along with the portal arm resource.</p>
+<p>To add another demo device, rerun the Part 3 setup command against the same
+services with a new <code>-RegistrationId</code>, <code>-EnrollmentId</code> and <code>-AppConfigPath</code>.
+The script creates a separate bootstrap issuer and credentials for that
+enrollment; it doesn't overwrite the first profile. Review the generated
+config and keep its private keys secure. If moving it to another machine,
+securely transfer the bootstrap certificate, key and chain, update their paths
+in the config, and run the bounded cloud check with that config first.</p>
 <!-- /wp:paragraph -->
 
 <!-- wp:paragraph -->
@@ -530,13 +439,12 @@ at System.Security.Cryptography.X509Certificates.X509Certificate2..ctor
 
 <!-- wp:list -->
 <ul class="wp-block-list"><!-- wp:list-item -->
-<li>Verify <code>AttestationCertPath</code> in <code>appsettings.json</code> points to correct location</li>
+<li>Verify <code>AttestationCertPath</code>, <code>AttestationKeyPath</code> and
+<code>AttestationCertChainPath</code> in the generated config point to the files
+created by setup.</li>
 <!-- /wp:list-item -->
 <!-- wp:list-item -->
-<li>Check if you ran the setup script from the <code>scripts/</code> directory</li>
-<!-- /wp:list-item -->
-<!-- wp:list-item -->
-<li>Ensure certificates exist: <code>./scripts/certs/device/device.pem</code></li>
+<li>If you moved the config to another device, update the paths to match.</li>
 <!-- /wp:list-item -->
 </ul>
 <!-- /wp:list -->
@@ -546,8 +454,10 @@ at System.Security.Cryptography.X509Certificates.X509Certificate2..ctor
 <!-- /wp:paragraph -->
 
 <!-- wp:code {"className":"language-powershell"} -->
-<pre class="wp-block-code language-powershell"><code>Test-Path &quot;./scripts/certs/device/&lt;YOUR_DEVICE_REGISTRATION_ID&gt;-device.pem&quot;
-Test-Path &quot;./scripts/certs/device/&lt;YOUR_DEVICE_REGISTRATION_ID&gt;-device.key&quot;
+<pre class="wp-block-code language-powershell"><code>$dps = (Get-Content .\appsettings.002.json -Raw | ConvertFrom-Json).IoTHub.DpsProvisioning
+Test-Path -LiteralPath $dps.AttestationCertPath
+Test-Path -LiteralPath $dps.AttestationKeyPath
+Test-Path -LiteralPath $dps.AttestationCertChainPath
 </code></pre>
 <!-- /wp:code -->
 
@@ -617,7 +527,7 @@ Test-Path &quot;./scripts/certs/device/&lt;YOUR_DEVICE_REGISTRATION_ID&gt;-devic
 
 <!-- wp:list -->
 <ul class="wp-block-list"><!-- wp:list-item -->
-<li>Check that DPS is linked to IoT Hub</li>
+<li>Check that the ADR namespace links to DPS and IoT Hub have succeeded</li>
 <!-- /wp:list-item -->
 <!-- wp:list-item -->
 <li>Verify IoT Hub hostname matches assigned hub</li>
@@ -629,15 +539,23 @@ Test-Path &quot;./scripts/certs/device/&lt;YOUR_DEVICE_REGISTRATION_ID&gt;-devic
 <!-- /wp:list -->
 
 <!-- wp:paragraph -->
-<p><strong>Verify DPS linked hub:</strong></p>
+<p><strong>Verify the ADR namespace links:</strong></p>
 <!-- /wp:paragraph -->
 
 <!-- wp:code {"className":"language-powershell"} -->
-<pre class="wp-block-code language-powershell"><code>az iot dps linked-hub list `
-  --dps-name &quot;my-dps-001&quot; `
+<pre class="wp-block-code language-powershell"><code>az iot adr ns link dps list `
+  --namespace &quot;my-adr-namespace&quot; `
+  --resource-group &quot;my-iot-rg&quot;
+az iot adr ns link hub list `
+  --namespace &quot;my-adr-namespace&quot; `
   --resource-group &quot;my-iot-rg&quot;
 </code></pre>
 <!-- /wp:code -->
+
+<!-- wp:paragraph -->
+<p><code>az iot dps linked-hub list</code> checks the separate classic allocation links; an
+empty result doesn't mean these ADR namespace links are missing.</p>
+<!-- /wp:paragraph -->
 
 <!-- wp:paragraph -->
 <p><strong>Problem: &quot;Device already provisioned&quot; but can't connect</strong></p>
@@ -654,7 +572,7 @@ exact-device cloud-test reset only when you intend to reprovision that identity.
 <!-- /wp:paragraph -->
 
 <!-- wp:paragraph -->
-<p><strong>Problem: Missing <code>appsettings.json</code> configuration</strong></p>
+<p><strong>Problem: Missing application configuration</strong></p>
 <!-- /wp:paragraph -->
 
 <!-- wp:code {"className":"language-plaintext"} -->
@@ -668,27 +586,17 @@ exact-device cloud-test reset only when you intend to reprovision that identity.
 
 <!-- wp:list -->
 <ul class="wp-block-list"><!-- wp:list-item -->
-<li>Ensure <code>appsettings.json</code> exists in project root</li>
+<li>Check that the generated config exists and that <code>--config</code> points to it.
+The default from Part 3 is <code>appsettings.002.json</code>; a custom
+<code>-AppConfigPath</code> changes that location.</li>
 <!-- /wp:list-item -->
 <!-- wp:list-item -->
-<li>Copy from the safe X.509 template if needed:</li>
+<li>If it was lost, inspect the existing enrollment and local credentials
+before rerunning setup. The script refuses to overwrite an existing
+enrollment or private key.</li>
 <!-- /wp:list-item -->
 </ul>
 <!-- /wp:list -->
-
-<!-- wp:code {"className":"language-powershell"} -->
-<pre class="wp-block-code language-powershell"><code>Copy-Item &quot;.\src\configuration\appsettings.x509.template.json&quot; &quot;.\appsettings.json&quot;
-</code></pre>
-<!-- /wp:code -->
-
-<!-- wp:paragraph -->
-<p><strong>Edit with your values:</strong></p>
-<!-- /wp:paragraph -->
-
-<!-- wp:code {"className":"language-powershell"} -->
-<pre class="wp-block-code language-powershell"><code>notepad appsettings.json
-</code></pre>
-<!-- /wp:code -->
 
 <!-- wp:paragraph -->
 <p><strong>Problem: Certificate expired or renewal needed</strong></p>
@@ -1082,13 +990,15 @@ to <code>softwareRevision</code>; if both are supplied, it overrides
 <!-- /wp:heading -->
 
 <!-- wp:paragraph -->
-<p><strong>Check device exists:</strong></p>
+<p><strong>Check device exists:</strong> This requires Hub registry read permission for your
+signed-in Entra identity; resource-management access alone isn't sufficient.</p>
 <!-- /wp:paragraph -->
 
 <!-- wp:code {"className":"language-powershell"} -->
 <pre class="wp-block-code language-powershell"><code>az iot hub device-identity show `
   --hub-name &quot;my-iothub-001&quot; `
-  --device-id &quot;my-device&quot;
+  --device-id &quot;my-device&quot; `
+  --auth-type login
 </code></pre>
 <!-- /wp:code -->
 
@@ -1113,34 +1023,19 @@ to <code>softwareRevision</code>; if both are supplied, it overrides
 <!-- /wp:heading -->
 
 <!-- wp:paragraph -->
-<p><strong>Watch device-to-cloud messages:</strong></p>
+<p>The bounded cloud self-test waits for a representative telemetry
+acknowledgement:</p>
 <!-- /wp:paragraph -->
 
 <!-- wp:code {"className":"language-powershell"} -->
-<pre class="wp-block-code language-powershell"><code>az iot hub monitor-events `
-  --hub-name &quot;my-iothub-001&quot; `
-  --device-id &quot;my-device&quot;
+<pre class="wp-block-code language-powershell"><code>dotnet run --project .\skittlesorter.csproj -- --cloud-self-test --config .\appsettings.002.json
 </code></pre>
 <!-- /wp:code -->
 
 <!-- wp:paragraph -->
-<p><strong>Expected output:</strong></p>
+<p>For an interactive view of messages, use Azure IoT Explorer and its Hub
+connection string. This is separate from the device's X.509 authentication.</p>
 <!-- /wp:paragraph -->
-
-<!-- wp:code {"className":"language-json"} -->
-<pre class="wp-block-code language-json"><code>{
-  &quot;event&quot;: {
-    &quot;origin&quot;: &quot;my-device&quot;,
-    &quot;payload&quot;: {
-      &quot;deviceId&quot;: &quot;my-device&quot;,
-      &quot;timestamp&quot;: &quot;2026-02-07T12:34:56Z&quot;,
-      &quot;color&quot;: &quot;red&quot;,
-      &quot;count&quot;: 1
-    }
-  }
-}
-</code></pre>
-<!-- /wp:code -->
 
 <!-- wp:heading {"level":3} -->
 <h3 class="wp-block-heading">Test 3: Query ADR Devices</h3>
@@ -1174,24 +1069,8 @@ my-device   uksouth
 the supported metadata properties; custom labels are under the resource's <code>tags</code>.</p>
 <!-- /wp:paragraph -->
 
-<!-- wp:heading {"level":3} -->
-<h3 class="wp-block-heading">Test 4: Device Twin Operations</h3>
-<!-- /wp:heading -->
-
 <!-- wp:paragraph -->
-<p><strong>Update desired properties:</strong></p>
-<!-- /wp:paragraph -->
-
-<!-- wp:code {"className":"language-powershell"} -->
-<pre class="wp-block-code language-powershell"><code>az iot hub device-twin update `
-  --hub-name &quot;my-iothub-001&quot; `
-  --device-id &quot;my-device&quot; `
-  --set properties.desired='{&quot;telemetryInterval&quot;:3000,&quot;enableSorting&quot;:true}'
-</code></pre>
-<!-- /wp:code -->
-
-<!-- wp:paragraph -->
-<p>The device receives the update and responds with reported properties.</p>
+<p>The sample doesn't currently implement device twin desired-property handling.</p>
 <!-- /wp:paragraph -->
 
 <!-- wp:heading {"level":3} -->

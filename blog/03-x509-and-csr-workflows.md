@@ -9,6 +9,8 @@ retains durable CSR/key and issued-chain files. Both symmetric-key and X.509 CSR
 onboarding remain; standard non-CSR profiles set `RequestOperationalCertificate:
 false`. The existing Hub and .NET 10 are unchanged; the SDK discovers the assigned
 endpoint/profile through DPS.
+The setup defaults to an X.509 bootstrap credential and an ADR-issued
+operational certificate requested by CSR; the two CA roles remain separate.
 
 > **Release baseline:** This series uses the latest Azure IoT CLI preview
 > extension, `azure-iot` **1.0.0b2**, released **6 October 2026**. Last
@@ -43,7 +45,7 @@ The new certificate management service makes use of a **two-phase approach**:
 - **Purpose:** Device authenticates to IoT Hub for ongoing operations
 - **How it works:** DPS coordinates issuance through the ADR certificate policy after validating the onboarding credential
 - **Generated on:** Device itself (private key never leaves device)
-- **Lifespan:** Set by the assigned policy (1–30 days in the current setup guide); renewal is supported
+- **Lifespan:** Set by the assigned policy (1–90 days; this setup defaults to 30); renewal is supported
 - **Security:** Higher security, no key transport
 
 ## How It Works
@@ -107,7 +109,7 @@ sequenceDiagram
 Azure Device Registry (ADR) manages a dedicated PKI for your namespace:
 
 - **Root CA (Credential):** One unique root CA per ADR namespace, managed by Microsoft using Azure Managed HSM
-- **Issuing CA (Policy):** Certificate policy controls certificate validity (1–30 days in the current setup guide)
+- **Issuing CA (Policy):** Certificate policy controls certificate validity (1–90 days; this setup defaults to 30)
 - **Leaf Certificate (Operational):** End-entity certificate issued to device by issuing CA
 
 The issuing CA certificates are automatically synced from ADR to all linked IoT Hubs, enabling Hub to authenticate devices.
@@ -118,9 +120,9 @@ The issuing CA certificates are automatically synced from ADR to all linked IoT 
 |---------|-------------|
 | **Algorithms** | ECC (ECDSA) with NIST P-384 curve, SHA-384 hashing |
 | **HSM Keys** | Azure Managed HSM (no additional subscription required) |
-| **Certificate Validity** | 1–30 days in the current setup guide (configurable per policy) |
+| **Certificate Validity** | 1–90 days per ADR policy (30-day default in this series' setup script) |
 | **Protocols** | HTTP and MQTT during provisioning |
-| **Renewal** | Device-initiated via DPS registration call |
+| **Renewal** | IoT Hub renewal APIs are available; this application has no automatic renewal scheduler |
 | **CA Sync** | Automatic sync from ADR to linked IoT Hubs |
 
 ## What You Need to Do
@@ -129,23 +131,24 @@ For this series, you'll create **onboarding credentials** (Phase 1) - we provide
 
 > **Preview Reminder:** Microsoft-backed X.509 certificate management remains in public preview. Operational certificates (Phase 2) are issued by ADR during provisioning and aren't recommended for production workloads during preview.
 
-### Quick Setup: Automated X.509 Bootstrap Certificates (if you didn't already run the full setup script!)
+### Quick Setup: Automated X.509 Bootstrap Certificates
 
-```powershell
-cd scripts
-
-.\setup-x509-attestation.ps1 `
-  -RegistrationId "my-device" `
-  -DpsName "my-dps-001" `
-  -ResourceGroup "my-iot-rg" `
-  -EnrollmentGroupId "my-device-group"
-```
+The [Part 3 setup script](02-creating-azure-resources.md) already creates the
+demo bootstrap CA, device certificate, policy-bound X.509 enrollment and
+CSR-enabled configuration. You don't need to repeat those steps. For an
+existing issuer, see the alternative X.509 profile in the
+[setup README](../scripts/iot-hub-device-registry/README.md).
 
 ### Manual Setup: Step-by-Step (X.509 Bootstrap Certificates)
 
 If you prefer not to use the script, here are the manual steps to create **onboarding credentials** (bootstrap certs) and verify your CA with DPS.
 
 > **Preview Reminder:** The **operational** certificate issuance that happens after these steps is **new and in preview**. Your device will receive those certificates only during provisioning via DPS/ADR.
+
+This optional walkthrough uses a separate enrollment and onboarding CA. It
+assumes the services and ADR policy from Part 3 already exist; do not reuse the
+automated setup's enrollment name or overwrite its certificates. The onboarding
+CA is separate from the ADR-managed operational issuer.
 
 **Prerequisites:**
 
@@ -172,11 +175,14 @@ $env:Path = "C:\Program Files\OpenSSL-Win64\bin;$env:Path"
 **Set variables:**
 
 ```powershell
-$resourceGroup = "my-iot-rg"
-$dpsName = "my-dps-001"
+$resourceGroup = "<existing-resource-group>"
+$dpsName = "<existing-dps-name>"
 $registrationId = "my-device"
-$enrollmentGroupId = "my-device-group"
-$certDir = ".\certs"
+$enrollmentGroupId = "my-separate-device-group"
+$certDir = ".\certs\manual-x509-demo" # choose an unused directory
+$adrNamespace = "<adr-namespace>"
+$adrIntermediateCaName = "<adr-intermediate-ca-name>"
+$adrCertificatePolicyName = "<adr-certificate-policy-name>"
 ```
 
 **Create root CA folder:**
@@ -379,7 +385,7 @@ Write-Host "✓ Device bootstrap certificate created" -ForegroundColor Green
 **7) Create DPS enrollment group:**
 
 ```powershell
-az iot dps enrollment-group create --dps-name $dpsName --resource-group $resourceGroup --enrollment-id $enrollmentGroupId --ca-name "$registrationId-intermediate" --credential-policy "cert-policy" --provisioning-status enabled
+az iot dps enrollment-group create --dps-name $dpsName --resource-group $resourceGroup --enrollment-id $enrollmentGroupId --certificate-path "$certDir\ca\intermediate-ca.pem" --adr-namespace $adrNamespace --adr-ca-name $adrIntermediateCaName --adr-cert-policy-name $adrCertificatePolicyName --provisioning-status enabled
 
 Write-Host "✓ Enrollment group created with CSR-based certificate issuance" -ForegroundColor Green
 ```

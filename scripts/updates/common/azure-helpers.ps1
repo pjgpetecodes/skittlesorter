@@ -22,6 +22,13 @@ function Assert-NewUpdateResourceGroup {
     }
 }
 
+function Assert-UpdateHubSharedAccess {
+    $disabled = Invoke-UpdateAzure -Arguments @("iot", "hub", "show", "-n", $Hub, "-g", $ResourceGroup, "--query", "properties.disableLocalAuth", "-o", "tsv")
+    if ("$disabled".Trim().ToLowerInvariant() -ne "false") {
+        throw "IoT Hub shared access policies are not verified as enabled (disableLocalAuth: '$disabled'). Check Azure Policy and Hub permissions."
+    }
+}
+
 function Read-ApplicationImportManifest {
     param([string]$Path, [string]$Handler)
     $resolved = (Resolve-Path -LiteralPath $Path).Path

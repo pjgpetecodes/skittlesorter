@@ -75,95 +75,25 @@ If you haven't already cloned the repository from earlier posts, get the complet
 **Clone the repository:**
 
 ```powershell
-git clone https://github.com/your-username/skittlesorter.git
+git clone https://github.com/pjgpetecodes/skittlesorter.git
 cd skittlesorter
 ```
 
 ## Step 2: Run Full Azure Setup (If Not Already Done)
 
-If you haven't already run the Azure setup automation from [Post 02](02-creating-azure-resources.md), run the comprehensive setup script to create all Azure resources, certificates, and enrollment groups:
-
-**Set your parameters:**
-
-```powershell
-$resourceGroup = "my-iot-rg"
-$location = "uksouth" # Or australiaeast, japaneast, or centralus
-$iotHubName = "my-iothub-001"
-$dpsName = "my-dps-001"
-$adrNamespace = "my-adrnamespace-uniquesuffix"
-$userIdentity = "my-uami"
-$registrationId = "my-device"
-```
-
-**Run the full setup script:**
-
-```powershell
-cd scripts
-
-.\setup-x509-dps-adr.ps1 `
-  -ResourceGroup $resourceGroup `
-  -Location $location `
-  -IoTHubName $iotHubName `
-  -DPSName $dpsName `
-  -AdrNamespace $adrNamespace `
-  -UserIdentity $userIdentity `
-  -RegistrationId $registrationId
-```
-
-This script will:
-- Create resource group, IoT Hub, DPS, and ADR namespace
-- Generate root CA, intermediate CA, and device bootstrap certificates
-- Upload and verify certificates with DPS
-- Create enrollment group with credential policy
-- Link all services together
-
-**Save the output values:**
-- **IdScope**: From DPS (format: `0ne00XXXXXX`)
-- **Hub Hostname**: Your IoT Hub endpoint
-- **Certificate Paths**: Location of device certificates
+If you haven't already run the Azure setup automation, follow the
+[Part 3 setup](02-creating-azure-resources.md). It creates the ADR namespace,
+Hub, DPS, managed operational issuer and policy, a demo bootstrap issuer,
+X.509 enrollment and local configuration. The manual certificate walkthrough
+in [Part 4](03-x509-and-csr-workflows.md) is optional.
 
 ## Step 3: Configure the Application
 
-Update `appsettings.json` with your values from the setup script:
-
-```json
-{
-  "IoTHub": {
-    "DpsProvisioning": {
-      "IdScope": "0ne00XXXXXX",
-      "RegistrationId": "my-device",
-      "AttestationMethod": "X509",
-      "RequestOperationalCertificate": true,
-      "AttestationCertPath": "./scripts/certs/device/device.pem",
-      "AttestationKeyPath": "./scripts/certs/device/device.key",
-      "AttestationCertChainPath": "./scripts/certs/device/device-full-chain.pem",
-      "ProvisioningHost": "global.azure-devices-provisioning.net",
-      "MqttPort": 8883,
-      "ApiVersion": "2025-07-01-preview",
-      "AutoGenerateCsr": true,
-      "CsrFilePath": "./certs/issued/device.csr",
-      "CsrKeyFilePath": "./certs/issued/device.key",
-      "IssuedCertFilePath": "./certs/issued/device.pem"
-    },
-    "DeviceId": "{RegistrationId}",
-    "SendTelemetry": true,
-    "TelemetryIntervalMs": 5000
-  },
-  "Adr": {
-    "Enabled": true,
-    "SubscriptionId": "xxxxxxxx-xxxx-xxxx-xxxx-xxxxxxxxxxxx",
-    "ResourceGroupName": "my-iot-rg",
-    "NamespaceName": "my-adrnamespace-uniquesuffix"
-  },
-  "Hardware": {
-    "MockMode": {
-      "EnableMockColorSensor": true,
-      "EnableMockServos": true,
-      "MockColorSequence": ["Red", "Green", "Yellow", "Orange", "Purple"]
-    }
-  }
-}
-```
+Use the config written by Part 3: `appsettings.002.json` by default, or the
+path passed to `-AppConfigPath`. It already contains the DPS ID scope,
+registration ID, bootstrap certificate paths and CSR settings. Mock hardware
+is enabled, and the SDK discovers the assigned Hub through DPS. Review the
+configuration before running it; don't copy private keys into source control.
 
 **Key Configuration Sections:**
 
@@ -178,15 +108,17 @@ distributing a group master key. Set `RequestOperationalCertificate` to `false`
 for standard symmetric-key or X.509 provisioning without issuance. The default
 stays `true` for compatibility with the earlier CSR examples.
 
-Keep the CSR, matching key and issued chain across restarts, outside application
+Keep the CSR, matching key, issued chain and assignment sidecar across restarts,
+outside application
 releases. Paths retain the existing [configuration resolution rules](../docs/Configuration.md).
+The Part 3 setup defaults to X.509 onboarding and CSR issuance.
 
 ## Step 4: Run the Application
 
 **Build and run:**
 
 ```powershell
-dotnet run --project .\skittlesorter.csproj -- --config .\appsettings.json
+dotnet run --project .\skittlesorter.csproj -- --config .\appsettings.002.json
 ```
 
 **Illustrative CSR-profile output** (SDK diagnostics differ from the old custom logs):
@@ -231,7 +163,7 @@ Detected: green (R:50 G:255 B:50 C:1180)
 
 **What's happening:**
 
-1. **DPS Configuration** - Loads settings from `appsettings.json`
+1. **DPS Configuration** - Loads the generated settings
 2. **DPS Provisioning** - Authenticates with bootstrap certificate and generates CSR
 3. **Saving Certificate** - Receives operational certificate from DPS and saves it locally
 4. **Connecting to IoT Hub** - Uses operational certificate to establish MQTT connection
@@ -243,10 +175,10 @@ I like to prove the connection before involving the motors:
 
 ```powershell
 # Offline configuration validation
-dotnet run --project .\skittlesorter.csproj -- --self-test --config .\appsettings.json
+dotnet run --project .\skittlesorter.csproj -- --self-test --config .\appsettings.002.json
 
 # Real provisioning + Hub + representative telemetry, then disconnect
-dotnet run --project .\skittlesorter.csproj -- --cloud-self-test --config .\appsettings.json
+dotnet run --project .\skittlesorter.csproj -- --cloud-self-test --config .\appsettings.002.json
 ```
 
 The cloud check has a two-minute bound and waits for one telemetry acknowledgement.
@@ -275,15 +207,16 @@ at System.Security.Cryptography.X509Certificates.X509Certificate2..ctor
 ```
 
 **Solution:**
-- Verify `AttestationCertPath` in `appsettings.json` points to correct location
-- Check if you ran the setup script from the `scripts/` directory
-- Ensure certificates exist: `./scripts/certs/device/device.pem`
+- Check `AttestationCertPath`, `AttestationKeyPath` and `AttestationCertChainPath`
+  in the generated config. If you moved it to another device, update the paths.
 
 **Check certificate files:**
 
 ```powershell
-Test-Path "./scripts/certs/device/device.pem"
-Test-Path "./scripts/certs/device/device.key"
+$dps = (Get-Content .\appsettings.002.json -Raw | ConvertFrom-Json).IoTHub.DpsProvisioning
+Test-Path -LiteralPath $dps.AttestationCertPath
+Test-Path -LiteralPath $dps.AttestationKeyPath
+Test-Path -LiteralPath $dps.AttestationCertChainPath
 ```
 
 **Problem: "DPS registration failed: Unauthorized"**
@@ -323,17 +256,23 @@ Error: The remote certificate is invalid according to the validation procedure
 ```
 
 **Solution:**
-- Check that DPS is linked to IoT Hub
+- Check that the ADR namespace links to DPS and IoT Hub have succeeded
 - Verify IoT Hub hostname matches assigned hub
 - Ensure operational certificate was saved correctly
 
-**Verify DPS linked hub:**
+**Verify the ADR namespace links:**
 
 ```powershell
-az iot dps linked-hub list `
-  --dps-name "my-dps-001" `
+az iot adr ns link dps list `
+  --namespace "my-adr-namespace" `
+  --resource-group "my-iot-rg"
+az iot adr ns link hub list `
+  --namespace "my-adr-namespace" `
   --resource-group "my-iot-rg"
 ```
+
+`az iot dps linked-hub list` checks the separate classic allocation links; an
+empty result doesn't mean these ADR namespace links are missing.
 
 **Problem: "Device already provisioned" but can't connect**
 
@@ -343,25 +282,17 @@ Check the selected profile, saved chain, matching CSR key and assigned Hub first
 Don't delete a shared certificate directory to fix one identity. Use the reviewed
 exact-device cloud-test reset only when you intend to reprovision it.
 
-**Problem: Missing `appsettings.json` configuration**
+**Problem: Missing application configuration**
 
 ```
 Unhandled exception. System.Exception: IoTHub config missing
 ```
 
 **Solution:**
-- Ensure `appsettings.json` exists in project root
-- Copy from the safe X.509 template if needed:
-
-```powershell
-Copy-Item ".\src\configuration\appsettings.x509.template.json" ".\appsettings.json"
-```
-
-**Edit with your values:**
-
-```powershell
-notepad appsettings.json
-```
+- Check that the generated config exists and `--config` points to it. Part 3
+  defaults to `appsettings.002.json`; `-AppConfigPath` changes that location.
+- If it was lost, inspect the existing enrollment and credentials before
+  rerunning setup. The script refuses to overwrite an enrollment or private key.
 
 **Problem: Certificate expired or renewal needed**
 
@@ -608,12 +539,14 @@ to `softwareRevision`; if both are supplied, it overrides
 
 ### Test 1: Verify Device in IoT Hub
 
-**Check device exists:**
+**Check device exists:** This requires Hub registry read permission for your
+signed-in Entra identity; resource-management access alone isn't sufficient.
 
 ```powershell
 az iot hub device-identity show `
   --hub-name "my-iothub-001" `
-  --device-id "my-device"
+  --device-id "my-device" `
+  --auth-type login
 ```
 
 **Expected output:**
@@ -631,29 +564,14 @@ az iot hub device-identity show `
 
 ### Test 2: Monitor Telemetry
 
-**Watch device-to-cloud messages:**
+The bounded cloud self-test waits for a representative telemetry acknowledgement:
 
 ```powershell
-az iot hub monitor-events `
-  --hub-name "my-iothub-001" `
-  --device-id "my-device"
+dotnet run --project .\skittlesorter.csproj -- --cloud-self-test --config .\appsettings.002.json
 ```
 
-**Expected output:**
-
-```json
-{
-  "event": {
-    "origin": "my-device",
-    "payload": {
-      "deviceId": "my-device",
-      "timestamp": "2026-02-07T12:34:56Z",
-      "color": "red",
-      "count": 1
-    }
-  }
-}
-```
+For an interactive view of messages, use Azure IoT Explorer and its Hub
+connection string. This is separate from the device's X.509 authentication.
 
 ### Test 3: Query ADR Devices
 
@@ -677,18 +595,7 @@ my-device   uksouth
 Column selection can vary. Inspect JSON for `properties.enablementState` and
 the supported metadata properties; custom labels are under the resource's `tags`.
 
-### Test 4: Device Twin Operations
-
-**Update desired properties:**
-
-```powershell
-az iot hub device-twin update `
-  --hub-name "my-iothub-001" `
-  --device-id "my-device" `
-  --set properties.desired='{"telemetryInterval":3000,"enableSorting":true}'
-```
-
-The device receives the update and responds with reported properties.
+The sample doesn't currently implement device twin desired-property handling.
 
 ## Production Deployment Checklist
 

@@ -17,6 +17,8 @@ Read `scripts\updates\adr\new-lab.ps1`. Supply an explicit subscription, new res
 
 The script enables system-assigned identities, uses `az iot adr ns link dps add` before `link hub add`, creates the update instance with `az iot adr ns su instance create`, links it using `link su add` and waits for links. It creates private artifact storage and operator content/storage roles.
 
+The demo Hub enables shared access policies so Azure IoT Explorer can list devices using a Hub connection string. That's separate from the intended X.509 device and update-channel authentication below; enabling a Hub policy doesn't make the device use its key. Protect the policy keys. Microsoft's guidance warns that disabling Hub shared access policies breaks DPS provisioning, so leave them enabled for this lab. Elsewhere, disabling them and using Microsoft Entra ID for service access reduces reliance on shared secrets, but Explorer can then report `DisableLocalAuth`/`IotHubUnauthorizedAccess`.
+
 The link workflow handles required service-to-service grants when the operator can create role assignments. That is different from granting the signed-in operator content permissions. Inspect all links and allow identity/RBAC propagation. Confirm the Hub has **no GA Device Update instance**.
 
 ## X.509 and the first proof

@@ -69,6 +69,8 @@ chain files and ADR ARM helpers; `ConnectionClient` owns provisioning and the
 Hub connection and `TelemetryClient` shares it. Both CSR onboarding flows and
 standard non-CSR symmetric-key/X.509 profiles remain on .NET 10 and our existing
 Hub, with its endpoint/profile discovered through DPS.
+The setup defaults to an X.509 bootstrap credential and an ADR-issued
+operational certificate requested by CSR; the two CA roles remain separate.
 
 See the [SDK feature matrix and design](https://github.com/Azure/azure-iot-sdk/blob/main/dotnet/README.md).
 Optional IoT Hub renewal APIs are available, but automatic certificate renewal
@@ -161,23 +163,21 @@ For this series, you'll create **onboarding credentials** (Phase 1) - we provi
 
 > **Preview Reminder:** Microsoft-backed X.509 certificate management is **new and in public preview**. Operational certificates (Phase 2) are issued by ADR during provisioning and are **not recommended for production workloads** during preview.
 
-### Quick Setup: Automated X.509 Bootstrap Certificates (if you didn't already run the full setup script!)
+### Quick Setup: Automated X.509 Bootstrap Certificates
 
-```powershell
-cd scripts
-
-.\setup-x509-attestation.ps1 `
-  -RegistrationId "my-device" `
-  -DpsName "my-dps-001" `
-  -ResourceGroup "my-iot-rg" `
-  -enrollmentGroupName "my-device-group"
-```
+The [Part 3 setup script](https://www.petecodes.co.uk/iot-hub-with-adr-and-certificate-management-part-3/)
+already creates the demo bootstrap CA, device certificate, policy-bound X.509
+enrollment and CSR-enabled configuration. You don't need to repeat those steps.
+For an existing issuer, see the alternative X.509 profile in the
+[setup README](https://github.com/pjgpetecodes/skittlesorter/blob/main/scripts/iot-hub-device-registry/README.md).
 
 ### Manual Setup: Step-by-Step (X.509 Bootstrap Certificates)
 
 If you prefer not to use the script, here are the manual steps to create **onboarding credentials** (bootstrap certs) and verify your CA with DPS.
 
-We'll start fresh here so that folks can run through these steps in isolation if needed.
+This optional walkthrough uses a separate enrollment and onboarding CA. It
+assumes the services and ADR certificate policy from Part 3 already exist; do
+not reuse the automated setup's enrollment name or overwrite its certificates.
 
 > **Keep the two CA roles separate:** The root and intermediate certificates
 > created below are your device's **onboarding** chain, which DPS uses to
@@ -215,11 +215,11 @@ $env:Path = "C:\Program Files\OpenSSL-Win64\bin;$env:Path"
 ```powershell
 $unique = "dev001"             # make it unique
 
-$resourceGroup = "$unique-skittlesorter-rg"
-$dpsName = "$unique-skittlesorter-dps"      # must be globally unique
+$resourceGroup = "<existing-resource-group>"
+$dpsName = "<existing-dps-name>"
 $registrationId = "$unique-skittlesorter"
 $enrollmentGroupName = "$unique-skittlesorter-group"
-$certDir = ".\certs"
+$certDir = ".\certs\manual-x509-demo"       # choose an unused directory
 $adrNamespace = "<adr-namespace>"
 $adrIntermediateCaName = "<adr-intermediate-ca-name>"
 $adrCertificatePolicyName = "<adr-certificate-policy-name>"

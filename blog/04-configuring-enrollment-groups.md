@@ -49,8 +49,8 @@ This post covers **X.509** with CSR-based certificate issuance. Symmetric key is
 
 Before proceeding, ensure you've completed:
 - [Creating Azure Resources](02-creating-azure-resources.md) - DPS, IoT Hub, and ADR setup
-- ADR credential policy created (`cert-policy`)
-- DPS linked to the new IoT Hub and ADR namespace
+- ADR certificate policy created (`default` by the setup script)
+- DPS and IoT Hub linked to the ADR namespace
 
 ## X.509 Certificate Attestation with CSR
 
@@ -64,92 +64,37 @@ This approach uses an **existing X.509 certificate** (bootstrap certificate) for
 
 ### Prerequisites
 
-You should have already created bootstrap certificates in the previous post. If not, follow the manual steps in [Post 03: X.509 and CSR Workflows](03-x509-and-csr-workflows.md) or use the automation script:
-
-```powershell
-.\scripts\setup-x509-attestation.ps1 `
-  -RegistrationId "dev001-skittlesorter" `
-  -DpsName "dev001-skittlesorter-dps" `
-  -ResourceGroup "dev001-skittlesorter-rg" `
-  -EnrollmentGroupId "dev001-skittlesorter-group"
-```
+The [resource setup](02-creating-azure-resources.md) already creates the
+bootstrap certificate, verified demo issuer and policy-bound enrollment.
+The [certificate walkthrough](03-x509-and-csr-workflows.md) also explains how
+to create a separate enrollment manually.
 
 ### Step 1: Ensure CA is Uploaded and Verified
 
-This was completed in [Post 03: X.509 and CSR Workflows](03-x509-and-csr-workflows.md). If you skipped that post, complete the CA upload and verification steps there before continuing.
-
-**Quick checks (confirm both root and intermediate are verified):**
-
-**Set variables:**
-
-```powershell
-$dpsName = "my-dps-001"
-$resourceGroup = "my-iot-rg"
-$registrationId = "my-device"
-
-$rootCertName = "$registrationId-root"
-$intermediateCertName = "$registrationId-intermediate"
-```
-
-**Check root CA verification status:**
+Setup registers the demo intermediate as a verified DPS CA. Check it using the
+enrollment ID supplied to setup:
 
 ```powershell
 az iot dps certificate show `
-  --dps-name $dpsName `
-  --resource-group $resourceGroup `
-  --certificate-name $rootCertName `
+  --dps-name "<dps-name>" `
+  --resource-group "<resource-group>" `
+  --certificate-name "<enrollment-id>-bootstrap-ca" `
   --query properties.isVerified -o tsv
 ```
-
-**Check intermediate CA verification status:**
-
-```powershell
-az iot dps certificate show `
-  --dps-name $dpsName `
-  --resource-group $resourceGroup `
-  --certificate-name $intermediateCertName `
-  --query properties.isVerified -o tsv
-```
-
-### Step 2: Create X.509 Enrollment Group
-
-**Set variables for enrollment:**
+### Step 2: Inspect the X.509 Enrollment Group
 
 ```powershell
-$enrollmentGroupName = "my-device-group"
-$iotHubName = "my-iothub-001"
-$credentialPolicyName = "cert-policy"
-```
-
-**Create enrollment group:**
-
-```powershell
-az iot dps enrollment-group create `
-  --dps-name $dpsName `
-  --resource-group $resourceGroup `
-  --enrollment-id "${enrollmentGroupName}-x509" `
-  --attestation-type x509 `
-  --ca-name "$registrationId-intermediate" `
-  --iot-hub-host-name "$iotHubName.azure-devices.net" `
-  --provisioning-status enabled `
-  --credential-policy $credentialPolicyName `
-  --edge-enabled false
+az iot dps enrollment-group show `
+  --dps-name "<dps-name>" `
+  --resource-group "<resource-group>" `
+  --enrollment-id "<enrollment-id>"
 ```
 
 ### Step 3: Configuration for Device
 
-```json
-{
-  "Dps": {
-    "IdScope": "0ne00XXXXXX",
-    "RegistrationId": "my-device",
-    "AttestationMethod": "X509",
-    "AttestationCertPath": "./certs/device/device.pem",
-    "AttestationCertPassword": "yourpassword",
-    "ProvisioningHost": "global.azure-devices-provisioning.net"
-  }
-}
-```
+Use the generated `appsettings.002.json` or the path supplied to
+`-AppConfigPath`. Its `IoTHub.DpsProvisioning` section contains the scope,
+registration ID, bootstrap certificate and key paths, and CSR settings.
 
 The device will:
 1. Load bootstrap X.509 certificate
@@ -162,8 +107,9 @@ The device will:
 **Configuration values you'll need:**
 - `IdScope`: From DPS overview page
 - `RegistrationId`: Your device name (CN in certificate)
-- `AttestationCertPath`: Path to bootstrap certificate (.pem or .pfx)
-- `AttestationCertPassword`: Password for certificate (if encrypted)
+- `AttestationCertPath`, `AttestationKeyPath`, `AttestationCertChainPath`:
+  bootstrap certificate, private key and issuer chain
+- `RequestOperationalCertificate` and `AutoGenerateCsr`: enabled for this flow
 
 ## Comparing Both Attestation Methods
 

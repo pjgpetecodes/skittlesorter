@@ -15,7 +15,9 @@ One `ConnectionClient` handles DPS provisioning and the Hub connection;
 DPS protocol rather than maintain it alongside the SDK.
 
 `AzureDpsFramework` stays as a thin configuration, durable CSR/key/certificate
-persistence, ADR ARM and session adapter. Standard symmetric-key/X.509 profiles
+persistence, ADR ARM and session adapter. The series defaults to X.509
+bootstrap attestation and a CSR-issued X.509 operational certificate.
+Standard symmetric-key/X.509 profiles
 and both CSR onboarding flows remain, as do .NET 10 and our existing Hub.
 The SDK discovers its assigned endpoint and profile through DPS.
 The new bounded `--cloud-self-test --config PATH` checks provisioning, connection
@@ -107,26 +109,21 @@ If you're interested in learning the traditional DPS workflow with self-signed X
 ### Option 1: Quick Start (Clone and Run Automation Scripts)
 ```powershell
 git clone https://github.com/pjgpetecodes/skittlesorter.git
-cd skittlesorter/scripts
+cd skittlesorter
 
-# Full ADR + X.509 setup (recommended)
-.\setup-x509-dps-adr.ps1 `
-  -ResourceGroup "my-iot-rg" `
+# Preview the full ADR + X.509 + CSR setup; run again without -WhatIf to create it.
+.\scripts\iot-hub-device-registry\setup.ps1 `
+  -SubscriptionId "<subscription-id>" `
+  -ResourceGroupName "my-iot-rg" `
   -Location "uksouth" `
-  -IoTHubName "my-hub-001" `
-  -DPSName "my-dps-001" `
-  -AdrNamespace "my-adr-uniquesuffix" `
-  -UserIdentity "my-uami"
-
-# OR X.509 only (traditional approach)
-.\setup-x509-attestation.ps1 `
-  -RegistrationId "my-device" `
+  -NamespaceName "my-adr-uniquesuffix" `
+  -HubName "my-hub-001" `
   -DpsName "my-dps-001" `
-  -ResourceGroup "my-iot-rg"
+  -EnrollmentId "my-device-group" `
+  -WhatIf
 
-# Then run the device app
-cd ..
-dotnet run --project .\skittlesorter.csproj
+# After setup, check the device connection without physical hardware.
+dotnet run --project .\skittlesorter.csproj -- --cloud-self-test --config .\appsettings.002.json
 ```
 
 See **[Creating Azure Resources](02-creating-azure-resources.md)** for detailed script examples.

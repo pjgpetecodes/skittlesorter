@@ -38,7 +38,9 @@ are the starting points for the new API. The package is still a preview.</p>
 <!-- /wp:paragraph -->
 
 <!-- wp:paragraph -->
-<p>Standard symmetric-key/X.509 profiles and both CSR onboarding flows remain,
+<p>The series defaults to an X.509 bootstrap certificate for DPS and a
+CSR-issued X.509 operational certificate for the Hub. Standard
+symmetric-key/X.509 profiles and both CSR onboarding flows remain,
 along with .NET 10 and our existing Hub. The SDK discovers its assigned
 endpoint/profile through DPS. There's a bounded
 <code>--cloud-self-test --config PATH</code> for provision/connect/telemetry/disconnect

@@ -36,13 +36,11 @@ and immediately run the bounded connectivity check instead, use
 `scripts\iot-hub-device-registry\test-unified.ps1 -ResetDevice` without
 `-ResetOnly`.
 
-For the two F5 demo profiles, use the config and enrollment group of the
-**previous** run when resetting: `appsettings.002.json` and
-`skittlesorter-enrollment-002` for symmetric-key attestation, or
-`appsettings.x509-002.json` and `skittlesorter-x509-002` for X.509 attestation.
-Both use `skittlesorter-002`; the reset checks that the specified group owns
-the current registration. Then select the desired F5 profile. The X.509 profile
-uses an existing bootstrap certificate, not operational-certificate issuance.
+For F5 demo profiles, use the config and enrollment group of the **previous**
+run when resetting. Existing local configurations may still use the earlier
+symmetric-key profile; `appsettings.x509-002.json` uses X.509 attestation and
+CSR issuance. Both may use `skittlesorter-002`; the reset checks that the
+specified group owns the current registration. Then select the desired profile.
 
 The older cleanup script used to delete an enrollment group and the entire local
 `certs` directory. Those broad deletions are intentionally no longer performed.

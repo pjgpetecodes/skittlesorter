@@ -14,7 +14,7 @@ param(
 )
 . (Join-Path $PSScriptRoot "..\common\azure-helpers.ps1")
 if (!$Apply) {
-    Write-Host "Preview only: create a NEW GA lab '$ResourceGroup' in '$Location': Hub, DPS, Device Update account/instance, private artifact storage, and data roles. Add -Apply to execute."
+    Write-Host "Preview only: create a NEW GA lab '$ResourceGroup' in '$Location': Hub with shared access policies enabled, DPS, Device Update account/instance, private artifact storage, and data roles. Add -Apply to execute."
     return
 }
 Assert-UpdateCli
@@ -23,7 +23,8 @@ Invoke-UpdateAzure -Arguments @("group", "create", "-n", $ResourceGroup, "-l", $
 foreach ($provider in @("Microsoft.Devices", "Microsoft.DeviceUpdate", "Microsoft.Storage")) {
     Invoke-UpdateAzure -Arguments @("provider", "register", "--namespace", $provider, "--wait", "-o", "none")
 }
-Invoke-UpdateAzure -Arguments @("iot", "hub", "create", "-n", $Hub, "-g", $ResourceGroup, "-l", $Location, "--sku", "S1", "-o", "none")
+Invoke-UpdateAzure -Arguments @("iot", "hub", "create", "-n", $Hub, "-g", $ResourceGroup, "-l", $Location, "--sku", "S1", "--disable-local-auth", "false", "-o", "none")
+Assert-UpdateHubSharedAccess
 Invoke-UpdateAzure -Arguments @("iot", "dps", "create", "-n", $Dps, "-g", $ResourceGroup, "-l", $Location, "-o", "none")
 # The link needs a service credential; keep it in memory, never in the payload or console output.
 $hubConnection = Invoke-UpdateAzure -Arguments @("iot", "hub", "connection-string", "show", "-n", $Hub, "-g", $ResourceGroup, "--query", "connectionString", "-o", "tsv")

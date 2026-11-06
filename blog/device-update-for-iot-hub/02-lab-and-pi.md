@@ -27,6 +27,8 @@ The `scripts\updates\device-update\new-lab.ps1` script takes subscription, new r
 
 The script creates an individual symmetric-key enrollment, links standard DPS to the Hub, grants the update account identity Hub data access and grants the operator Device Update Administrator. It does not distribute an enrollment-group master key. It creates a private `updates` container; account-key staging later requires suitable management permissions. Allow RBAC propagation before testing.
 
+The demo Hub enables shared access policies so Azure IoT Explorer can list devices. The GA lab is an exception to the certificate-based ADR demonstration: its setup uses a Hub connection string to link DPS and a device-specific symmetric key for onboarding, so it isn't X.509 end to end. Protect those credentials and the Hub policy keys. Microsoft's guidance warns that disabling Hub shared access policies breaks DPS provisioning, so leave them enabled for this lab. Elsewhere, disabling them and using Microsoft Entra ID for service access reduces reliance on shared secrets, but Explorer can then report `DisableLocalAuth`/`IotHubUnauthorizedAccess`.
+
 ## Separate identities and configuration
 
 Copy `src\configuration\appsettings.device-update.template.json` to a protected external configuration file. Supply the DPS scope, registration ID and **individual enrollment device key**. Leave mock hardware enabled until wiring, servo ranges and permissions have been verified. Enable telemetry only when ready to provision.

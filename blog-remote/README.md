@@ -27,8 +27,9 @@ remote-content baseline, a per-article config, and a local sync baseline in
    ```
 
 5. Only after reviewing the preview, add `--apply` to `push` to update that
-   WordPress post. These posts are published, so an applied push changes the
-   live article.
+   WordPress post. Push updates content without changing its status. For draft
+   ADR articles, verify the remote status is `draft` before and after the push;
+   never publish without explicit instruction.
 
 Use the corresponding config filename for each article. Do not copy these
 working files over the original `blog\` drafts. The remote baseline makes push

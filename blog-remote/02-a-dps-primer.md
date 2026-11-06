@@ -327,7 +327,11 @@ Here's how the complete flow works with the new features:
 
 ```
 
-### Dual Attestation: Symmetric Key + X.509
+### Alternative: Symmetric Key + X.509
+
+This series defaults to X.509 bootstrap attestation followed by CSR-based X.509
+operational certificate issuance. Symmetric-key onboarding is a supported
+alternative, not the default for this walkthrough.
 
 One powerful pattern enabled by the new API:
 

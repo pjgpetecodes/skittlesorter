@@ -34,45 +34,12 @@ the workflow.
 
 ### Using the Automation Scripts
 
-We provide helper scripts to automate certificate generation and DPS setup:
-
-#### Automated Full Setup (ADR + X.509)
-
-```powershell
-cd scripts
-
-.\setup-x509-dps-adr.ps1 `
-  -ResourceGroup "my-iot-rg" `
-  -Location "uksouth" `
-  -IoTHubName "my-iothub-001" `
-  -DPSName "my-dps-001" `
-  -AdrNamespace "my-adrnamespace-uniquesuffix" `
-  -UserIdentity "my-uami" `
-  -RegistrationId "my-device" `
-  -EnrollmentGroupId "my-device-group" `
-  -AttestationType "X509"
-```
-
-This generates:
-- Root CA (3650 days, pathlen:1)
-- Intermediate CA (1825 days, pathlen:0)
-- Device bootstrap certificate (365 days)
-- Certificate verification in DPS
-- Enrollment group with credential policy
-
-#### Automated X.509 Only Setup
-
-```powershell
-cd scripts
-
-.\setup-x509-attestation.ps1 `
-  -RegistrationId "my-device" `
-  -DpsName "my-dps-001" `
-  -ResourceGroup "my-iot-rg" `
-  -EnrollmentGroupId "my-device-group"
-```
-
-Generates just X.509 certificates and performs DPS verification.
+The [resource setup](02-creating-azure-resources.md) creates the Azure
+services, managed operational issuer and policy, a separate self-signed demo
+bootstrap issuer, a device certificate and a policy-bound X.509 enrollment.
+It writes a CSR-enabled configuration; you don't need to repeat the bootstrap
+steps below. For an existing issuer, see the alternative profile in the
+[setup README](../scripts/iot-hub-device-registry/README.md).
 
 ---
 
@@ -107,7 +74,7 @@ To use X.509 authentication with DPS, you need to create and upload a **bootstra
          ▼
 ┌─────────────────────────────────────┐
 │  Create Bootstrap Device Certs      │
-│  (signed by Root CA)                │
+│  (signed by intermediate CA)        │
 │  (for DPS auth only)                │
 └────────┬────────────────────────────┘
          │
@@ -126,7 +93,9 @@ To use X.509 authentication with DPS, you need to create and upload a **bootstra
 └─────────────────────────────────────┘
 ```
 
-You can either use the automation scripts from "Quick Setup" or follow these manual steps.
+The automated setup is the recommended path. The following manual steps are
+optional and use a separate CA and device identity; don't reuse or overwrite
+the automated setup's credentials.
 
 ---
 
@@ -145,18 +114,12 @@ openssl version                 # OpenSSL
 Before starting, define your environment:
 
 ```powershell
-$resourceGroup = "my-iot-rg"
-$location = "uksouth" # Or australiaeast, japaneast, or centralus
-$dpsName = "my-dps-001"
-$iotHubName = "my-iothub-001"
-$adrNamespace = "my-adrnamespace-uniquesuffix"
-$userIdentity = "my-uami"
+$resourceGroup = "<existing-resource-group>"
+$dpsName = "<existing-dps-name>"
 $registrationId = "my-device"
-$enrollmentGroupId = "my-device-group"
-$credentialPolicyName = "cert-policy"
 
 # Create directory structure for certificates
-$certDir = ".\certs"
+$certDir = ".\certs\manual-x509-deep-dive" # choose an unused directory
 New-Item -ItemType Directory -Path "$certDir\root" -Force | Out-Null
 New-Item -ItemType Directory -Path "$certDir\ca" -Force | Out-Null
 New-Item -ItemType Directory -Path "$certDir\device" -Force | Out-Null
@@ -455,7 +418,7 @@ Write-Host "   - AttestationKeyPath: $certDir\device\device.key"
 Write-Host "2. Device uses these to authenticate with DPS"
 Write-Host "3. During provisioning, device submits CSR"
 Write-Host "4. ADR issues operational certificate for IoT Hub"
-Write-Host "5. See post 04 to create the enrollment group"
+Write-Host "5. Use the manual enrollment step in post 03 to bind the separate ADR certificate policy"
 ```
 
 ---
@@ -477,7 +440,7 @@ This series uses a **two-phase certificate approach**:
 - **Official Term:** "End-entity operational certificate" (leaf certificate)
 - **Purpose:** Authenticate device to **IoT Hub** for all ongoing operations
 - **Created by:** ADR issuing CA automatically during provisioning (via CSR workflow)
-- **Lifespan:** Controlled by the assigned policy (1–30 days in the current setup guide); renewal is supported
+- **Lifespan:** Controlled by the assigned policy (1–90 days; this setup defaults to 30); renewal is supported
 - **Storage:** Generated on device, never leaves device
 
 **The Flow:**
@@ -528,7 +491,7 @@ Phase 2 flips the model: instead of pre-deploying operational certificates, devi
 
 **Microsoft-Managed PKI Hierarchy:**
 - **Root CA (Credential):** One unique root CA per ADR namespace, managed by Microsoft using Azure Managed HSM
-- **Issuing CA (Policy):** The certificate policy controls validity (1–30 days in the current setup guide)
+- **Issuing CA (Policy):** The certificate policy controls validity (1–90 days; this setup defaults to 30)
 - **Leaf Certificate (Operational):** End-entity certificate issued to device, signed by issuing CA
 
 The issuing CA (policy) is linked to your DPS enrollment group and automatically signs certificates for devices provisioning through that enrollment.
@@ -669,7 +632,7 @@ Now we flip to the CSR model: the device makes its own key, asks DPS/ADR to sign
 ✅ **Private Key Security:** Keys generated on device, never transmitted  
 ✅ **Automated:** Certificates issued during provisioning via DPS registration call  
 ✅ **Scalable:** Works for millions of devices  
-✅ **Short-Lived Certificates:** The current setup guide supports policy validity from 1–30 days
+✅ **Short-Lived Certificates:** The policy supports validity from 1–90 days (30-day setup default)
 ✅ **Lifecycle Management:** ADR credential policies support operational-certificate renewal
 ✅ **Supported Protocols:** HTTP and MQTT during provisioning  
 ✅ **Zero-Touch:** Device provisions itself on first boot
@@ -689,7 +652,7 @@ Now we flip to the CSR model: the device makes its own key, asks DPS/ADR to sign
 | **Issued By** | You (third-party CA) | Microsoft ADR issuing CA (auto) |
 | **Generated On** | Host machine (pre-deployed) | Device itself (on-demand) |
 | **Private Key** | Pre-deployed to device | Never leaves device |
-| **Lifecycle** | Manual renewal (or long-lived) | Renewal supported (1–30 day validity in current setup guide) |
+| **Lifecycle** | Manual renewal (or long-lived) | Renewal supported (1–90 day validity; 30-day setup default) |
 | **PKI Infrastructure** | You manage | Microsoft manages (Azure Managed HSM) |
 | **Risk** | Keys must be securely deployed | Minimal (no key transport) |
 | **Status** | Required (GA) | Optional/Preview |

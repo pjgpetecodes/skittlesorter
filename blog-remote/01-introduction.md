@@ -23,7 +23,9 @@ adapter. Microsoft's [SDK design and feature matrix](https://github.com/Azure/az
 and [unified examples](https://github.com/Azure/azure-iot-sdk/tree/releases/public-preview/dotnet/samples/Unified)
 are the starting points for the new API. The package is still a preview.
 
-Standard symmetric-key/X.509 profiles and both CSR onboarding flows remain,
+The series defaults to an X.509 bootstrap certificate for DPS and a
+CSR-issued X.509 operational certificate for the Hub. Standard
+symmetric-key/X.509 profiles and both CSR onboarding flows remain,
 along with .NET 10 and our existing Hub. The SDK discovers its assigned
 endpoint/profile through DPS. There's a bounded
 `--cloud-self-test --config PATH` for provision/connect/telemetry/disconnect

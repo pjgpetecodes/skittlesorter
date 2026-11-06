@@ -1,4 +1,4 @@
-#requires -Version 5.1
+#requires -Version 7.0
 
 [CmdletBinding(SupportsShouldProcess = $true, ConfirmImpact = 'High')]
 param(
@@ -21,11 +21,15 @@ param(
     [string]$DpsName,
 
     [Parameter(Mandatory = $true)]
+    [ValidatePattern('^[a-zA-Z0-9][a-zA-Z0-9._-]{0,127}$')]
     [string]$EnrollmentId,
 
+    [ValidatePattern('^[a-z0-9][a-z0-9-]{0,127}$')]
     [string]$RegistrationId = 'skittlesorter-002',
 
     [string]$AppConfigPath = 'appsettings.002.json',
+
+    [string]$BootstrapDirectory = 'certs\x509-bootstrap',
 
     [string]$RootCaName = 'root-ca',
 
@@ -56,6 +60,15 @@ $resolvedAppConfigPath = if ([System.IO.Path]::IsPathRooted($AppConfigPath)) {
     [System.IO.Path]::GetFullPath((Join-Path $repositoryRoot $AppConfigPath))
 }
 $writeAppConfig = -not (Test-Path -LiteralPath $resolvedAppConfigPath)
+if (-not $writeAppConfig) {
+    $existingConfig = Get-Content -LiteralPath $resolvedAppConfigPath -Raw | ConvertFrom-Json
+    $existingDps = $existingConfig.IoTHub.DpsProvisioning
+    if ($existingDps.AttestationMethod -ne 'X509' -or
+        $existingDps.RequestOperationalCertificate -ne $true -or
+        $existingDps.RegistrationId -ne $RegistrationId) {
+        throw "Existing config '$resolvedAppConfigPath' is not the requested X.509 CSR profile. Keep it and choose a new -AppConfigPath and enrollment group."
+    }
+}
 
 function Invoke-AzCli {
     param(
@@ -138,7 +151,7 @@ function Invoke-AzCliCreateIfMissing {
 
 if (-not $PSCmdlet.ShouldProcess(
     "subscription '$SubscriptionId', resource group '$ResourceGroupName'",
-    'Create ADR certificate management, an S1 IoT Hub, DPS, an enrollment group, and any requested Hub registry role assignment'
+    'Create ADR certificate management, an S1 IoT Hub with shared access policies enabled, DPS, an enrollment group, and any requested Hub registry role assignment; enable shared access on an existing Hub'
 )) {
     return
 }
@@ -148,6 +161,7 @@ if (-not (Get-Command az -ErrorAction SilentlyContinue)) {
 }
 
 Write-Host 'This setup uses preview Azure Device Registry certificate management. IoT Hub S1 and DPS are billed at standard rates.' -ForegroundColor Yellow
+Write-Host 'Hub shared access policies will be enabled, including on an existing Hub. Protect the Hub policy keys.' -ForegroundColor Yellow
 Write-Host "Using supported preview region: $Location" -ForegroundColor Yellow
 Write-Host 'No device records will be created. The enrollment group is a provisioning template only.' -ForegroundColor Yellow
 if (-not $writeAppConfig) {
@@ -340,6 +354,17 @@ Invoke-AzCliCreateIfMissing -Description 'Linking DPS to the Device Registry nam
     '--subscription', $SubscriptionId,
     '--output', 'none'
 )
+$linkedDpsId = Get-AzCliValue -Description 'Checking the linked DPS target' -Arguments @(
+    'iot', 'adr', 'ns', 'link', 'dps', 'list',
+    '--namespace', $NamespaceName,
+    '--resource-group', $ResourceGroupName,
+    '--subscription', $SubscriptionId,
+    '--query', "[?name=='primary-dps'].resourceId | [0]",
+    '--output', 'tsv'
+)
+if ($linkedDpsId -ine $dpsResourceId) {
+    throw "Namespace link 'primary-dps' targets '$linkedDpsId', not the requested DPS '$dpsResourceId'."
+}
 
 Invoke-AzCliCreateIfMissing -Description 'Creating S1 IoT Hub with system-assigned identity' `
     -CheckArguments @(
@@ -364,9 +389,33 @@ Invoke-AzCliCreateIfMissing -Description 'Creating S1 IoT Hub with system-assign
     '--location', $Location,
     '--sku', 'S1',
     '--system-assigned-mi', 'true',
+    '--disable-local-auth', 'false',
     '--subscription', $SubscriptionId,
     '--output', 'none'
 )
+$hubAuthArguments = @(
+    'iot', 'hub', 'show',
+    '--name', $HubName,
+    '--resource-group', $ResourceGroupName,
+    '--subscription', $SubscriptionId,
+    '--query', 'properties.disableLocalAuth',
+    '--output', 'tsv'
+)
+$localAuthDisabled = (Get-AzCliValue -Description 'Checking IoT Hub shared access policies' -Arguments $hubAuthArguments).ToLowerInvariant()
+if ($localAuthDisabled -eq 'true') {
+    Invoke-AzCliStep -Description 'Enabling IoT Hub shared access policies' -Arguments @(
+        'iot', 'hub', 'update',
+        '--name', $HubName,
+        '--resource-group', $ResourceGroupName,
+        '--subscription', $SubscriptionId,
+        '--disable-local-auth', 'false',
+        '--output', 'none'
+    )
+    $localAuthDisabled = (Get-AzCliValue -Description 'Verifying IoT Hub shared access policies' -Arguments $hubAuthArguments).ToLowerInvariant()
+}
+if ($localAuthDisabled -ne 'false') {
+    throw "IoT Hub shared access policies could not be verified as enabled (disableLocalAuth: '$localAuthDisabled'). Check Azure Policy and Hub permissions."
+}
 $hubResourceId = Get-AzCliValue -Description 'Getting IoT Hub resource ID' -Arguments @(
     'iot', 'hub', 'show',
     '--name', $HubName,
@@ -402,6 +451,17 @@ Invoke-AzCliCreateIfMissing -Description 'Linking IoT Hub to the Device Registry
     '--subscription', $SubscriptionId,
     '--output', 'none'
 )
+$linkedHubId = Get-AzCliValue -Description 'Checking the linked IoT Hub target' -Arguments @(
+    'iot', 'adr', 'ns', 'link', 'hub', 'list',
+    '--namespace', $NamespaceName,
+    '--resource-group', $ResourceGroupName,
+    '--subscription', $SubscriptionId,
+    '--query', "[?name=='primary-hub'].resourceId | [0]",
+    '--output', 'tsv'
+)
+if ($linkedHubId -ine $hubResourceId) {
+    throw "Namespace link 'primary-hub' targets '$linkedHubId', not the requested IoT Hub '$hubResourceId'."
+}
 
 Invoke-AzCliStep -Description 'Waiting for DPS and IoT Hub namespace links' -Arguments @(
     'iot', 'adr', 'ns', 'link', 'wait',
@@ -410,27 +470,6 @@ Invoke-AzCliStep -Description 'Waiting for DPS and IoT Hub namespace links' -Arg
     '--dps-endpoint-name', 'primary-dps',
     '--hub-endpoint-name', 'primary-hub',
     '--subscription', $SubscriptionId
-)
-
-Invoke-AzCliCreateIfMissing -Description 'Creating DPS enrollment group with the ADR certificate policy' `
-    -CheckArguments @(
-        'iot', 'dps', 'enrollment-group', 'list',
-        '--dps-name', $DpsName,
-        '--resource-group', $ResourceGroupName,
-        '--subscription', $SubscriptionId,
-        '--query', "[?enrollmentGroupId=='$EnrollmentId'].enrollmentGroupId | [0]",
-        '--output', 'tsv'
-    ) `
-    -CreateArguments @(
-    'iot', 'dps', 'enrollment-group', 'create',
-    '--dps-name', $DpsName,
-    '--resource-group', $ResourceGroupName,
-    '--enrollment-id', $EnrollmentId,
-    '--adr-namespace', $NamespaceName,
-    '--adr-ca-name', $IntermediateCaName,
-    '--adr-cert-policy-name', $PolicyName,
-    '--subscription', $SubscriptionId,
-    '--output', 'none'
 )
 
 if ($writeAppConfig) {
@@ -442,26 +481,6 @@ if ($writeAppConfig) {
         '--query', 'properties.idScope',
         '--output', 'tsv'
     )
-    $enrollmentGroupKey = Get-AzCliValue -Description 'Getting enrollment group key for the local sorter config' -Arguments @(
-        'iot', 'dps', 'enrollment-group', 'show',
-        '--dps-name', $DpsName,
-        '--resource-group', $ResourceGroupName,
-        '--enrollment-id', $EnrollmentId,
-        '--show-keys',
-        '--subscription', $SubscriptionId,
-        '--query', 'attestation.symmetricKey.primaryKey',
-        '--output', 'tsv'
-    )
-    $hmac = [System.Security.Cryptography.HMACSHA256]::new(
-        [Convert]::FromBase64String($enrollmentGroupKey)
-    )
-    try {
-        $registrationBytes = [System.Text.Encoding]::UTF8.GetBytes($RegistrationId)
-        $deviceKey = [Convert]::ToBase64String($hmac.ComputeHash($registrationBytes))
-    } finally {
-        $hmac.Dispose()
-    }
-
     $templatePath = Join-Path $PSScriptRoot '..\..\src\configuration\appsettings.template.json'
     if (-not (Test-Path -LiteralPath $templatePath)) {
         throw "Application settings template was not found: $templatePath"
@@ -473,9 +492,9 @@ if ($writeAppConfig) {
     $appConfig.IoTHub.SendTelemetry = $true
     $appConfig.IoTHub.DpsProvisioning.IdScope = $idScope
     $appConfig.IoTHub.DpsProvisioning.RegistrationId = $RegistrationId
-    $appConfig.IoTHub.DpsProvisioning.AttestationMethod = 'SymmetricKey'
+    $appConfig.IoTHub.DpsProvisioning.AttestationMethod = 'X509'
     $appConfig.IoTHub.DpsProvisioning.EnrollmentGroupKeyBase64 = ''
-    $appConfig.IoTHub.DpsProvisioning.DeviceKeyBase64 = $deviceKey
+    $appConfig.IoTHub.DpsProvisioning.DeviceKeyBase64 = ''
     $appConfig.IoTHub.DpsProvisioning.RequestOperationalCertificate = $true
     $appConfig.IoTHub.DpsProvisioning.AutoGenerateCsr = $true
     $appConfig.IoTHub.DpsProvisioning.EnableDebugLogging = $false
@@ -487,10 +506,49 @@ if ($writeAppConfig) {
     if ($configDirectory) {
         New-Item -ItemType Directory -Path $configDirectory -Force | Out-Null
     }
-    $appConfig | ConvertTo-Json -Depth 100 |
-        Set-Content -LiteralPath $resolvedAppConfigPath -Encoding UTF8
-    Write-Host "Created local sorter config with a device-specific DPS key: $resolvedAppConfigPath" -ForegroundColor Yellow
-    Write-Host 'Keep this file private. The default appsettings.002.json path is git-ignored.'
+    $sourceConfig = [IO.Path]::GetTempFileName()
+    try {
+        $appConfig | ConvertTo-Json -Depth 100 | Set-Content -LiteralPath $sourceConfig -Encoding utf8NoBOM
+        & (Join-Path $PSScriptRoot 'setup-x509-demo.ps1') `
+            -SubscriptionId $SubscriptionId -ResourceGroupName $ResourceGroupName `
+            -DpsName $DpsName -NamespaceName $NamespaceName -EnrollmentId $EnrollmentId `
+            -GenerateDemoIssuer -SourceConfigPath $sourceConfig -OutputConfigPath $resolvedAppConfigPath `
+            -DeviceDirectory (Join-Path (Join-Path $BootstrapDirectory $EnrollmentId) 'device') `
+            -DemoIssuerDirectory (Join-Path (Join-Path $BootstrapDirectory $EnrollmentId) 'ca') `
+            -IssuerDpsCertificateName "$EnrollmentId-bootstrap-ca" `
+            -CertificateAuthorityName $IntermediateCaName -CertificatePolicyName $PolicyName `
+            -RequestOperationalCertificate $true -Confirm:$false
+    } finally {
+        Remove-Item -LiteralPath $sourceConfig -ErrorAction SilentlyContinue
+    }
+    Write-Host 'Keep the bootstrap CA and device private keys private; the generated CA is for demonstrations only.' -ForegroundColor Yellow
+} else {
+    $enrollmentJson = Get-AzCliValue -Description 'Checking the existing DPS enrollment attestation and policy' -Arguments @(
+        'iot', 'dps', 'enrollment-group', 'show', '--dps-name', $DpsName,
+        '--resource-group', $ResourceGroupName, '--subscription', $SubscriptionId,
+        '--enrollment-id', $EnrollmentId,
+        '--query', '{type:attestation.type,thumb:attestation.x509.signingCertificates.primary.info.sha1Thumbprint,namespace:namespaceName,ca:certificateAuthorityName,policy:certificatePolicyName}',
+        '--output', 'json'
+    )
+    $enrollment = $enrollmentJson | ConvertFrom-Json
+    $idScope = Get-AzCliValue -Description 'Checking DPS ID scope' -Arguments @(
+        'iot', 'dps', 'show', '--name', $DpsName, '--resource-group', $ResourceGroupName,
+        '--subscription', $SubscriptionId, '--query', 'properties.idScope', '--output', 'tsv'
+    )
+    $chainPath = $existingDps.AttestationCertChainPath
+    if (-not [IO.Path]::IsPathRooted($chainPath)) { $chainPath = Join-Path $repositoryRoot $chainPath }
+    $chain = [Security.Cryptography.X509Certificates.X509Certificate2Collection]::new()
+    try {
+        $chain.ImportFromPemFile($chainPath)
+        if ($chain.Count -eq 0 -or $enrollment.type -ne 'x509' -or
+            $enrollment.thumb -ne $chain[0].Thumbprint -or
+            $enrollment.namespace -ne $NamespaceName -or $enrollment.ca -ne $IntermediateCaName -or
+            $enrollment.policy -ne $PolicyName -or $existingDps.IdScope -ne $idScope) {
+            throw "Existing config and enrollment '$EnrollmentId' do not match the requested X.509 issuer, DPS scope and ADR policy."
+        }
+    } finally {
+        foreach ($certificate in $chain) { $certificate.Dispose() }
+    }
 }
 
 Write-Host 'Verifying connected services and certificate authorities:' -ForegroundColor Cyan
@@ -526,7 +584,7 @@ Write-Host "Namespace:     $NamespaceName"
 Write-Host "IoT Hub:       $HubName (S1)"
 Write-Host "DPS:           $DpsName (S1)"
 Write-Host "Enrollment:    $EnrollmentId"
-Write-Host "Registration:  $RegistrationId (will be created in Azure only when the sorter runs)"
+Write-Host "Registration:  $RegistrationId (provisioned when the sorter runs, if not already present)"
 if ($writeAppConfig) {
     Write-Host "App config:    $resolvedAppConfigPath"
     Write-Host "Run sorter:    dotnet run --project `"$repositoryRoot\skittlesorter.csproj`" -- --config `"$resolvedAppConfigPath`""

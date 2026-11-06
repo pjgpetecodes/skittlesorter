@@ -13,7 +13,7 @@ param(
 )
 . (Join-Path $PSScriptRoot "..\common\azure-helpers.ps1")
 if (!$Apply) {
-    Write-Host "Preview only: NEW ADR lab '$ResourceGroup': namespace, DPS-first links, separate S1 Hub, Software Updates instance. Linking is irreversible; this must NOT be the GA Device Update Hub. Add -Apply to execute."
+    Write-Host "Preview only: NEW ADR lab '$ResourceGroup': namespace, DPS-first links, separate S1 Hub with shared access policies enabled, Software Updates instance. Linking is irreversible; this must NOT be the GA Device Update Hub. Add -Apply to execute."
     return
 }
 Assert-UpdateCli
@@ -26,7 +26,8 @@ Invoke-UpdateAzure -Arguments @("iot", "adr", "ns", "create", "-n", $Namespace, 
 Invoke-UpdateAzure -Arguments @("iot", "dps", "create", "-n", $Dps, "-g", $ResourceGroup, "-l", $Location, "--system-assigned-mi", "-o", "none")
 $dpsId = Invoke-UpdateAzure -Arguments @("iot", "dps", "show", "-n", $Dps, "-g", $ResourceGroup, "--query", "id", "-o", "tsv")
 Invoke-UpdateAzure -Arguments @("iot", "adr", "ns", "link", "dps", "add", "-n", "primary-dps", "--ns", $Namespace, "-g", $ResourceGroup, "--dps-id", $dpsId, "--system-assigned-mi", "true", "-o", "none")
-Invoke-UpdateAzure -Arguments @("iot", "hub", "create", "-n", $Hub, "-g", $ResourceGroup, "-l", $Location, "--sku", "S1", "--system-assigned-mi", "-o", "none")
+Invoke-UpdateAzure -Arguments @("iot", "hub", "create", "-n", $Hub, "-g", $ResourceGroup, "-l", $Location, "--sku", "S1", "--system-assigned-mi", "--disable-local-auth", "false", "-o", "none")
+Assert-UpdateHubSharedAccess
 $hubId = Invoke-UpdateAzure -Arguments @("iot", "hub", "show", "-n", $Hub, "-g", $ResourceGroup, "--query", "id", "-o", "tsv")
 Invoke-UpdateAzure -Arguments @("iot", "adr", "ns", "link", "hub", "add", "-n", "primary-hub", "--ns", $Namespace, "-g", $ResourceGroup, "--hub-id", $hubId, "--system-assigned-mi", "true", "-o", "none")
 Invoke-UpdateAzure -Arguments @("iot", "adr", "ns", "su", "instance", "create", "-n", $UpdateInstance, "-g", $ResourceGroup, "-l", $Location, "--system-assigned-mi", "true", "-o", "none")

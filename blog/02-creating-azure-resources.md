@@ -12,7 +12,7 @@
 **What's changed in the application?** We're now using Microsoft's unified
 `Microsoft.Azure.Iot.Device` **2.0.0-preview4**, not a custom C# DPS transport.
 This doesn't require new cloud resources or an MQTT5 Hub. The script generates
-unified-compatible configuration with symmetric-key onboarding and CSR issuance
+unified-compatible configuration with X.509 onboarding and CSR issuance
 enabled. Set `RequestOperationalCertificate: false` explicitly for standard
 non-CSR profiles. See the [bounded cloud test](../scripts/iot-hub-device-registry/README.md#bounded-unified-sdk-cloud-test)
 before running physical hardware.
@@ -71,8 +71,26 @@ without `-WhatIf`. The script installs/upgrades the preview-enabled Azure IoT
 CLI extension, registers the required resource providers, creates missing
 resources, links DPS first and then IoT Hub to the namespace, and waits for
 both links. It can resume after a partial run by keeping existing named
-resources, but it doesn't reconcile their settings; inspect reused resources
-before proceeding.
+resources. It enables Hub shared access policies even when reusing a Hub;
+other existing settings aren't reconciled, so inspect them before proceeding.
+Existing non-X.509 configs or enrollments are not overwritten: choose a new
+config path and enrollment ID for this X.509 + CSR flow.
+
+We're enabling shared access policies for this demo so tools such as Azure IoT
+Explorer can use a Hub connection string. This is separate from how the device
+authenticates: with the X.509 profile, it uses a certificate for DPS attestation
+and its Hub connection, not a Hub shared access policy key. That certificate
+focus is one of the distinctions between this series and the usual shared-key
+IoT Hub examples. The setup creates a self-signed bootstrap CA for the demo;
+ADR's separate managed CA issues the operational certificate from the CSR.
+Protect the bootstrap private keys and never use this demo CA in production.
+
+Protect Hub policy keys even when using certificates on the device. Microsoft's
+current guidance warns that disabling Hub shared access policies breaks DPS
+provisioning, so don't disable them for this lab. In other scenarios you can
+disable them and use Microsoft Entra ID for service access, but IoT Explorer's
+connection-string device list can then fail with
+`DisableLocalAuth`/`IotHubUnauthorizedAccess`.
 
 The full parameter reference, costs, and verification instructions are in the
 [setup README](../scripts/iot-hub-device-registry/README.md). For manual
@@ -88,10 +106,10 @@ commands and the latest API and CLI requirements, use Microsoft's
 4. A namespace link to DPS, followed by a namespace link to IoT Hub.
 5. A DPS enrollment group attached to the ADR certificate policy.
 
-The setup script does not create device records, device certificates, or
-provision a device. The enrollment group is only a template for future
-provisioning. The operational certificate policy is separate from the
-onboarding credential a device will use with DPS.
+The setup script creates a local bootstrap certificate but does not create a
+cloud device record or provision a device. The enrollment group is only a
+template for future provisioning. The operational certificate policy is
+separate from the onboarding credential a device will use with DPS.
 
 ### Verify the setup
 

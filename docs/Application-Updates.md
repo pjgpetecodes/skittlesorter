@@ -112,6 +112,8 @@ recovery before an attended real-hardware deployment.
 1. Review `scripts\updates\device-update\new-lab.ps1` parameters. Its default is a
    descriptive preview; `-Apply` creates a **new** resource group and billable lab.
    The script refuses an existing resource group and never repurposes the ADR Hub.
+   The Hub permits shared access policies for IoT Explorer and DPS; protect its
+   policy keys.
 2. Configure standard DPS using the safe device-update template, an individual
    device key and `RequestOperationalCertificate: false`. Existing profiles retain
    their certificate-request default. Enable real hardware/telemetry explicitly.
@@ -136,7 +138,8 @@ as part of writing this runbook.
 
 1. Stop the GA controller. Use `scripts\updates\adr\new-lab.ps1` for new, isolated
    resources, with DPS-first namespace links and an S1 Hub. Linking is irreversible.
-   Check supported region, resource-provider registration, identities and roles.
+   The Hub permits shared access policies; protect its policy keys. Check supported
+   region, resource-provider registration, identities and roles.
 2. Establish supported X.509 enrollment and normal registered-device provisioning.
    This is independent of finishing the older CSR issuance/renewal walkthrough.
    Obtain the real trusted signing-key baseline out of band.
