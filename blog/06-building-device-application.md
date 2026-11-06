@@ -573,6 +573,21 @@ dotnet run --project .\skittlesorter.csproj -- --cloud-self-test --config .\apps
 For an interactive view of messages, use Azure IoT Explorer and its Hub
 connection string. This is separate from the device's X.509 authentication.
 
+You can also watch incoming messages from a terminal using the Azure IoT CLI
+extension installed by the setup script:
+
+```powershell
+az iot hub monitor-events `
+  --hub-name "my-iothub-001" `
+  --device-id "my-device"
+```
+
+Replace the names with your Hub and registration ID. Start monitoring before
+running the sorter, and press Ctrl+C to stop. The CLI uses a Hub shared-access
+policy to read telemetry and needs permission to retrieve its key; this is
+service-side access, not the device's X.509 credentials. Protect policy keys
+and use this option only on a Hub where shared access is enabled.
+
 ### Test 3: Query ADR Devices
 
 **List devices:**

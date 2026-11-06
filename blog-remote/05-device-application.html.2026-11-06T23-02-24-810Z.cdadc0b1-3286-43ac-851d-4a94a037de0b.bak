@@ -1,0 +1,1295 @@
+<!-- wp:heading {"level":2} -->
+<h2 class="wp-block-heading"><strong>The Device Application</strong></h2>
+<!-- /wp:heading -->
+
+<!-- wp:quote -->
+<blockquote class="wp-block-quote"><!-- wp:paragraph -->
+<p><strong>CLI baseline:</strong> The examples use Azure IoT CLI preview extension
+<code>azure-iot</code> <strong>1.0.0b2</strong>, released <strong>6 October 2026</strong>. Last
+reviewed against current Microsoft Learn guidance <strong>5 November 2026</strong>.
+<a href="https://github.com/Azure/azure-iot-cli-extension/releases/tag/v1.0.0b2">Release notes</a>.</p>
+<!-- /wp:paragraph --></blockquote>
+<!-- /wp:quote -->
+
+<!-- wp:paragraph -->
+<p>In this post, we'll walk through the complete IoT device application that uses DPS provisioning with CSR-based certificate issuance. Rather than building from scratch, if you've not already done so, we'll clone the repository, run the setup automation, configure the application, and explore how the major components work together.</p>
+<!-- /wp:paragraph -->
+
+<!-- wp:heading {"level":3} -->
+<h3 class="wp-block-heading">Current preview status</h3>
+<!-- /wp:heading -->
+
+<!-- wp:paragraph -->
+<p>IoT Hub integration with Azure Device Registry (ADR) and certificate
+management remains in <strong>public preview</strong> and isn't recommended for production.
+The current getting-started guide supports creating a new Hub or connecting an
+eligible existing Hub; connecting an existing Hub is permanent and can't be
+reversed. The setup script in Part 3 creates a dedicated new Hub. DPS is
+required for every IoT Hub preview scenario. The current supported regions are
+Australia East, Japan East, Central US, and UK South. ADR integration and
+certificate management are free during preview, while IoT Hub and DPS are
+billed at standard rates.</p>
+<!-- /wp:paragraph -->
+
+<!-- wp:paragraph -->
+<p>Certificate management issues operational X.509 certificates after a device
+authenticates with a separate onboarding credential. The certificate policy
+belongs to an ADR intermediate CA and is selected on the DPS enrollment. ADR
+synchronizes CA certificates with linked IoT Hubs and manages CA lifecycle and
+rotation operations. SDK renewal APIs are available, but this application does
+not implement automatic operational-certificate renewal. See Microsoft's <a href="https://learn.microsoft.com/en-gb/azure/iot/device-registry/get-started-azure-device-registry">ADR connected-services
+guide</a>,
+<a href="https://learn.microsoft.com/en-gb/azure/iot/concept-managed-ca-hierarchy">CA hierarchy</a>,
+<a href="https://learn.microsoft.com/en-gb/azure/iot/how-to-create-policy?tabs=cli">managed CA setup</a>,
+and <a href="https://learn.microsoft.com/en-us/azure/iot/how-to-create-edit-certificate-policy?tabs=cli">certificate-policy enrollment
+guide</a>
+before creating or changing Azure resources.</p>
+<!-- /wp:paragraph -->
+
+<!-- wp:heading {"level":3} -->
+<h3 class="wp-block-heading">What's changed in this edition?</h3>
+<!-- /wp:heading -->
+
+<!-- wp:paragraph -->
+<p>I've replaced the custom C# DPS provisioning protocol and the legacy
+<code>Microsoft.Azure.Devices.Client</code> with Microsoft's unified
+<a href="https://www.nuget.org/packages/Microsoft.Azure.Iot.Device/2.0.0-preview4"><code>Microsoft.Azure.Iot.Device</code> <strong>2.0.0-preview4</strong></a>.
+One <code>ConnectionClient</code> handles provisioning and the Hub connection;
+<code>TelemetryClient</code> shares it for our Skittle readings. <code>AzureDpsFramework</code> stays
+as a thin configuration, certificate-persistence, ADR ARM and session adapter.</p>
+<!-- /wp:paragraph -->
+
+<!-- wp:paragraph -->
+<p>Both standard symmetric-key/X.509 profiles and both CSR onboarding flows remain.
+.NET 10, our existing Hub and Azure resources are unchanged. The SDK discovers
+the assigned endpoint/profile through DPS, not a hostname constructed from the
+Hub name. The sorter
+now uses MQTTnet 5; the separate software-updates client stays on MQTTnet 4 and
+its own DPS <strong>update</strong> protocol. That workflow isn't implemented by this SDK.</p>
+<!-- /wp:paragraph -->
+
+<!-- wp:paragraph -->
+<p>The new bounded <code>--cloud-self-test --config PATH</code> provisions, connects, sends
+representative telemetry and disconnects without physical hardware. SDK retry
+and reprovisioning are available, but automatic certificate renewal isn't
+implemented. Microsoft's <a href="https://github.com/Azure/azure-iot-sdk/blob/main/dotnet/README.md">SDK design and feature matrix</a>
+and <a href="https://github.com/Azure/azure-iot-sdk/tree/releases/public-preview/dotnet/samples/Unified">unified samples</a>
+explain the new API. This is still a preview. See the
+<a href="https://www.petecodes.co.uk/iot-hub-with-adr-and-certificate-management-part-1">Introduction</a>
+for the series-wide changes.</p>
+<!-- /wp:paragraph -->
+
+<!-- wp:heading {"level":3} -->
+<h3 class="wp-block-heading">Contents</h3>
+<!-- /wp:heading -->
+
+<!-- wp:list {"ordered":true} -->
+<ol class="wp-block-list"><!-- wp:list-item -->
+<li><a href="https://www.petecodes.co.uk/iot-hub-with-adr-and-certificate-management-part-1">Introduction</a></li>
+<!-- /wp:list-item -->
+<!-- wp:list-item -->
+<li><a href="https://www.petecodes.co.uk/iot-hub-with-adr-and-certificate-management-part-2">A DPS Primer</a></li>
+<!-- /wp:list-item -->
+<!-- wp:list-item -->
+<li><a href="https://www.petecodes.co.uk/iot-hub-with-adr-and-certificate-management-part-3">Creating DPS, IoT Hub and ADR Instances</a></li>
+<!-- /wp:list-item -->
+<!-- wp:list-item -->
+<li><a href="https://www.petecodes.co.uk/iot-hub-with-adr-and-certificate-management-part-4">Understanding X.509 and CSR Workflows</a></li>
+<!-- /wp:list-item -->
+<!-- wp:list-item -->
+<li><a href="https://www.petecodes.co.uk/iot-hub-with-adr-and-certificate-management-part-5">The Device Application (this post)</a></li>
+<!-- /wp:list-item -->
+</ol>
+<!-- /wp:list -->
+
+<!-- wp:heading {"level":3} -->
+<h3 class="wp-block-heading">Why Keep a DPS Adapter?</h3>
+<!-- /wp:heading -->
+
+<!-- wp:quote -->
+<blockquote class="wp-block-quote"><!-- wp:paragraph -->
+<p>I no longer need to maintain security providers, SAS tokens, registration
+polling or a DPS MQTT transport in C#. The official unified SDK handles those.
+Our adapter still keeps configuration, CSR/key and issued-chain files durable,
+and ADR ARM metadata operations out of the sorting loop.</p>
+<!-- /wp:paragraph -->
+<!-- wp:paragraph -->
+<p><strong>Note:</strong> The cleanup commands in older versions of this post use a previous
+resource setup. For the refreshed deployment, follow the resource review and
+cleanup guidance in the Part 3 setup README.</p>
+<!-- /wp:paragraph --></blockquote>
+<!-- /wp:quote -->
+
+<!-- wp:heading {"level":3} -->
+<h3 class="wp-block-heading">Application Architecture</h3>
+<!-- /wp:heading -->
+
+<!-- wp:code {"className":"language-plaintext"} -->
+<pre class="wp-block-code language-plaintext"><code>┌─────────────────────────────────────────────────────────┐
+│                     Program.cs                          │
+│                   (Main Entry Point)                    │
+└─────────────────────┬───────────────────────────────────┘
+                      │
+    ┌─────────────┬───┴─────────┬───────────────┐
+    │             │             │               │
+    ▼             ▼             ▼               ▼
+┌─────────┐  ┌──────────┐  ┌──────────┐  ┌──────────────┐
+│ Config  │  │   DPS    │  │Telemetry │  │   Hardware   │
+│ Loader  │  │   Init   │  │ Service  │  │   Drivers    │
+└─────────┘  └────┬─────┘  └────┬─────┘  └──────────────┘
+                  │             │
+                  ▼             ▼
+          ┌─────────────────────────┐
+          │  Azure DPS Framework    │
+          │  (Thin SDK adapter)     │
+          └──────────┬──────────────┘
+                     │
+                     ▼
+              ┌─────────────┐
+              │   IoT Hub   │
+              └─────────────┘
+
+</code></pre>
+<!-- /wp:code -->
+
+<!-- wp:paragraph -->
+<p>The adapter opens the SDK <code>ConnectionClient</code>; telemetry uses <code>TelemetryClient</code>
+on the same connection. No second custom provisioning transport sits underneath.</p>
+<!-- /wp:paragraph -->
+
+<!-- wp:heading {"level":3} -->
+<h3 class="wp-block-heading">Getting Started</h3>
+<!-- /wp:heading -->
+
+<!-- wp:quote -->
+<blockquote class="wp-block-quote"><!-- wp:paragraph -->
+<p><strong>Already completed previous posts?</strong> </p>
+<!-- /wp:paragraph -->
+<!-- wp:paragraph -->
+<p>If you've already cloned the repository and run the setup scripts from the earlier posts, you can skip to <a href="#step-3-configure-the-application">Step 3: Configure the Application</a>.</p>
+<!-- /wp:paragraph -->
+<!-- wp:paragraph -->
+<p>The steps below are for those starting fresh or who need to set up the complete environment.</p>
+<!-- /wp:paragraph --></blockquote>
+<!-- /wp:quote -->
+
+<!-- wp:heading {"level":4} -->
+<h4 class="wp-block-heading">Step 1: Clone the Repository (If Not Already Done)</h4>
+<!-- /wp:heading -->
+
+<!-- wp:paragraph -->
+<p>If you haven't already cloned the repository from earlier posts, get the complete project code:</p>
+<!-- /wp:paragraph -->
+
+<!-- wp:paragraph -->
+<p><strong>Clone the repository:</strong></p>
+<!-- /wp:paragraph -->
+
+<!-- wp:code {"className":"language-powershell"} -->
+<pre class="wp-block-code language-powershell"><code>git clone https://github.com/pjgpetecodes/skittlesorter.git
+cd skittlesorter
+</code></pre>
+<!-- /wp:code -->
+
+<!-- wp:heading {"level":4} -->
+<h4 class="wp-block-heading">Step 2: Create the Azure Resources</h4>
+<!-- /wp:heading -->
+
+<!-- wp:paragraph -->
+<p>Follow our updated <a href="https://www.petecodes.co.uk/iot-hub-with-adr-and-certificate-management-part-3/">Azure CLI walkthrough in Part 3</a>
+to create the ADR namespace, a <strong>new</strong> IoT Hub, and DPS in a supported region.
+The commands are aligned with the current
+<a href="https://learn.microsoft.com/en-us/azure/iot-hub/iot-hub-device-registry-setup?pivots=azure-cli">Microsoft Learn Azure CLI deployment method</a>.
+The script also creates the X.509 bootstrap certificate and enrollment. Part 4
+explains those credentials and the separate operational issuer; its manual
+walkthrough is optional.</p>
+<!-- /wp:paragraph -->
+
+<!-- wp:paragraph -->
+<p>All IoT Hub preview scenarios require DPS. If using certificate management,
+configure a device onboarding credential separately from the ADR-managed
+operational issuer. Create an ADR intermediate CA and its certificate policy,
+then select that CA and policy on the DPS enrollment. Connect DPS before the
+Hub; ADR synchronizes CA certificates with linked Hubs. Keep the resulting DPS
+ID Scope, hub hostname, and onboarding credential for the application
+configuration.</p>
+<!-- /wp:paragraph -->
+
+<!-- wp:heading {"level":4} -->
+<h4 class="wp-block-heading">Step 3: Configure the Application</h4>
+<!-- /wp:heading -->
+
+<!-- wp:paragraph -->
+<p>Use the config written by Part 3: <code>appsettings.002.json</code> by default, or the
+path passed to <code>-AppConfigPath</code>. It already contains the DPS ID scope,
+registration ID, bootstrap certificate paths and CSR settings. Mock hardware is
+enabled, and the SDK discovers the assigned Hub through DPS. Review the
+configuration before running it; don't copy private keys into source control.</p>
+<!-- /wp:paragraph -->
+
+<!-- wp:paragraph -->
+<p><strong>Key Configuration Sections:</strong></p>
+<!-- /wp:paragraph -->
+
+<!-- wp:list -->
+<ul class="wp-block-list"><!-- wp:list-item -->
+<li><strong>DpsProvisioning</strong>: Bootstrap certificate paths and DPS connection details</li>
+<!-- /wp:list-item -->
+<!-- wp:list-item -->
+<li><strong>DeviceId</strong>: Must match your registration ID</li>
+<!-- /wp:list-item -->
+<!-- wp:list-item -->
+<li><strong>IssuedCertFilePath</strong>: Where the operational certificate chain from DPS will be saved</li>
+<!-- /wp:list-item -->
+<!-- wp:list-item -->
+<li><strong>Hardware.MockMode</strong>: Enable hardware simulation for testing without physical devices</li>
+<!-- /wp:list-item -->
+</ul>
+<!-- /wp:list -->
+
+<!-- wp:paragraph -->
+<p>This is the X.509 + CSR profile from Part 4. For symmetric-key onboarding,
+select <code>SymmetricKey</code> and supply <code>DeviceKeyBase64</code> (prefer a device-specific
+key over a group master key). Set <code>RequestOperationalCertificate</code> to <code>false</code>
+for standard symmetric-key or X.509 provisioning without issuance; the default
+stays <code>true</code> for compatibility with the earlier CSR examples.</p>
+<!-- /wp:paragraph -->
+
+<!-- wp:paragraph -->
+<p>Keep the CSR, matching key, issued chain and assignment sidecar across restarts.
+The generated profile keeps these separate from other enrollments. Paths retain the
+existing <a href="https://github.com/pjgpetecodes/skittlesorter/blob/main/docs/Configuration.md">configuration resolution rules</a>;
+don't package those files with an
+application release. The Part 3 setup script produces unified-compatible
+configuration with X.509 onboarding and CSR issuance enabled by default.</p>
+<!-- /wp:paragraph -->
+
+<!-- wp:heading {"level":4} -->
+<h4 class="wp-block-heading">Step 4: Run the Application</h4>
+<!-- /wp:heading -->
+
+<!-- wp:paragraph -->
+<p><strong>Build and run:</strong></p>
+<!-- /wp:paragraph -->
+
+<!-- wp:code {"className":"language-powershell"} -->
+<pre class="wp-block-code language-powershell"><code>dotnet run --project .\skittlesorter.csproj -- --config .\appsettings.002.json
+</code></pre>
+<!-- /wp:code -->
+
+<!-- wp:paragraph -->
+<p><strong>Illustrative CSR-profile output</strong> (SDK diagnostics differ from the old custom logs):</p>
+<!-- /wp:paragraph -->
+
+<!-- wp:code {"className":"language-plaintext"} -->
+<pre class="wp-block-code language-plaintext"><code>Skittle Sorter Starting...
+
+=== DPS Configuration ===
+IdScope: 0ne00XXXXXX
+RegistrationId: my-device
+AttestationMethod: X509
+
+=== Starting DPS Provisioning ===
+Loaded bootstrap certificate: CN=my-device
+Generated new RSA key pair for operational certificate.
+Submitting registration request to DPS...
+✓ Device assigned to: my-iothub-001.azure-devices.net
+✓ Device ID: my-device
+
+=== Saving Issued Certificate ===
+Certificate Subject: CN=my-device
+Issuer: CN=Microsoft-Managed-ICA-...
+Valid from: 2026-02-07 10:00:00Z
+Valid until: 2026-03-09 10:00:00Z
+✓ Certificate chain saved to the configured IssuedCertFilePath
+
+=== Connecting to IoT Hub ===
+Connecting to: my-iothub-001.azure-devices.net
+Device ID: my-device
+✓ Connected to IoT Hub
+
+=== Starting Sorting Loop ===
+
+Detected: red (R:255 G:50 B:50 C:1200)
+→ Telemetry sent: red (count: 1)
+✓ red sorted
+
+Detected: green (R:50 G:255 B:50 C:1180)
+→ Telemetry sent: green (count: 1)
+✓ green sorted
+
+</code></pre>
+<!-- /wp:code -->
+
+<!-- wp:paragraph -->
+<p><strong>What's happening:</strong></p>
+<!-- /wp:paragraph -->
+
+<!-- wp:list {"ordered":true} -->
+<ol class="wp-block-list"><!-- wp:list-item -->
+<li><strong>DPS Configuration</strong> - Loads the generated settings</li>
+<!-- /wp:list-item -->
+<!-- wp:list-item -->
+<li><strong>DPS Provisioning</strong> - Authenticates with bootstrap certificate and generates CSR</li>
+<!-- /wp:list-item -->
+<!-- wp:list-item -->
+<li><strong>Saving Certificate</strong> - Receives operational certificate from DPS and saves it locally</li>
+<!-- /wp:list-item -->
+<!-- wp:list-item -->
+<li><strong>Connecting to IoT Hub</strong> - Uses operational certificate to establish MQTT connection</li>
+<!-- /wp:list-item -->
+<!-- wp:list-item -->
+<li><strong>Sorting Loop</strong> - Processes skittles and sends telemetry</li>
+<!-- /wp:list-item -->
+</ol>
+<!-- /wp:list -->
+
+<!-- wp:heading {"level":4} -->
+<h4 class="wp-block-heading">A Bounded Cloud Check Before Moving Anything</h4>
+<!-- /wp:heading -->
+
+<!-- wp:paragraph -->
+<p>I like to prove the connection before involving the motors:</p>
+<!-- /wp:paragraph -->
+
+<!-- wp:code {"className":"language-powershell"} -->
+<pre class="wp-block-code language-powershell"><code># Offline configuration check
+dotnet run --project .\skittlesorter.csproj -- --self-test --config .\appsettings.002.json
+
+# Real provisioning + Hub + representative telemetry, then disconnect
+dotnet run --project .\skittlesorter.csproj -- --cloud-self-test --config .\appsettings.002.json
+</code></pre>
+<!-- /wp:code -->
+
+<!-- wp:paragraph -->
+<p>The cloud check has a two-minute bound and waits for one telemetry acknowledgement;
+it doesn't initialize physical sensors or servos. It does contact Azure, so use
+the intended subscription and identity. The helper
+<code>scripts\iot-hub-device-registry\test-unified.ps1 -AppConfigPath PATH</code>
+doesn't reset by default. Only use explicit <code>-ResetDevice</code> with matching resource
+names to reset that exact device/registration; it never deletes a resource
+group, enrollment group or CA. See the <a href="https://github.com/pjgpetecodes/skittlesorter/blob/main/scripts/iot-hub-device-registry/README.md#bounded-unified-sdk-cloud-test">cloud-test runbook</a>.</p>
+<!-- /wp:paragraph -->
+
+<!-- wp:paragraph -->
+<p>Reset also needs operator <strong>Hub data-plane registry read/delete</strong> permissions,
+such as scoped IoT Hub Registry Contributor, not just resource-management access.
+On a Hub with <code>DisableLocalAuth=true</code>, use Entra CLI authentication
+(<code>--auth-type login</code>); SAS is disabled. The helper checks Hub registry access
+before destructive work and stops if permission is missing. A successful
+device connection doesn't grant the operator registry access, so don't change
+RBAC unilaterally to force the reset through.</p>
+<!-- /wp:paragraph -->
+
+<!-- wp:heading {"level":3} -->
+<h3 class="wp-block-heading">Verify in the Portal</h3>
+<!-- /wp:heading -->
+
+<!-- wp:paragraph -->
+<p>You should now be able to navigate to your resource group in the Azure Portal and see your device happily registered and showing as a first class citizen;</p>
+<!-- /wp:paragraph -->
+
+<!-- wp:paragraph -->
+<p><a href="https://www.petecodes.co.uk/wp-content/uploads/2026/02/image-1.png"><img src="https://www.petecodes.co.uk/wp-content/uploads/2026/02/image-1.png" alt="ADR device resource in the Azure portal"></a></p>
+<!-- /wp:paragraph -->
+
+<!-- wp:paragraph -->
+<p>If you Navigate to your IoT Hub, and then to Device Management, and Devices, you should see your traditional IoT Hub Device present too;</p>
+<!-- /wp:paragraph -->
+
+<!-- wp:paragraph -->
+<p><a href="https://www.petecodes.co.uk/wp-content/uploads/2026/02/image-2.png"><img src="https://www.petecodes.co.uk/wp-content/uploads/2026/02/image-2-1024x192.png" alt="IoT Hub device management view"></a></p>
+<!-- /wp:paragraph -->
+
+<!-- wp:heading {"level":3} -->
+<h3 class="wp-block-heading">Setting Up More Devices</h3>
+<!-- /wp:heading -->
+
+<!-- wp:paragraph -->
+<p>To add another demo device, rerun the Part 3 setup command against the same
+services with a new <code>-RegistrationId</code>, <code>-EnrollmentId</code> and <code>-AppConfigPath</code>.
+The script creates a separate bootstrap issuer and credentials for that
+enrollment; it doesn't overwrite the first profile. Review the generated
+config and keep its private keys secure. If moving it to another machine,
+securely transfer the bootstrap certificate, key and chain, update their paths
+in the config, and run the bounded cloud check with that config first.</p>
+<!-- /wp:paragraph -->
+
+<!-- wp:paragraph -->
+<p><a href="https://www.petecodes.co.uk/wp-content/uploads/2026/02/image.png"><img src="https://www.petecodes.co.uk/wp-content/uploads/2026/02/image.png" alt="Additional device registered in DPS, IoT Hub, and ADR"></a></p>
+<!-- /wp:paragraph -->
+
+<!-- wp:heading {"level":3} -->
+<h3 class="wp-block-heading">Troubleshooting Common Issues</h3>
+<!-- /wp:heading -->
+
+<!-- wp:paragraph -->
+<p><strong>Problem: &quot;Failed to load bootstrap certificate&quot;</strong></p>
+<!-- /wp:paragraph -->
+
+<!-- wp:code {"className":"language-plaintext"} -->
+<pre class="wp-block-code language-plaintext"><code>Error: The system cannot find the file specified.
+at System.Security.Cryptography.X509Certificates.X509Certificate2..ctor
+</code></pre>
+<!-- /wp:code -->
+
+<!-- wp:paragraph -->
+<p><strong>Solution:</strong></p>
+<!-- /wp:paragraph -->
+
+<!-- wp:list -->
+<ul class="wp-block-list"><!-- wp:list-item -->
+<li>Verify <code>AttestationCertPath</code>, <code>AttestationKeyPath</code> and
+<code>AttestationCertChainPath</code> in the generated config point to the files
+created by setup.</li>
+<!-- /wp:list-item -->
+<!-- wp:list-item -->
+<li>If you moved the config to another device, update the paths to match.</li>
+<!-- /wp:list-item -->
+</ul>
+<!-- /wp:list -->
+
+<!-- wp:paragraph -->
+<p><strong>Check certificate files:</strong></p>
+<!-- /wp:paragraph -->
+
+<!-- wp:code {"className":"language-powershell"} -->
+<pre class="wp-block-code language-powershell"><code>$dps = (Get-Content .\appsettings.002.json -Raw | ConvertFrom-Json).IoTHub.DpsProvisioning
+Test-Path -LiteralPath $dps.AttestationCertPath
+Test-Path -LiteralPath $dps.AttestationKeyPath
+Test-Path -LiteralPath $dps.AttestationCertChainPath
+</code></pre>
+<!-- /wp:code -->
+
+<!-- wp:paragraph -->
+<p><strong>Problem: &quot;DPS registration failed: Unauthorized&quot;</strong></p>
+<!-- /wp:paragraph -->
+
+<!-- wp:code {"className":"language-plaintext"} -->
+<pre class="wp-block-code language-plaintext"><code>DPS initialization failed: Registration failed with status: Unauthorized
+</code></pre>
+<!-- /wp:code -->
+
+<!-- wp:paragraph -->
+<p><strong>Solution:</strong></p>
+<!-- /wp:paragraph -->
+
+<!-- wp:list -->
+<ul class="wp-block-list"><!-- wp:list-item -->
+<li>Verify your enrollment group exists in DPS</li>
+<!-- /wp:list-item -->
+<!-- wp:list-item -->
+<li>Check that CA certificates are uploaded and <strong>verified</strong> in DPS (see <a href="https://www.petecodes.co.uk/iot-hub-with-adr-and-certificate-management-part-4/">Understanding X.509 and CSR Workflows</a>)</li>
+<!-- /wp:list-item -->
+<!-- wp:list-item -->
+<li>Confirm <code>IdScope</code> in <code>appsettings.json</code> matches DPS</li>
+<!-- /wp:list-item -->
+</ul>
+<!-- /wp:list -->
+
+<!-- wp:paragraph -->
+<p><strong>Verify enrollment group:</strong></p>
+<!-- /wp:paragraph -->
+
+<!-- wp:code {"className":"language-powershell"} -->
+<pre class="wp-block-code language-powershell"><code>az iot dps enrollment-group show `
+  --dps-name &quot;my-dps-001&quot; `
+  --resource-group &quot;my-iot-rg&quot; `
+  --enrollment-id &quot;my-device-group&quot;
+</code></pre>
+<!-- /wp:code -->
+
+<!-- wp:paragraph -->
+<p><strong>Verify CA certificates are verified:</strong></p>
+<!-- /wp:paragraph -->
+
+<!-- wp:code {"className":"language-powershell"} -->
+<pre class="wp-block-code language-powershell"><code>az iot dps certificate show `
+  --dps-name &quot;my-dps-001&quot; `
+  --resource-group &quot;my-iot-rg&quot; `
+  --certificate-name &quot;my-device-root&quot; `
+  --query &quot;properties.isVerified&quot;
+</code></pre>
+<!-- /wp:code -->
+
+<!-- wp:paragraph -->
+<p><strong>Problem: &quot;Failed to connect to IoT Hub&quot;</strong></p>
+<!-- /wp:paragraph -->
+
+<!-- wp:code {"className":"language-powershell"} -->
+<pre class="wp-block-code language-powershell"><code>Error: The remote certificate is invalid according to the validation procedure
+</code></pre>
+<!-- /wp:code -->
+
+<!-- wp:paragraph -->
+<p><strong>Solution:</strong></p>
+<!-- /wp:paragraph -->
+
+<!-- wp:list -->
+<ul class="wp-block-list"><!-- wp:list-item -->
+<li>Check that the ADR namespace links to DPS and IoT Hub have succeeded</li>
+<!-- /wp:list-item -->
+<!-- wp:list-item -->
+<li>Verify IoT Hub hostname matches assigned hub</li>
+<!-- /wp:list-item -->
+<!-- wp:list-item -->
+<li>Ensure operational certificate was saved correctly</li>
+<!-- /wp:list-item -->
+</ul>
+<!-- /wp:list -->
+
+<!-- wp:paragraph -->
+<p><strong>Verify the ADR namespace links:</strong></p>
+<!-- /wp:paragraph -->
+
+<!-- wp:code {"className":"language-powershell"} -->
+<pre class="wp-block-code language-powershell"><code>az iot adr ns link dps list `
+  --namespace &quot;my-adr-namespace&quot; `
+  --resource-group &quot;my-iot-rg&quot;
+az iot adr ns link hub list `
+  --namespace &quot;my-adr-namespace&quot; `
+  --resource-group &quot;my-iot-rg&quot;
+</code></pre>
+<!-- /wp:code -->
+
+<!-- wp:paragraph -->
+<p><code>az iot dps linked-hub list</code> checks the separate classic allocation links; an
+empty result doesn't mean these ADR namespace links are missing.</p>
+<!-- /wp:paragraph -->
+
+<!-- wp:paragraph -->
+<p><strong>Problem: &quot;Device already provisioned&quot; but can't connect</strong></p>
+<!-- /wp:paragraph -->
+
+<!-- wp:paragraph -->
+<p>If you see the operational certificate exists but connection fails:</p>
+<!-- /wp:paragraph -->
+
+<!-- wp:paragraph -->
+<p>Check the selected profile, saved chain, matching CSR key and assigned Hub first.
+Don't delete a shared certificate directory to fix one device. Use the reviewed
+exact-device cloud-test reset only when you intend to reprovision that identity.</p>
+<!-- /wp:paragraph -->
+
+<!-- wp:paragraph -->
+<p><strong>Problem: Missing application configuration</strong></p>
+<!-- /wp:paragraph -->
+
+<!-- wp:code {"className":"language-plaintext"} -->
+<pre class="wp-block-code language-plaintext"><code>Unhandled exception. System.Exception: IoTHub config missing
+</code></pre>
+<!-- /wp:code -->
+
+<!-- wp:paragraph -->
+<p><strong>Solution:</strong></p>
+<!-- /wp:paragraph -->
+
+<!-- wp:list -->
+<ul class="wp-block-list"><!-- wp:list-item -->
+<li>Check that the generated config exists and that <code>--config</code> points to it.
+The default from Part 3 is <code>appsettings.002.json</code>; a custom
+<code>-AppConfigPath</code> changes that location.</li>
+<!-- /wp:list-item -->
+<!-- wp:list-item -->
+<li>If it was lost, inspect the existing enrollment and local credentials
+before rerunning setup. The script refuses to overwrite an existing
+enrollment or private key.</li>
+<!-- /wp:list-item -->
+</ul>
+<!-- /wp:list -->
+
+<!-- wp:paragraph -->
+<p><strong>Problem: Certificate expired or renewal needed</strong></p>
+<!-- /wp:paragraph -->
+
+<!-- wp:code {"className":"language-plaintext"} -->
+<pre class="wp-block-code language-plaintext"><code>Certificate Valid until: 2026-01-15 10:00:00Z (expired)
+</code></pre>
+<!-- /wp:code -->
+
+<!-- wp:paragraph -->
+<p><strong>Solution:</strong></p>
+<!-- /wp:paragraph -->
+
+<!-- wp:list -->
+<ul class="wp-block-list"><!-- wp:list-item -->
+<li>Check the certificate policy, persisted chain and matching private key.</li>
+<!-- /wp:list-item -->
+<!-- wp:list-item -->
+<li>Operational certificate validity is set by the ADR certificate policy.</li>
+<!-- /wp:list-item -->
+<!-- wp:list-item -->
+<li>There is no automatic renewal scheduler in this application, and no
+service-wide seven-day renewal requirement. See the <a href="https://learn.microsoft.com/en-us/azure/iot/how-to-create-edit-certificate-policy?tabs=cli">current certificate-policy
+guide</a>
+and the service's <a href="https://learn.microsoft.com/en-us/azure/iot/iot-certificate-management-overview">renewal documentation</a>.</li>
+<!-- /wp:list-item -->
+</ul>
+<!-- /wp:list -->
+
+<!-- wp:paragraph -->
+<p>The SDK offers optional IoT Hub renewal APIs without DPS reprovisioning.
+Using those safely needs a deliberate lifecycle implementation; deleting a
+certificate isn't the same thing. Preserve keys and chains while diagnosing.</p>
+<!-- /wp:paragraph -->
+
+<!-- wp:paragraph -->
+<p><strong>Still having issues?</strong></p>
+<!-- /wp:paragraph -->
+
+<!-- wp:list {"ordered":true} -->
+<ol class="wp-block-list"><!-- wp:list-item -->
+<li>Check Azure resources are properly configured (<a href="https://www.petecodes.co.uk/iot-hub-with-adr-and-certificate-management-part-3/">Creating DPS, IoT Hub and ADR Instances</a>)</li>
+<!-- /wp:list-item -->
+<!-- wp:list-item -->
+<li>Verify certificate and CSR setup (<a href="https://www.petecodes.co.uk/iot-hub-with-adr-and-certificate-management-part-4/">Understanding X.509 and CSR Workflows</a>)</li>
+<!-- /wp:list-item -->
+<!-- wp:list-item -->
+<li>Review Microsoft's <a href="https://learn.microsoft.com/en-gb/azure/iot/device-registry/get-started-azure-device-registry">ADR connected-services guide</a> and <a href="https://learn.microsoft.com/en-us/azure/iot/how-to-create-edit-certificate-policy?tabs=cli">certificate-policy enrollment guide</a> for current resource and enrollment configuration</li>
+<!-- /wp:list-item -->
+<!-- wp:list-item -->
+<li>Check DPS and IoT Hub logs in Azure Portal</li>
+<!-- /wp:list-item -->
+<!-- wp:list-item -->
+<li>Enable verbose logging in <code>appsettings.json</code>:</li>
+<!-- /wp:list-item -->
+</ol>
+<!-- /wp:list -->
+
+<!-- wp:code {"className":"language-json"} -->
+<pre class="wp-block-code language-json"><code>{
+  &quot;Logging&quot;: {
+    &quot;LogLevel&quot;: {
+      &quot;Default&quot;: &quot;Debug&quot;,
+      &quot;Microsoft&quot;: &quot;Information&quot;
+    }
+  }
+}
+</code></pre>
+<!-- /wp:code -->
+
+<!-- wp:heading {"level":3} -->
+<h3 class="wp-block-heading">Understanding the Code Architecture</h3>
+<!-- /wp:heading -->
+
+<!-- wp:paragraph -->
+<p>Now let's explore the major components that make this work.</p>
+<!-- /wp:paragraph -->
+
+<!-- wp:heading {"level":4} -->
+<h4 class="wp-block-heading">Project Structure</h4>
+<!-- /wp:heading -->
+
+<!-- wp:code {"className":"language-plaintext"} -->
+<pre class="wp-block-code language-plaintext"><code>skittlesorter/
+├── src/
+│   ├── Program.cs                      # Main entry point
+│   ├── comms/
+│   │   ├── DpsInitializationService.cs # DPS provisioning logic
+│   │   └── TelemetryService.cs         # IoT Hub telemetry
+│   ├── configuration/
+│   │   └── ConfigurationLoader.cs      # Load appsettings.json
+│   └── drivers/
+│       ├── SkittleSorterService.cs     # Main business logic
+│       ├── TCS3472x.cs                 # Color sensor driver
+│       └── ServoController.cs          # Servo control
+├── AzureDpsFramework/                  # Thin SDK/session adapter
+│   ├── DpsConfiguration.cs             # Existing profile configuration
+│   ├── CertificateManager.cs           # CSR, private key and chain persistence
+│   └── Adr/                           # ADR ARM metadata operations
+└── appsettings.json                    # Device configuration
+</code></pre>
+<!-- /wp:code -->
+
+<!-- wp:heading {"level":4} -->
+<h4 class="wp-block-heading">Main Program Flow (src/Program.cs)</h4>
+<!-- /wp:heading -->
+
+<!-- wp:paragraph -->
+<p>The main program still loads configuration, initializes mock or real hardware
+for a normal run, opens the cloud session and runs pick → detect → sort → drop.
+The cloud-self-test takes a separate bounded path and never initializes physical
+hardware. Shutdown disconnects the SDK session gracefully.</p>
+<!-- /wp:paragraph -->
+
+<!-- wp:heading {"level":4} -->
+<h4 class="wp-block-heading">DPS Initialization Service (src/comms/DpsInitializationService.cs)</h4>
+<!-- /wp:heading -->
+
+<!-- wp:paragraph -->
+<p>This service selects the configured attestation/issuance profile and delegates
+session creation to <code>AzureDpsFramework</code>. <code>ConnectionClient</code> handles the actual
+DPS registration, credentials and Hub connection.</p>
+<!-- /wp:paragraph -->
+
+<!-- wp:paragraph -->
+<p>For CSR profiles, the adapter loads or creates the durable CSR/key pair,
+supplies it to the SDK, then persists the returned operational chain with the
+matching key. The <code>.connection.json</code> assignment sidecar alongside the issued PEM
+lets restarts restore the operational certificate and assigned Hub. A required-
+certificate wrapper rejects a missing issued chain before Hub authentication.
+For standard profiles, the adapter doesn't request a new certificate.
+The onboarding certificate and operational certificate remain different
+credentials; moving to an SDK hasn't merged their roles.</p>
+<!-- /wp:paragraph -->
+
+<!-- wp:heading {"level":4} -->
+<h4 class="wp-block-heading">Thin AzureDpsFramework Adapter (AzureDpsFramework/)</h4>
+<!-- /wp:heading -->
+
+<!-- wp:paragraph -->
+<p>I've kept the pieces specific to this application: configuration, device-key
+derivation where needed, certificate files, optional ADR ARM metadata helpers
+and the unified-session adapter. The old security-provider, transport,
+registration and SAS-token protocol classes are removed, not wrapped.</p>
+<!-- /wp:paragraph -->
+
+<!-- wp:paragraph -->
+<p>The <code>UnifiedDeviceSession</code> adapter delegates MQTT to the SDK. Its coordinator
+holds the updater's shared lock only during DPS sessions, including reprovisioning,
+not for the lifetime of the Hub telemetry connection.</p>
+<!-- /wp:paragraph -->
+
+<!-- wp:paragraph -->
+<p>For the SDK API itself, follow the <a href="https://github.com/Azure/azure-iot-sdk/tree/releases/public-preview/dotnet/samples/Unified">official unified samples</a>.
+For our file/configuration boundary, read the
+<a href="https://github.com/pjgpetecodes/skittlesorter/blob/main/AzureDpsFramework/README.md">adapter README</a>.</p>
+<!-- /wp:paragraph -->
+
+<!-- wp:paragraph -->
+<p>The smaller boundary looks like this (with a loaded <code>DpsConfiguration</code> and
+cancellation token):</p>
+<!-- /wp:paragraph -->
+
+<!-- wp:code {"className":"language-csharp"} -->
+<pre class="wp-block-code language-csharp"><code>using var session = UnifiedDeviceSession.Create(dpsConfiguration);
+try
+{
+    await session.ConnectAsync(cancellationToken);
+    // TelemetryService receives session.Telemetry, the SDK TelemetryClient.
+}
+finally
+{
+    await session.DisconnectAsync();
+}
+</code></pre>
+<!-- /wp:code -->
+
+<!-- wp:paragraph -->
+<p><code>session.Connection</code> is the SDK <code>ConnectionClient</code>; <code>session.Telemetry</code> shares
+that connection. There's no legacy <code>DeviceClient</code> or custom register/poll loop.</p>
+<!-- /wp:paragraph -->
+
+<!-- wp:heading {"level":4} -->
+<h4 class="wp-block-heading">Telemetry Service (src/comms/TelemetryService.cs)</h4>
+<!-- /wp:heading -->
+
+<!-- wp:paragraph -->
+<p><code>TelemetryService</code> now uses the SDK's <code>TelemetryClient</code> on the same connection.
+It preserves the application's JSON telemetry and message-property contract;
+we aren't changing cloud routes or introducing a second Hub connection.
+The optional session-count feature remains independent of this SDK migration.</p>
+<!-- /wp:paragraph -->
+
+<!-- wp:heading {"level":4} -->
+<h4 class="wp-block-heading">Certificate Renewal</h4>
+<!-- /wp:heading -->
+
+<!-- wp:paragraph -->
+<p>SDK retry/reconnection and reprovisioning are available through <code>ConnectionClient</code>.
+They aren't an automatic certificate-renewal scheduler. Optional IoT Hub renewal
+APIs are also available, but I haven't wired automatic operational-certificate
+renewal into this application. The old “delete the certificate seven days
+before expiry” snippet wasn't a complete lifecycle implementation, so I've
+removed it. Durable replacement and recovery need their own tests.</p>
+<!-- /wp:paragraph -->
+
+<!-- wp:heading {"level":3} -->
+<h3 class="wp-block-heading">Azure Device Registry (ADR) Integration</h3>
+<!-- /wp:heading -->
+
+<!-- wp:paragraph -->
+<p>Azure Device Registry provides device identity and metadata management that works with DPS and IoT Hub.</p>
+<!-- /wp:paragraph -->
+
+<!-- wp:heading {"level":4} -->
+<h4 class="wp-block-heading">Key ADR Features</h4>
+<!-- /wp:heading -->
+
+<!-- wp:paragraph -->
+<p><strong>🔹 Device Metadata</strong></p>
+<!-- /wp:paragraph -->
+
+<!-- wp:list -->
+<ul class="wp-block-list"><!-- wp:list-item -->
+<li>Registry properties: manufacturer, model, hardware revision and software revision</li>
+<!-- /wp:list-item -->
+<!-- wp:list-item -->
+<li>Tags for custom labels such as hardware ID, location, tenant and environment</li>
+<!-- /wp:list-item -->
+<!-- wp:list-item -->
+<li>Enablement state: <code>Enabled</code> or <code>Disabled</code></li>
+<!-- /wp:list-item -->
+</ul>
+<!-- /wp:list -->
+
+<!-- wp:paragraph -->
+<p><strong>🔹 Credential Management</strong></p>
+<!-- /wp:paragraph -->
+
+<!-- wp:list -->
+<ul class="wp-block-list"><!-- wp:list-item -->
+<li>Policies for operational-certificate issuance</li>
+<!-- /wp:list-item -->
+<!-- wp:list-item -->
+<li>Certificate issuance, renewal, and revocation</li>
+<!-- /wp:list-item -->
+<!-- wp:list-item -->
+<li>CA lifecycle management, including automatic CA rotation</li>
+<!-- /wp:list-item -->
+</ul>
+<!-- /wp:list -->
+
+<!-- wp:paragraph -->
+<p><strong>🔹 Multi-Hub Support</strong></p>
+<!-- /wp:paragraph -->
+
+<!-- wp:list -->
+<ul class="wp-block-list"><!-- wp:list-item -->
+<li>A namespace can be linked to multiple IoT Hubs</li>
+<!-- /wp:list-item -->
+<!-- wp:list-item -->
+<li>Devices are represented as Azure resources in the namespace</li>
+<!-- /wp:list-item -->
+<!-- wp:list-item -->
+<li>Query and govern resources across hubs sharing a namespace</li>
+<!-- /wp:list-item -->
+</ul>
+<!-- /wp:list -->
+
+<!-- wp:paragraph -->
+<p>Don't infer that moving a device between hubs avoids reprovisioning; follow
+the current DPS and IoT Hub documentation for device migration behavior.</p>
+<!-- /wp:paragraph -->
+
+<!-- wp:heading {"level":4} -->
+<h4 class="wp-block-heading">ADR Client Implementation</h4>
+<!-- /wp:heading -->
+
+<!-- wp:paragraph -->
+<p>The project includes an ADR client for device management (AzureDpsFramework/Adr/AdrDeviceRegistryClient.cs):</p>
+<!-- /wp:paragraph -->
+
+<!-- wp:code {"className":"language-csharp"} -->
+<pre class="wp-block-code language-csharp"><code>using Azure.Identity;
+using AzureDpsFramework.Adr;
+
+// Create ADR client (uses DefaultAzureCredential)
+var adrClient = new AdrDeviceRegistryClient();
+
+// List all devices in namespace
+var devices = await adrClient.ListDevicesAsync(
+    subscriptionId: &quot;your-subscription-id&quot;,
+    resourceGroupName: &quot;my-iot-rg&quot;,
+    namespaceName: &quot;my-adrnamespace-uniquesuffix&quot;
+);
+
+Console.WriteLine($&quot;Found {devices.Count} devices:&quot;);
+foreach (var device in devices)
+{
+    Console.WriteLine($&quot;  - {device.Name}: {device.Properties}&quot;);
+}
+
+// Get specific device details
+var deviceDetails = await adrClient.GetDeviceAsync(
+    subscriptionId: &quot;your-subscription-id&quot;,
+    resourceGroupName: &quot;my-iot-rg&quot;,
+    namespaceName: &quot;my-adrnamespace-uniquesuffix&quot;,
+    deviceName: &quot;my-device&quot;
+);
+
+if (deviceDetails != null)
+{
+    Console.WriteLine($&quot;\nDevice: {deviceDetails.Name}&quot;);
+    Console.WriteLine($&quot;Properties: {deviceDetails.Properties}&quot;);
+    
+    // Display tags
+    if (deviceDetails.Tags.ValueKind == System.Text.Json.JsonValueKind.Object)
+    {
+        Console.WriteLine(&quot;Tags:&quot;);
+        foreach (var tag in deviceDetails.Tags.EnumerateObject())
+        {
+            Console.WriteLine($&quot;  {tag.Name}: {tag.Value}&quot;);
+        }
+    }
+}
+</code></pre>
+<!-- /wp:code -->
+
+<!-- wp:heading {"level":4} -->
+<h4 class="wp-block-heading">Configuration-Driven ADR Updates</h4>
+<!-- /wp:heading -->
+
+<!-- wp:paragraph -->
+<p>Enable automatic device metadata updates in <code>appsettings.json</code>:</p>
+<!-- /wp:paragraph -->
+
+<!-- wp:code {"className":"language-json"} -->
+<pre class="wp-block-code language-json"><code>{
+  &quot;Adr&quot;: {
+    &quot;Enabled&quot;: true,
+    &quot;SubscriptionId&quot;: &quot;your-subscription-id&quot;,
+    &quot;ResourceGroupName&quot;: &quot;my-iot-rg&quot;,
+    &quot;NamespaceName&quot;: &quot;my-adrnamespace-uniquesuffix&quot;,
+    &quot;DeviceUpdate&quot;: {
+      &quot;Enabled&quot;: true,
+      &quot;Attributes&quot;: {
+        &quot;manufacturer&quot;: &quot;Raspberry Pi Foundation&quot;,
+        &quot;model&quot;: &quot;Raspberry Pi 4B&quot;,
+        &quot;hardwareRevision&quot;: &quot;1.4&quot;,
+        &quot;softwareRevision&quot;: &quot;1.0.5&quot;
+      },
+      &quot;Tags&quot;: {
+        &quot;location&quot;: &quot;factory-1&quot;,
+        &quot;department&quot;: &quot;manufacturing&quot;,
+        &quot;hardwareId&quot;: &quot;RPI4B-12345678&quot;
+      },
+      &quot;DeviceEnabled&quot;: true
+    }
+  }
+}
+</code></pre>
+<!-- /wp:code -->
+
+<!-- wp:paragraph -->
+<p>The application automatically updates device metadata after provisioning.</p>
+<!-- /wp:paragraph -->
+
+<!-- wp:paragraph -->
+<p>There's one API detail worth calling out: the current ARM resource is
+<code>namespaces/registryDevices</code> (<code>2026-11-02-preview</code>), and it doesn't accept an
+arbitrary <code>attributes</code> object. Our <code>Attributes</code> configuration name is retained,
+but only exact keys <code>manufacturer</code>, <code>model</code>, <code>hardwareRevision</code> and
+<code>softwareRevision</code> are accepted and mapped to properties. Other keys fail
+explicitly; put custom labels in string-valued <code>Tags</code>, as with <code>hardwareId</code> above.</p>
+<!-- /wp:paragraph -->
+
+<!-- wp:paragraph -->
+<p><code>DeviceEnabled</code> maps to <code>enablementState: &quot;Enabled&quot;</code> or <code>&quot;Disabled&quot;</code>.
+The older <code>OperatingSystemVersion</code> configuration name is still accepted and maps
+to <code>softwareRevision</code>; if both are supplied, it overrides
+<code>Attributes.softwareRevision</code>. It isn't an ARM property of its own.</p>
+<!-- /wp:paragraph -->
+
+<!-- wp:heading {"level":3} -->
+<h3 class="wp-block-heading">Testing the Complete Solution</h3>
+<!-- /wp:heading -->
+
+<!-- wp:heading {"level":4} -->
+<h4 class="wp-block-heading">Test 1: Verify Device in IoT Hub</h4>
+<!-- /wp:heading -->
+
+<!-- wp:paragraph -->
+<p><strong>Check device exists:</strong> This requires Hub registry read permission for your
+signed-in Entra identity; resource-management access alone isn't sufficient.</p>
+<!-- /wp:paragraph -->
+
+<!-- wp:code {"className":"language-powershell"} -->
+<pre class="wp-block-code language-powershell"><code>az iot hub device-identity show `
+  --hub-name &quot;my-iothub-001&quot; `
+  --device-id &quot;my-device&quot; `
+  --auth-type login
+</code></pre>
+<!-- /wp:code -->
+
+<!-- wp:paragraph -->
+<p><strong>Expected output:</strong></p>
+<!-- /wp:paragraph -->
+
+<!-- wp:code {"className":"language-json"} -->
+<pre class="wp-block-code language-json"><code>{
+  &quot;deviceId&quot;: &quot;my-device&quot;,
+  &quot;authentication&quot;: {
+    &quot;type&quot;: &quot;certificateAuthority&quot;
+  },
+  &quot;connectionState&quot;: &quot;Connected&quot;,
+  &quot;status&quot;: &quot;enabled&quot;
+}
+</code></pre>
+<!-- /wp:code -->
+
+<!-- wp:heading {"level":3} -->
+<h3 class="wp-block-heading">Test 2: Monitor Telemetry</h3>
+<!-- /wp:heading -->
+
+<!-- wp:paragraph -->
+<p>The bounded cloud self-test waits for a representative telemetry
+acknowledgement:</p>
+<!-- /wp:paragraph -->
+
+<!-- wp:code {"className":"language-powershell"} -->
+<pre class="wp-block-code language-powershell"><code>dotnet run --project .\skittlesorter.csproj -- --cloud-self-test --config .\appsettings.002.json
+</code></pre>
+<!-- /wp:code -->
+
+<!-- wp:paragraph -->
+<p>For an interactive view of messages, use Azure IoT Explorer and its Hub
+connection string. This is separate from the device's X.509 authentication.</p>
+<!-- /wp:paragraph -->
+
+<!-- wp:heading {"level":3} -->
+<h3 class="wp-block-heading">Test 3: Query ADR Devices</h3>
+<!-- /wp:heading -->
+
+<!-- wp:paragraph -->
+<p><strong>List devices:</strong></p>
+<!-- /wp:paragraph -->
+
+<!-- wp:code {"className":"language-powershell"} -->
+<pre class="wp-block-code language-powershell"><code>az iot adr ns device list `
+  --namespace &quot;my-adrnamespace-uniquesuffix&quot; `
+  --resource-group &quot;my-iot-rg&quot; `
+  --output table
+</code></pre>
+<!-- /wp:code -->
+
+<!-- wp:paragraph -->
+<p><strong>Expected output:</strong></p>
+<!-- /wp:paragraph -->
+
+<!-- wp:code {"className":"language-plaintext"} -->
+<pre class="wp-block-code language-plaintext"><code>Name        Location
+----------  ----------
+my-device   uksouth
+</code></pre>
+<!-- /wp:code -->
+
+<!-- wp:paragraph -->
+<p>Column selection can vary. Inspect JSON for <code>properties.enablementState</code> and
+the supported metadata properties; custom labels are under the resource's <code>tags</code>.</p>
+<!-- /wp:paragraph -->
+
+<!-- wp:paragraph -->
+<p>The sample doesn't currently implement device twin desired-property handling.</p>
+<!-- /wp:paragraph -->
+
+<!-- wp:heading {"level":3} -->
+<h3 class="wp-block-heading">Production Deployment Checklist</h3>
+<!-- /wp:heading -->
+
+<!-- wp:heading {"level":4} -->
+<h4 class="wp-block-heading">✅ Security</h4>
+<!-- /wp:heading -->
+
+<!-- wp:list -->
+<ul class="wp-block-list"><!-- wp:list-item -->
+<li>[ ] Store enrollment keys in Azure Key Vault</li>
+<!-- /wp:list-item -->
+<!-- wp:list-item -->
+<li>[ ] Use hardware security modules (TPM) for private keys</li>
+<!-- /wp:list-item -->
+<!-- wp:list-item -->
+<li>[ ] Enable certificate pinning</li>
+<!-- /wp:list-item -->
+<!-- wp:list-item -->
+<li>[ ] Implement certificate revocation checks</li>
+<!-- /wp:list-item -->
+<!-- wp:list-item -->
+<li>[ ] Use separate enrollment groups for dev/staging/prod</li>
+<!-- /wp:list-item -->
+<!-- wp:list-item -->
+<li>[ ] Rotate enrollment group keys periodically</li>
+<!-- /wp:list-item -->
+</ul>
+<!-- /wp:list -->
+
+<!-- wp:heading {"level":4} -->
+<h4 class="wp-block-heading">✅ Reliability</h4>
+<!-- /wp:heading -->
+
+<!-- wp:list -->
+<ul class="wp-block-list"><!-- wp:list-item -->
+<li>[ ] Implement exponential backoff for retries</li>
+<!-- /wp:list-item -->
+<!-- wp:list-item -->
+<li>[ ] Handle network disconnections gracefully</li>
+<!-- /wp:list-item -->
+<!-- wp:list-item -->
+<li>[ ] Monitor certificate expiration</li>
+<!-- /wp:list-item -->
+<!-- wp:list-item -->
+<li>[ ] Implement automatic certificate renewal</li>
+<!-- /wp:list-item -->
+<!-- wp:list-item -->
+<li>[ ] Log all provisioning events</li>
+<!-- /wp:list-item -->
+<!-- wp:list-item -->
+<li>[ ] Set up alerting for failed provisioning</li>
+<!-- /wp:list-item -->
+</ul>
+<!-- /wp:list -->
+
+<!-- wp:heading {"level":4} -->
+<h4 class="wp-block-heading">✅ Monitoring</h4>
+<!-- /wp:heading -->
+
+<!-- wp:list -->
+<ul class="wp-block-list"><!-- wp:list-item -->
+<li>[ ] Enable Azure Monitor for IoT Hub</li>
+<!-- /wp:list-item -->
+<!-- wp:list-item -->
+<li>[ ] Configure diagnostic logs for DPS</li>
+<!-- /wp:list-item -->
+<!-- wp:list-item -->
+<li>[ ] Track device connection metrics</li>
+<!-- /wp:list-item -->
+<!-- wp:list-item -->
+<li>[ ] Monitor telemetry delivery rates</li>
+<!-- /wp:list-item -->
+<!-- wp:list-item -->
+<li>[ ] Set up alerts for certificate expiration</li>
+<!-- /wp:list-item -->
+<!-- wp:list-item -->
+<li>[ ] Track ADR API usage and errors</li>
+<!-- /wp:list-item -->
+</ul>
+<!-- /wp:list -->
+
+<!-- wp:heading {"level":4} -->
+<h4 class="wp-block-heading">✅ Configuration</h4>
+<!-- /wp:heading -->
+
+<!-- wp:list -->
+<ul class="wp-block-list"><!-- wp:list-item -->
+<li>[ ] Use environment-specific appsettings files</li>
+<!-- /wp:list-item -->
+<!-- wp:list-item -->
+<li>[ ] Store secrets in Key Vault or environment variables</li>
+<!-- /wp:list-item -->
+<!-- wp:list-item -->
+<li>[ ] Document all configuration parameters</li>
+<!-- /wp:list-item -->
+<!-- wp:list-item -->
+<li>[ ] Validate configuration on startup</li>
+<!-- /wp:list-item -->
+<!-- wp:list-item -->
+<li>[ ] Implement configuration hot-reload</li>
+<!-- /wp:list-item -->
+</ul>
+<!-- /wp:list -->
+
+<!-- wp:heading {"level":4} -->
+<h4 class="wp-block-heading">✅ Testing</h4>
+<!-- /wp:heading -->
+
+<!-- wp:list -->
+<ul class="wp-block-list"><!-- wp:list-item -->
+<li>[ ] Unit tests for CSR generation</li>
+<!-- /wp:list-item -->
+<!-- wp:list-item -->
+<li>[ ] Integration tests for DPS provisioning</li>
+<!-- /wp:list-item -->
+<!-- wp:list-item -->
+<li>[ ] E2E tests for telemetry flow</li>
+<!-- /wp:list-item -->
+<!-- wp:list-item -->
+<li>[ ] Load testing for concurrent provisioning</li>
+<!-- /wp:list-item -->
+<!-- wp:list-item -->
+<li>[ ] Certificate renewal testing</li>
+<!-- /wp:list-item -->
+</ul>
+<!-- /wp:list -->
+
+<!-- wp:heading {"level":3} -->
+<h3 class="wp-block-heading">Safe Resource Cleanup</h3>
+<!-- /wp:heading -->
+
+<!-- wp:paragraph -->
+<p>The older cleanup commands in this article refer to a previous resource and
+identity setup; don't use them for the refreshed Part 3 deployment. Stop the
+sorter first. If you used the Part 3 setup script, review the resource group
+and delete it only if it contains dedicated test resources you intend to
+remove. The <a href="https://github.com/pjgpetecodes/skittlesorter/blob/main/scripts/iot-hub-device-registry/README.md">setup README</a>
+describes the resources and costs. Connecting an existing Hub or DPS instance
+to a namespace is permanent, so don't use resource-group deletion as a
+substitute for reviewing what is linked and billable.</p>
+<!-- /wp:paragraph -->
+
+<!-- wp:heading {"level":3} -->
+<h3 class="wp-block-heading">Key Takeaways</h3>
+<!-- /wp:heading -->
+
+<!-- wp:paragraph -->
+<p>✅ <strong>Unified SDK</strong> - One connection for provisioning and Hub feature clients
+✅ <strong>Two-Phase Authentication</strong> - Bootstrap cert for DPS, operational cert for IoT Hub<br>
+✅ <strong>CSR-Based Issuance</strong> - Private key never leaves device<br>
+✅ <strong>Thin Adapter</strong> - Configuration, persistence and ADR ARM helpers, not a custom DPS protocol<br>
+✅ <strong>Certificate Persistence</strong> - Durable CSR/key and issued chain; no automatic renewal claim<br>
+✅ <strong>Mock Hardware Support</strong> - Test without physical devices</p>
+<!-- /wp:paragraph -->
+
+<!-- wp:heading {"level":3} -->
+<h3 class="wp-block-heading">What We Accomplished</h3>
+<!-- /wp:heading -->
+
+<!-- wp:paragraph -->
+<p>✅  Cloned the repository and ran full setup automation<br>
+✅ Configured the device application with Azure resources<br>
+✅ Understood the main program flow and component architecture<br>
+✅ Replaced the custom provisioning protocol with the official unified SDK
+✅ Learned how CSR-based provisioning works end-to-end<br>
+✅ Integrated with Azure Device Registry for metadata management<br>
+✅ Tested the complete solution with telemetry monitoring<br>
+✅ Reviewed the documented preview limitations and production warning</p>
+<!-- /wp:paragraph -->
+
+<!-- wp:heading {"level":3} -->
+<h3 class="wp-block-heading">Further Learning</h3>
+<!-- /wp:heading -->
+
+<!-- wp:list -->
+<ul class="wp-block-list"><!-- wp:list-item -->
+<li><strong>Azure IoT Hub Documentation</strong>: <a href="https://learn.microsoft.com/azure/iot-hub/">learn.microsoft.com/azure/iot-hub</a></li>
+<!-- /wp:list-item -->
+<!-- wp:list-item -->
+<li><strong>Device Provisioning Service</strong>: <a href="https://learn.microsoft.com/azure/iot-dps/">learn.microsoft.com/azure/iot-dps</a></li>
+<!-- /wp:list-item -->
+<!-- wp:list-item -->
+<li><strong>Azure Device Registry</strong>: <a href="https://learn.microsoft.com/azure/iot/iot-device-registry-overview">learn.microsoft.com/azure/iot/iot-device-registry-overview</a></li>
+<!-- /wp:list-item -->
+<!-- wp:list-item -->
+<li><strong>X.509 Certificates</strong>: <a href="https://learn.microsoft.com/azure/iot-hub/iot-hub-x509ca-overview">learn.microsoft.com/azure/iot-hub/iot-hub-x509ca-overview</a></li>
+<!-- /wp:list-item -->
+<!-- wp:list-item -->
+<li><strong>ADR connected-services setup</strong>: <a href="https://learn.microsoft.com/en-gb/azure/iot/device-registry/get-started-azure-device-registry">Get started with Azure Device Registry</a></li>
+<!-- /wp:list-item -->
+<!-- wp:list-item -->
+<li><strong>ADR CA hierarchy</strong>: <a href="https://learn.microsoft.com/en-gb/azure/iot/concept-managed-ca-hierarchy">Certificate authorities hierarchy</a></li>
+<!-- /wp:list-item -->
+<!-- wp:list-item -->
+<li><strong>ADR certificate policy</strong>: <a href="https://learn.microsoft.com/en-us/azure/iot/how-to-create-edit-certificate-policy?tabs=cli">Create a certificate policy and select it in a DPS enrollment</a></li>
+<!-- /wp:list-item -->
+</ul>
+<!-- /wp:list -->
+
+<!-- wp:heading {"level":3} -->
+<h3 class="wp-block-heading">Questions or Issues?</h3>
+<!-- /wp:heading -->
+
+<!-- wp:list -->
+<ul class="wp-block-list"><!-- wp:list-item -->
+<li>Open an issue on GitHub</li>
+<!-- /wp:list-item -->
+<!-- wp:list-item -->
+<li>Check the <a href="https://github.com/pjgpetecodes/skittlesorter/blob/main/docs/Troubleshooting.md">Troubleshooting.md guide</a></li>
+<!-- /wp:list-item -->
+<!-- wp:list-item -->
+<li>Review the <a href="https://learn.microsoft.com/en-us/azure/iot-hub/iot-hub-device-registry-setup">current Azure setup guide</a></li>
+<!-- /wp:list-item -->
+</ul>
+<!-- /wp:list -->
+
+<!-- wp:paragraph -->
+<p>Thank you for following this series! Happy IoT building! 🚀</p>
+<!-- /wp:paragraph -->

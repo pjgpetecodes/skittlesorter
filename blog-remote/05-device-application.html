@@ -1037,6 +1037,26 @@ acknowledgement:</p>
 connection string. This is separate from the device's X.509 authentication.</p>
 <!-- /wp:paragraph -->
 
+<!-- wp:paragraph -->
+<p>You can also watch incoming messages from a terminal using the Azure IoT CLI
+extension installed by the setup script:</p>
+<!-- /wp:paragraph -->
+
+<!-- wp:code {"className":"language-powershell"} -->
+<pre class="wp-block-code language-powershell"><code>az iot hub monitor-events `
+  --hub-name &quot;my-iothub-001&quot; `
+  --device-id &quot;my-device&quot;
+</code></pre>
+<!-- /wp:code -->
+
+<!-- wp:paragraph -->
+<p>Replace the names with your Hub and registration ID. Start monitoring before
+running the sorter, and press Ctrl+C to stop. The CLI uses a Hub shared-access
+policy to read telemetry and needs permission to retrieve its key; this is
+service-side access, not the device's X.509 credentials. Protect policy keys
+and use this option only on a Hub where shared access is enabled.</p>
+<!-- /wp:paragraph -->
+
 <!-- wp:heading {"level":3} -->
 <h3 class="wp-block-heading">Test 3: Query ADR Devices</h3>
 <!-- /wp:heading -->
