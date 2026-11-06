@@ -24,33 +24,44 @@ reviewed against current Microsoft Learn guidance <strong>5 November 2026</stron
 <!-- /wp:heading -->
 
 <!-- wp:paragraph -->
-<p>I've refreshed the setup steps and script. They now use system-assigned identities, link DPS before the Hub, and connect the enrollment to the ADR certificate policy. The script creates dedicated resources and an enrollment group; it doesn't provision a device. See the <a href="https://www.petecodes.co.uk/iot-hub-with-adr-and-certificate-management-part-1">Introduction</a> for the series-wide changes.</p>
+<p>I've refreshed the setup steps and script. They now use system-assigned
+identities, link DPS before the Hub, and connect the enrollment to the ADR
+certificate policy. The script creates dedicated resources and an enrollment
+group; it doesn't provision a device. See the <a href="https://www.petecodes.co.uk/iot-hub-with-adr-and-certificate-management-part-1">Introduction</a>
+for the series-wide changes.</p>
 <!-- /wp:paragraph -->
 
-<!-- wp:heading {"textColor":"#f6f6f4"} -->
-<h2 class="wp-block-heading has-f-6-f-6-f-4-color has-text-color">Contents:</h2>
+<!-- wp:paragraph -->
+<p>The application now uses Microsoft's unified <code>Microsoft.Azure.Iot.Device</code>
+<strong>2.0.0-preview4</strong>. The generated config is compatible with that adapter and
+defaults to symmetric-key onboarding with CSR issuance enabled.
+Set <code>RequestOperationalCertificate: false</code> explicitly for standard non-CSR profiles. The SDK
+migration doesn't change the resources below or require an MQTT5 Hub. Once
+configured, <code>--cloud-self-test --config PATH</code> gives us a bounded
+provision/connect/telemetry/disconnect check without physical hardware.</p>
+<!-- /wp:paragraph -->
+
+<!-- wp:heading {"level":3} -->
+<h3 class="wp-block-heading">Contents</h3>
 <!-- /wp:heading -->
 
-<!-- wp:list {"ordered":true,"textColor":"#f6f6f4"} -->
-<ol class="wp-block-list has-f-6-f-6-f-4-color has-text-color"><!-- wp:list-item -->
-<li><a href="https://www.petecodes.co.uk/iot-hub-with-adr-and-certificate-management-part-1" target="_blank" rel="noreferrer noopener">Introduction </a></li>
+<!-- wp:list {"ordered":true} -->
+<ol class="wp-block-list"><!-- wp:list-item -->
+<li><a href="https://www.petecodes.co.uk/iot-hub-with-adr-and-certificate-management-part-1">Introduction</a></li>
 <!-- /wp:list-item -->
-
 <!-- wp:list-item -->
-<li><a href="https://www.petecodes.co.uk/iot-hub-with-adr-and-certificate-management-part-2" target="_blank" rel="noreferrer noopener">A DPS Primer</a></li>
+<li><a href="https://www.petecodes.co.uk/iot-hub-with-adr-and-certificate-management-part-2">A DPS Primer</a></li>
 <!-- /wp:list-item -->
-
 <!-- wp:list-item -->
-<li><a href="https://www.petecodes.co.uk/iot-hub-with-adr-and-certificate-management-part-3" target="_blank" rel="noreferrer noopener">Creating DPS, IoT Hub and ADR Instances</a> (This Post)</li>
+<li><a href="https://www.petecodes.co.uk/iot-hub-with-adr-and-certificate-management-part-3">Creating DPS, IoT Hub and ADR Instances (this post)</a></li>
 <!-- /wp:list-item -->
-
 <!-- wp:list-item -->
-<li><a href="https://www.petecodes.co.uk/iot-hub-with-adr-and-certificate-management-part-4" target="_blank" rel="noreferrer noopener">Understanding X.509 and CSR Workflows</a></li>
+<li><a href="https://www.petecodes.co.uk/iot-hub-with-adr-and-certificate-management-part-4">Understanding X.509 and CSR Workflows</a></li>
 <!-- /wp:list-item -->
-
 <!-- wp:list-item -->
-<li><a href="https://www.petecodes.co.uk/iot-hub-with-adr-and-certificate-management-part-5" target="_blank" rel="noreferrer noopener">The Device Application</a></li>
-<!-- /wp:list-item --></ol>
+<li><a href="https://www.petecodes.co.uk/iot-hub-with-adr-and-certificate-management-part-5">The Device Application</a></li>
+<!-- /wp:list-item -->
+</ol>
 <!-- /wp:list -->
 
 <!-- wp:heading {"level":3} -->

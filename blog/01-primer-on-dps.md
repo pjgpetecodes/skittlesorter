@@ -1,5 +1,14 @@
 # A Primer on DPS
 
+## What's changed?
+
+The device now uses Microsoft's unified `Microsoft.Azure.Iot.Device`
+**2.0.0-preview4**, not our custom C# provisioning protocol. The DPS concepts
+below still apply: both standard profiles and both CSR onboarding flows remain,
+with .NET 10 and the same Hub; the SDK discovers its connection profile through
+DPS. See the [Introduction](00-introduction.md)
+for SDK links and the migration summary.
+
 > **Release baseline:** This series uses the latest Azure IoT CLI preview
 > extension, `azure-iot` **1.0.0b2**, released **6 October 2026**. Last
 > reviewed **29 October 2026**. [Release notes](https://github.com/Azure/azure-iot-cli-extension/releases/tag/v1.0.0b2).
@@ -327,10 +336,13 @@ remain in public preview:
 - ✅ DPS MQTT protocol support
 - ✅ Microsoft-managed CA
 
-The sample application uses a custom DPS framework over MQTT for its CSR
-provisioning implementation. This is a repository-specific implementation
-choice, not a general requirement for IoT Hub or ADR deployments. Check
-Microsoft's current documentation for API and SDK support.
+**What's changed in the device code?** The sorter now pins
+`Microsoft.Azure.Iot.Device` **2.0.0-preview4**. Its unified `ConnectionClient`
+handles provisioning and the Hub connection, including optional CSR issuance;
+we've removed our custom C# DPS protocol. The adapter retains configuration and
+durable CSR/key/chain files. Standard symmetric-key and X.509 modes remain.
+See the [SDK design and feature matrix](https://github.com/Azure/azure-iot-sdk/blob/main/dotnet/README.md).
+This isn't an MQTT5 migration or an automatic-renewal implementation.
 
 > **Note:** Always check [Microsoft's documentation](https://learn.microsoft.com/azure/iot-dps/) for the latest API status and general availability dates.
 
@@ -340,7 +352,7 @@ In the following sections, we'll:
 1. Create DPS, IoT Hub, and ADR instances
 2. Configure credential policies for certificate issuance
 3. Set up enrollment groups (symmetric key and X.509)
-4. Build a .NET device application with custom DPS framework
+4. Build a .NET device application with the unified SDK and a thin adapter
 5. Implement CSR generation and certificate management
 6. Integrate with ADR for device management
 

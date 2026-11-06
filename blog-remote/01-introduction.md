@@ -13,6 +13,26 @@ I've refreshed the series to match the current preview. DPS is required, while
 certificate management is optional. The credential a device uses to get onto
 DPS is separate from the operational certificate ADR can issue for IoT Hub.
 
+I've also moved the sorter to Microsoft's unified
+[`Microsoft.Azure.Iot.Device` **2.0.0-preview4**](https://www.nuget.org/packages/Microsoft.Azure.Iot.Device/2.0.0-preview4).
+`ConnectionClient` handles DPS and the Hub connection; `TelemetryClient` sends
+our Skittle readings. The custom C# provisioning protocol and legacy
+`Microsoft.Azure.Devices.Client` are gone. `AzureDpsFramework` stays as a thin
+configuration, durable CSR/key/issued-chain persistence, ADR ARM and session
+adapter. Microsoft's [SDK design and feature matrix](https://github.com/Azure/azure-iot-sdk/blob/main/dotnet/README.md)
+and [unified examples](https://github.com/Azure/azure-iot-sdk/tree/releases/public-preview/dotnet/samples/Unified)
+are the starting points for the new API. The package is still a preview.
+
+Standard symmetric-key/X.509 profiles and both CSR onboarding flows remain,
+along with .NET 10 and our existing Hub. The SDK discovers its assigned
+endpoint/profile through DPS. There's a bounded
+`--cloud-self-test --config PATH` for provision/connect/telemetry/disconnect
+without physical hardware. SDK retry/reprovision and optional IoT Hub renewal
+APIs are available, but automatic certificate renewal isn't implemented here.
+The sorter uses MQTTnet 5; the separate ADR software-updates client keeps
+MQTTnet 4 and its own DPS **update** protocol. The SDK doesn't implement that
+workflow. None of this requires an MQTT5 Hub or a cloud topology change.
+
 The resource walkthrough now uses the current CLI flow and system-assigned
 identities, links DPS before IoT Hub, and creates an enrollment group linked to
 the ADR certificate policy. It doesn't create a device. You can also connect
@@ -22,9 +42,8 @@ I've clarified which credentials are for DPS onboarding and which are issued
 for IoT Hub. The policy belongs to an ADR intermediate CA and sets the
 operational certificate validity; this example uses a 30-day policy. The
 Microsoft-managed lifecycle includes renewal and revocation, with limitations
-for intermediate CAs signed by an external CA. The custom MQTT DPS framework
-described later is this project's implementation choice, not a requirement
-for every IoT Hub deployment.
+for intermediate CAs signed by an external CA. I've kept the distinction between
+service capabilities, SDK APIs and the lifecycle code actually in this sample.
 
 ### Contents
 
@@ -105,10 +124,10 @@ standard rates.
 -   Create a certificate policy and select it in a DPS enrollment: [https://learn.microsoft.com/en-us/azure/iot/how-to-create-edit-certificate-policy?tabs=cli](https://learn.microsoft.com/en-us/azure/iot/how-to-create-edit-certificate-policy?tabs=cli)
 -   Current deployment steps: [https://learn.microsoft.com/en-us/azure/iot-hub/iot-hub-device-registry-setup](https://learn.microsoft.com/en-us/azure/iot-hub/iot-hub-device-registry-setup)
 
-The sample application later in this series uses a custom DPS framework over
-MQTT. That is an implementation detail of this project, not a requirement for
-every IoT Hub or ADR deployment. Check the current service documentation before
-relying on sample API-version or client-library details.
+The sample later in this series now uses the official unified .NET SDK, not a
+custom provisioning transport. Our adapter retains the application-specific
+configuration and durable certificate files. Check current service and SDK
+documentation before changing pinned preview versions.
 
 ### Learning the Traditional DPS Approach
 
@@ -162,7 +181,7 @@ Follow along post-by-post to understand **why** and **how** everything works
 Most IoT tutorials use **symmetric keys** or **manual X.509 certificate generation**. This series shows you:
 
 -   How to use Microsoft's **new certificate management** features
--   How to build a **custom DPS framework** to access preview APIs
+-   How to use the **unified .NET device SDK** with a thin application adapter
 -   How to integrate **ADR** for advanced device management
 -   How to apply security-minded IoT patterns while accounting for preview limitations
 

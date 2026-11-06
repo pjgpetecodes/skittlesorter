@@ -2,7 +2,7 @@ using System.Text.Json;
 using System.Security.Cryptography;
 using System.Security.Cryptography.X509Certificates;
 using AzureDpsFramework;
-using AzureDpsFramework.Security;
+using Microsoft.Azure.Iot.Device.Authentication;
 using Xunit;
 
 namespace SkittleSorter.Tests;
@@ -22,9 +22,9 @@ public sealed class UpdateReadinessTests
             CsrKeyFilePath = "",
             IssuedCertFilePath = ""
         };
-        using var provider = skittle_sorter.DpsInitializationService.CreateStandardSecurity(config);
-        Assert.IsType<SecurityProviderSymmetricKey>(provider);
-        Assert.Equal(config.DeviceKeyBase64, ((SecurityProviderSymmetricKey)provider).GetPrimaryKey());
+        using var session = UnifiedDeviceSession.Create(config);
+        Assert.IsType<SymmetricKeyAuthenticationProvider>(session.Authentication);
+        Assert.Null(session.Provisioning.CertificateSigningRequest);
     }
 
     [Fact]
@@ -32,7 +32,7 @@ public sealed class UpdateReadinessTests
     {
         var config = new DpsConfiguration();
         Assert.True(config.RequestOperationalCertificate);
-        Assert.Throws<InvalidOperationException>(() => skittle_sorter.DpsInitializationService.CreateStandardSecurity(config));
+        Assert.Throws<InvalidOperationException>(() => UnifiedDeviceSession.Create(config));
     }
 
     [Fact]
@@ -49,16 +49,17 @@ public sealed class UpdateReadinessTests
             var keyPath = Path.Combine(directory, "bootstrap.key");
             File.WriteAllText(certPath, certificate.ExportCertificatePem());
             File.WriteAllText(keyPath, key.ExportPkcs8PrivateKeyPem());
-            using var provider = skittle_sorter.DpsInitializationService.CreateStandardSecurity(new DpsConfiguration
+            using var session = UnifiedDeviceSession.Create(new DpsConfiguration
             {
                 IdScope = "test-scope", RegistrationId = "sorter", AttestationMethod = "X509",
                 RequestOperationalCertificate = false, AttestationCertPath = certPath, AttestationKeyPath = keyPath,
                 CsrFilePath = "", CsrKeyFilePath = "", IssuedCertFilePath = ""
             });
-            var x509 = Assert.IsType<SecurityProviderX509Certificate>(provider);
-            Assert.True(x509.GetAuthenticationCertificate().HasPrivateKey);
-            Assert.Equal(certificate.Thumbprint, x509.GetAuthenticationCertificate().Thumbprint);
-            Assert.Equal("sorter", x509.GetRegistrationID());
+            var x509 = Assert.IsType<X509AuthenticationProvider>(session.Authentication);
+            Assert.True(x509.PrimaryClientCertificate.HasPrivateKey);
+            Assert.Equal(certificate.Thumbprint, x509.PrimaryClientCertificate.Thumbprint);
+            Assert.Equal("sorter", x509.GetRegistrationId());
+            Assert.Null(session.Provisioning.CertificateSigningRequest);
         }
         finally { Directory.Delete(directory, recursive: true); }
     }

@@ -4,17 +4,37 @@
 > extension, `azure-iot` **1.0.0b2**, released **6 October 2026**. Last
 > reviewed **29 October 2026**. [Release notes](https://github.com/Azure/azure-iot-cli-extension/releases/tag/v1.0.0b2).
 
-[← Previous: Building the Custom DPS Framework](05-building-dps-framework.md) | [Back to Introduction](00-introduction.md)
+[← Previous: Keeping a Thin DPS Adapter](05-building-dps-framework.md) | [Back to Introduction](00-introduction.md)
 
 ---
 
 In this post, we'll walk through the complete IoT device application that uses DPS provisioning with CSR-based certificate issuance. Rather than building from scratch, we'll clone the repository, run the setup automation, configure the application, and explore how the major components work together.
 
-> **Sample implementation:** This repository uses a custom MQTT-based DPS
-> framework for its CSR provisioning flow. This is an implementation choice
-> for the sample, not a general requirement for IoT Hub or ADR deployments.
-> IoT Hub integration with ADR and certificate management remain in public
-> preview; see [What's Changed since the Previous Preview](07-whats-changed-since-previous-preview.md).
+## What's changed?
+
+I've replaced the custom C# DPS provisioning protocol and
+`Microsoft.Azure.Devices.Client` with the unified
+[`Microsoft.Azure.Iot.Device` **2.0.0-preview4**](https://www.nuget.org/packages/Microsoft.Azure.Iot.Device/2.0.0-preview4).
+`ConnectionClient` handles provisioning and the Hub connection; `TelemetryClient`
+shares it for the Skittle readings. `AzureDpsFramework` stays as a thin
+configuration, durable certificate/CSR persistence, ADR ARM and session adapter.
+
+Standard symmetric-key/X.509 profiles and both CSR onboarding flows remain.
+.NET 10, our existing Hub and cloud resources are unchanged. The SDK discovers
+the assigned endpoint/profile through DPS. MQTTnet 5 in the sorter is a
+dependency upgrade, not a manual Hub migration. The separate updater
+retains MQTTnet 4 and its own DPS **software-update** MQTT protocol, which the
+unified SDK doesn't implement.
+
+The bounded `--cloud-self-test --config PATH` provisions, connects, sends
+representative telemetry and disconnects without physical hardware. SDK retry
+and reprovisioning are available, as are optional IoT Hub renewal APIs, but this
+app doesn't implement automatic operational-certificate renewal.
+
+Read Microsoft's [SDK design and feature matrix](https://github.com/Azure/azure-iot-sdk/blob/main/dotnet/README.md)
+and [unified samples](https://github.com/Azure/azure-iot-sdk/tree/releases/public-preview/dotnet/samples/Unified).
+The SDK and ADR certificate-management integration are still preview features;
+see [What's Changed since the Previous Preview](07-whats-changed-since-previous-preview.md).
 
 ## Application Architecture
 
@@ -35,7 +55,7 @@ In this post, we'll walk through the complete IoT device application that uses D
                   ▼             ▼
           ┌─────────────────────────┐
           │  Azure DPS Framework    │
-          │  (Custom MQTT + CSR)    │
+          │  (Thin SDK adapter)     │
           └──────────┬──────────────┘
                      │
                      ▼
@@ -113,6 +133,7 @@ Update `appsettings.json` with your values from the setup script:
       "IdScope": "0ne00XXXXXX",
       "RegistrationId": "my-device",
       "AttestationMethod": "X509",
+      "RequestOperationalCertificate": true,
       "AttestationCertPath": "./scripts/certs/device/device.pem",
       "AttestationKeyPath": "./scripts/certs/device/device.key",
       "AttestationCertChainPath": "./scripts/certs/device/device-full-chain.pem",
@@ -122,10 +143,9 @@ Update `appsettings.json` with your values from the setup script:
       "AutoGenerateCsr": true,
       "CsrFilePath": "./certs/issued/device.csr",
       "CsrKeyFilePath": "./certs/issued/device.key",
-      "IssuedCertPath": "./certs/issued/device.pfx",
-      "IssuedCertPassword": "your-strong-password"
+      "IssuedCertFilePath": "./certs/issued/device.pem"
     },
-    "DeviceId": "my-device",
+    "DeviceId": "{RegistrationId}",
     "SendTelemetry": true,
     "TelemetryIntervalMs": 5000
   },
@@ -135,10 +155,12 @@ Update `appsettings.json` with your values from the setup script:
     "ResourceGroupName": "my-iot-rg",
     "NamespaceName": "my-adrnamespace-uniquesuffix"
   },
-  "Mock": {
-    "EnableMockColorSensor": true,
-    "EnableMockServos": true,
-    "MockColorSequence": ["red", "green", "yellow", "orange", "purple"]
+  "Hardware": {
+    "MockMode": {
+      "EnableMockColorSensor": true,
+      "EnableMockServos": true,
+      "MockColorSequence": ["Red", "Green", "Yellow", "Orange", "Purple"]
+    }
   }
 }
 ```
@@ -147,19 +169,27 @@ Update `appsettings.json` with your values from the setup script:
 
 - **DpsProvisioning**: Bootstrap certificate paths and DPS connection details
 - **DeviceId**: Must match your registration ID
-- **IssuedCertPath**: Where the operational certificate from DPS will be saved
-- **Mock**: Enable hardware simulation for testing without physical devices
+- **IssuedCertFilePath**: Where the operational certificate chain from DPS will be saved
+- **Hardware.MockMode**: Enable hardware simulation for testing without physical devices
+
+This example uses X.509 + CSR. For symmetric-key onboarding, choose
+`SymmetricKey` and supply `DeviceKeyBase64`; prefer a device-specific key over
+distributing a group master key. Set `RequestOperationalCertificate` to `false`
+for standard symmetric-key or X.509 provisioning without issuance. The default
+stays `true` for compatibility with the earlier CSR examples.
+
+Keep the CSR, matching key and issued chain across restarts, outside application
+releases. Paths retain the existing [configuration resolution rules](../docs/Configuration.md).
 
 ## Step 4: Run the Application
 
 **Build and run:**
 
 ```powershell
-cd ..
-dotnet run
+dotnet run --project .\skittlesorter.csproj -- --config .\appsettings.json
 ```
 
-**Expected output:**
+**Illustrative CSR-profile output** (SDK diagnostics differ from the old custom logs):
 
 ```
 Skittle Sorter Starting...
@@ -181,7 +211,7 @@ Certificate Subject: CN=my-device
 Issuer: CN=Microsoft-Managed-ICA-...
 Valid from: 2026-02-07 10:00:00Z
 Valid until: 2026-03-09 10:00:00Z
-✓ Certificate saved to: ./certs/issued/device.pfx
+✓ Certificate chain saved to the configured IssuedCertFilePath
 
 === Connecting to IoT Hub ===
 Connecting to: my-iothub-001.azure-devices.net
@@ -206,6 +236,34 @@ Detected: green (R:50 G:255 B:50 C:1180)
 3. **Saving Certificate** - Receives operational certificate from DPS and saves it locally
 4. **Connecting to IoT Hub** - Uses operational certificate to establish MQTT connection
 5. **Sorting Loop** - Processes skittles and sends telemetry
+
+### A Bounded Cloud Check Before Moving Anything
+
+I like to prove the connection before involving the motors:
+
+```powershell
+# Offline configuration validation
+dotnet run --project .\skittlesorter.csproj -- --self-test --config .\appsettings.json
+
+# Real provisioning + Hub + representative telemetry, then disconnect
+dotnet run --project .\skittlesorter.csproj -- --cloud-self-test --config .\appsettings.json
+```
+
+The cloud check has a two-minute bound and waits for one telemetry acknowledgement.
+It doesn't initialize physical sensors or servos, but it does contact Azure.
+The operator helper
+`scripts\iot-hub-device-registry\test-unified.ps1 -AppConfigPath PATH`
+doesn't reset by default; only use `-ResetDevice` with matching resource names
+to reset that exact device/registration. It never deletes a resource group,
+enrollment group or CA. See the [runbook](../scripts/iot-hub-device-registry/README.md#bounded-unified-sdk-cloud-test).
+
+Reset also needs operator **Hub data-plane registry read/delete** permissions,
+such as scoped IoT Hub Registry Contributor, not just resource-management access.
+On a Hub with `DisableLocalAuth=true`, use Entra CLI authentication
+(`--auth-type login`); SAS is disabled. The helper checks Hub registry access
+before destructive work and stops if permission is missing. A successful
+device connection doesn't grant the operator registry access, so don't change
+RBAC unilaterally to force the reset through.
 
 ### Troubleshooting Common Issues
 
@@ -281,15 +339,9 @@ az iot dps linked-hub list `
 
 If you see the operational certificate exists but connection fails:
 
-**Delete and re-provision:**
-
-```powershell
-# Delete issued certificate
-Remove-Item "./certs/issued/device.pfx" -ErrorAction SilentlyContinue
-
-# Run application again (it will re-provision)
-dotnet run
-```
+Check the selected profile, saved chain, matching CSR key and assigned Hub first.
+Don't delete a shared certificate directory to fix one identity. Use the reviewed
+exact-device cloud-test reset only when you intend to reprovision it.
 
 **Problem: Missing `appsettings.json` configuration**
 
@@ -299,10 +351,10 @@ Unhandled exception. System.Exception: IoTHub config missing
 
 **Solution:**
 - Ensure `appsettings.json` exists in project root
-- Copy from `appsettings.x509.json` template if needed:
+- Copy from the safe X.509 template if needed:
 
 ```powershell
-Copy-Item "appsettings.x509.json" "appsettings.json"
+Copy-Item ".\src\configuration\appsettings.x509.template.json" ".\appsettings.json"
 ```
 
 **Edit with your values:**
@@ -318,16 +370,10 @@ Certificate Valid until: 2026-01-15 10:00:00Z (expired)
 ```
 
 **Solution:**
-- Delete expired certificate and re-provision
-- Operational certificates are short-lived (30 days default)
-- Application should auto-renew within 7-day window
-
-**Force renewal:**
-
-```powershell
-Remove-Item "./certs/issued/device.pfx"
-dotnet run
-```
+- Check the policy, saved chain and matching private key.
+- Certificate validity is controlled by the ADR policy.
+- The SDK offers optional IoT Hub renewal APIs, but this application has no
+  automatic renewal scheduler. Deleting a certificate isn't that renewal API.
 
 **Still having issues?**
 
@@ -367,330 +413,82 @@ skittlesorter/
 │       ├── SkittleSorterService.cs     # Main business logic
 │       ├── TCS3472x.cs                 # Color sensor driver
 │       └── ServoController.cs          # Servo control
-├── AzureDpsFramework/                  # Custom DPS framework
-│   ├── ProvisioningDeviceClient.cs
-│   ├── DpsConfiguration.cs
-│   ├── SecurityProvider*.cs
-│   ├── Transport/
-│   │   └── ProvisioningTransportHandlerMqtt.cs
-│   └── Adr/
-│       └── AdrDeviceRegistryClient.cs
+├── AzureDpsFramework/                  # Thin SDK/session adapter
+│   ├── DpsConfiguration.cs             # Existing profile configuration
+│   ├── CertificateManager.cs           # CSR, private key and chain persistence
+│   └── Adr/                           # ADR ARM metadata operations
 └── appsettings.json                    # Device configuration
 ```
 
-### Main Program Flow ([src/Program.cs](c:/repos/skittlesorter/src/Program.cs))
+### Main Program Flow ([src/Program.cs](../src/Program.cs))
 
-The main program orchestrates the device lifecycle:
+The main program still loads configuration, initializes mock or real hardware
+for a normal run, opens the cloud session and runs pick → detect → sort → drop.
+The cloud-self-test takes a separate bounded path and never initializes physical
+hardware. Shutdown disconnects the SDK session gracefully.
+
+### DPS Initialization Service ([src/comms/DpsInitializationService.cs](../src/comms/DpsInitializationService.cs))
+
+This service selects the configured attestation/issuance profile and delegates
+session creation to `AzureDpsFramework`. `ConnectionClient` handles the actual
+DPS registration, credentials and Hub connection.
+
+For CSR profiles, the adapter loads or creates the durable CSR/key pair,
+supplies it to the SDK, then persists the returned operational chain with the
+matching key. The `.connection.json` assignment sidecar alongside the issued PEM
+lets restarts restore the operational certificate and assigned Hub. A required-
+certificate wrapper rejects a missing issued chain before Hub authentication.
+For standard profiles, the adapter doesn't request a new certificate.
+The onboarding and operational credentials still have separate roles.
+
+### Thin AzureDpsFramework Adapter ([AzureDpsFramework/](../AzureDpsFramework/))
+
+I've kept the application-specific pieces: configuration, device-key derivation
+where needed, certificate files, optional ADR ARM metadata helpers and the
+unified-session adapter. The old security-provider, transport, registration
+and SAS-token protocol classes are removed, not wrapped.
+
+`UnifiedDeviceSession` delegates MQTT to the SDK. Its coordinator holds the
+updater's shared lock only during DPS sessions, including reprovisioning, not
+for the lifetime of the Hub telemetry connection.
+
+For SDK API examples, use the [official unified samples](https://github.com/Azure/azure-iot-sdk/tree/releases/public-preview/dotnet/samples/Unified).
+For our configuration/file boundary, see the [adapter README](../AzureDpsFramework/README.md).
+
+The smaller boundary looks like this (with a loaded `DpsConfiguration` and
+cancellation token):
 
 ```csharp
-static async Task Main(string[] args)
+using var session = UnifiedDeviceSession.Create(dpsConfiguration);
+try
 {
-    // 1. Load configuration
-    var iotConfig = ConfigurationLoader.LoadIoTHubConfiguration();
-    var mockConfig = ConfigurationLoader.LoadMockConfiguration();
-    
-    // 2. Initialize hardware (mocked or real)
-    using var colorSensor = mockConfig.EnableMockColorSensor 
-        ? new TCS3472x(true, mockConfig.MockColorSequence)
-        : new TCS3472x();
-    
-    var servo = new ServoController(mockConfig.EnableMockServos);
-    
-    // 3. Initialize DPS and connect to IoT Hub
-    DeviceClient? deviceClient = DpsInitializationService.Initialize(iotConfig);
-    
-    // 4. Create telemetry service
-    TelemetryService? telemetryService = null;
-    if (deviceClient != null)
-    {
-        telemetryService = new TelemetryService(deviceClient, iotConfig.DeviceId);
-    }
-    
-    // 5. Main sorting loop
-    while (true)
-    {
-        // Pick, scan, sort, and report telemetry
-        servo.MoveToPickPosition();
-        var (clear, red, green, blue) = colorSensor.ReadColor();
-        string color = colorSensor.ClassifySkittleColor(red, green, blue, clear);
-        
-        if (telemetryService != null)
-        {
-            await telemetryService.SendSkittleColorTelemetryAsync(color);
-        }
-        
-        servo.MoveToColorChute(color);
-    }
+    await session.ConnectAsync(cancellationToken);
+    // TelemetryService receives session.Telemetry, the SDK TelemetryClient.
+}
+finally
+{
+    await session.DisconnectAsync();
 }
 ```
 
-**Key responsibilities:**
-1. **Configuration loading** - Reads `appsettings.json` for DPS, IoT Hub, and hardware settings
-2. **Hardware initialization** - Sets up color sensor and servo controllers (real or mocked)
-3. **DPS provisioning** - Calls our custom framework to get operational certificate
-4. **IoT Hub connection** - Establishes MQTT connection using X.509 certificate
-5. **Business logic** - Runs the main sorting loop with telemetry reporting
+`session.Connection` is the SDK `ConnectionClient`; `session.Telemetry` shares
+that connection. There's no legacy `DeviceClient` or custom register/poll loop.
 
-### DPS Initialization Service ([src/comms/DpsInitializationService.cs](c:/repos/skittlesorter/src/comms/DpsInitializationService.cs))
+### Telemetry Service ([src/comms/TelemetryService.cs](../src/comms/TelemetryService.cs))
 
-This service handles the complete provisioning workflow:
-
-**Phase 1: Check for existing certificate**
-```csharp
-if (File.Exists(dpsCfg.IssuedCertPath))
-{
-    Console.WriteLine("Device already provisioned. Using existing certificate.");
-    return ConnectToIoTHub(dpsCfg, iotConfig);
-}
-```
-
-**Phase 2: Provision device with bootstrap credentials**
-```csharp
-// Load bootstrap certificate
-var bootstrapCert = new X509Certificate2(
-    dpsCfg.AttestationCertPath, 
-    dpsCfg.AttestationCertPassword
-);
-
-// Generate new key for operational certificate
-RSA rsa = RSA.Create(2048);
-
-// Create security provider
-var security = new SecurityProviderX509CsrWithCert(
-    dpsCfg.RegistrationId,
-    bootstrapCert,
-    rsa
-);
-
-// Create provisioning client
-var client = ProvisioningDeviceClient.Create(
-    dpsCfg.ProvisioningHost,
-    dpsCfg.IdScope,
-    security,
-    new ProvisioningTransportHandlerMqtt()
-);
-
-// Register device
-var result = client.RegisterAsync().GetAwaiter().GetResult();
-```
-
-**Phase 3: Save issued certificate**
-```csharp
-// Parse issued certificate from DPS response
-byte[] certBytes = Convert.FromBase64String(result.IssuedCertificateChain[0]);
-var certificate = new X509Certificate2(certBytes);
-
-// Combine with private key
-var certWithKey = certificate.CopyWithPrivateKey(rsa);
-
-// Export to PFX for storage
-byte[] pfx = certWithKey.Export(X509ContentType.Pfx, dpsCfg.IssuedCertPassword);
-File.WriteAllBytes(dpsCfg.IssuedCertPath, pfx);
-```
-
-**Phase 4: Connect to IoT Hub**
-```csharp
-var certificate = new X509Certificate2(
-    dpsCfg.IssuedCertPath, 
-    dpsCfg.IssuedCertPassword
-);
-
-var auth = new DeviceAuthenticationWithX509Certificate(
-    iotConfig.DeviceId, 
-    certificate
-);
-
-var deviceClient = DeviceClient.Create(
-    assignedHub, 
-    auth, 
-    TransportType.Mqtt
-);
-```
-
-### Custom DPS Framework ([AzureDpsFramework/](c:/repos/skittlesorter/AzureDpsFramework/))
-
-**Why we built it:**
-
-This sample's custom framework implements the `2025-07-01-preview` API path
-using MQTT. This describes the repository's implementation, not a general
-limitation of the official SDKs. The sample features include:
-
-- Certificate Signing Request (CSR) submission during registration
-- Receiving issued certificates in the registration response
-- Microsoft-managed PKI via Azure Device Registry
-
-**What it does:**
-
-Our custom framework implements the preview API using raw MQTT communication:
-
-**1. Security Providers** ([SecurityProvider*.cs](c:/repos/skittlesorter/AzureDpsFramework/Security/))
-
-```csharp
-// SecurityProviderX509CsrWithCert.cs
-public class SecurityProviderX509CsrWithCert : SecurityProvider
-{
-    private readonly X509Certificate2 _bootstrapCertificate;
-    private readonly RSA _operationalKey;
-    
-    public SecurityProviderX509CsrWithCert(
-        string registrationId,
-        X509Certificate2 bootstrapCert,
-        RSA operationalKey)
-    {
-        _bootstrapCertificate = bootstrapCert;
-        _operationalKey = operationalKey;
-    }
-    
-    public string GenerateCsr()
-    {
-        // Create Certificate Signing Request
-        var request = new CertificateRequest(
-            $"CN={RegistrationId}",
-            _operationalKey,
-            HashAlgorithmName.SHA256,
-            RSASignaturePadding.Pkcs1
-        );
-        
-        return Convert.ToBase64String(request.CreateSigningRequest());
-    }
-}
-```
-
-This generates a CSR using the new operational key pair, not the bootstrap certificate's key.
-
-**2. MQTT Transport Handler** ([ProvisioningTransportHandlerMqtt.cs](c:/repos/skittlesorter/AzureDpsFramework/Transport/ProvisioningTransportHandlerMqtt.cs))
-
-```csharp
-public async Task<DeviceRegistrationResult> RegisterAsync(
-    string idScope,
-    SecurityProvider security)
-{
-    // Connect to DPS with bootstrap credentials
-    var mqttClient = await ConnectAsync(security);
-    
-    // Subscribe to response topics
-    await mqttClient.SubscribeAsync("$dps/registrations/res/#");
-    
-    // Build registration payload with CSR
-    var payload = new
-    {
-        registrationId = security.RegistrationId,
-        certificateSigningRequest = security.GenerateCsr()
-    };
-    
-    // Publish registration request
-    await mqttClient.PublishAsync(
-        $"$dps/registrations/PUT/iotdps-register/?$rid={operationId}&api-version=2025-07-01-preview",
-        JsonSerializer.Serialize(payload)
-    );
-    
-    // Wait for response
-    var response = await WaitForResponseAsync(mqttClient, operationId);
-    
-    // Parse issued certificate from response
-    return new DeviceRegistrationResult
-    {
-        AssignedHub = response.AssignedHub,
-        DeviceId = response.DeviceId,
-        IssuedCertificateChain = response.IssuedCertificateChain
-    };
-}
-```
-
-**Key features:**
-- Uses **preview API version** (`2025-07-01-preview`)
-- Includes **CSR in registration payload**
-- Extracts **issued certificate from response**
-- Handles **MQTT QoS and response correlation**
-
-**3. Provisioning Client** ([ProvisioningDeviceClient.cs](c:/repos/skittlesorter/AzureDpsFramework/ProvisioningDeviceClient.cs))
-
-```csharp
-public class ProvisioningDeviceClient
-{
-    public static ProvisioningDeviceClient Create(
-        string provisioningHost,
-        string idScope,
-        SecurityProvider security,
-        ProvisioningTransportHandler transport)
-    {
-        return new ProvisioningDeviceClient(
-            provisioningHost, 
-            idScope, 
-            security, 
-            transport
-        );
-    }
-    
-    public async Task<DeviceRegistrationResult> RegisterAsync()
-    {
-        // Delegate to transport handler
-        return await _transport.RegisterAsync(_idScope, _security);
-    }
-}
-```
-
-### Telemetry Service ([src/comms/TelemetryService.cs](c:/repos/skittlesorter/src/comms/TelemetryService.cs))
-
-Handles sending device telemetry to IoT Hub:
-
-```csharp
-public async Task SendSkittleColorTelemetryAsync(string color)
-{
-    var telemetry = new
-    {
-        deviceId = _deviceId,
-        timestamp = DateTime.UtcNow,
-        color = color,
-        count = _colorCounts.GetValueOrDefault(color, 1)
-    };
-    
-    string json = JsonSerializer.Serialize(telemetry);
-    var message = new Message(Encoding.UTF8.GetBytes(json))
-    {
-        ContentType = "application/json",
-        ContentEncoding = "utf-8"
-    };
-    
-    message.Properties.Add("skittleColor", color);
-    message.Properties.Add("deviceType", "skittle-sorter");
-    
-    await _deviceClient.SendEventAsync(message);
-}
-```
-
-**Features:**
-- JSON-formatted telemetry messages
-- Custom message properties for routing
-- Per-color count tracking
-- Batch summary reporting
+`TelemetryService` now uses `TelemetryClient` on the same connection. It preserves
+the application's JSON telemetry and message-property contract. The optional
+session-count feature is separate from this migration; no Hub routes or
+resource topology need to change.
 
 ### Certificate Renewal
 
-The application monitors certificate expiration and triggers renewal:
-
-```csharp
-public static async Task CheckCertificateRenewal(DpsConfiguration dpsCfg)
-{
-    var cert = new X509Certificate2(
-        dpsCfg.IssuedCertPath, 
-        dpsCfg.IssuedCertPassword
-    );
-    
-    // Check if within renewal window (7 days before expiry)
-    var renewalWindow = cert.NotAfter.AddDays(-7);
-    
-    if (DateTime.UtcNow >= renewalWindow)
-    {
-        Console.WriteLine("Certificate renewal window reached. Re-provisioning...");
-        
-        // Delete old certificate
-        File.Delete(dpsCfg.IssuedCertPath);
-        
-        // Trigger re-provisioning (same flow as initial)
-    }
-}
-```
+SDK retry/reconnection and reprovisioning are available through `ConnectionClient`.
+They aren't an automatic certificate-renewal scheduler. Optional IoT Hub renewal
+APIs are also available, but I haven't wired automatic operational-certificate
+renewal into this application. The old “delete the certificate seven days
+before expiry” snippet wasn't a complete lifecycle implementation, so I've
+removed it. Durable replacement and recovery need their own tests.
 
 ## Azure Device Registry (ADR) Integration
 
@@ -699,9 +497,9 @@ Azure Device Registry provides device identity and metadata management that work
 ### Key ADR Features
 
 **🔹 Device Metadata**
-- Attributes (hardware ID, model, version)
-- Tags (location, tenant, environment)
-- Custom properties
+- Registry properties: manufacturer, model, hardware revision and software revision
+- Tags for custom labels such as hardware ID, location, tenant and environment
+- Enablement state: `Enabled` or `Disabled`
 
 **🔹 Credential Management**
 - Credential policies for certificate issuance
@@ -715,7 +513,7 @@ Azure Device Registry provides device identity and metadata management that work
 
 ### ADR Client Implementation
 
-The project includes an ADR client for device management ([AzureDpsFramework/Adr/AdrDeviceRegistryClient.cs](c:/repos/skittlesorter/AzureDpsFramework/Adr/AdrDeviceRegistryClient.cs)):
+The project retains its separate ADR ARM client for device management ([AzureDpsFramework/Adr/AdrDeviceRegistryClient.cs](../AzureDpsFramework/Adr/AdrDeviceRegistryClient.cs)):
 
 ```csharp
 using Azure.Identity;
@@ -734,7 +532,7 @@ var devices = await adrClient.ListDevicesAsync(
 Console.WriteLine($"Found {devices.Count} devices:");
 foreach (var device in devices)
 {
-    Console.WriteLine($"  - {device.Name} ({device.Properties?.Enabled ?? false})");
+    Console.WriteLine($"  - {device.Name}: {device.Properties}");
 }
 
 // Get specific device details
@@ -748,16 +546,15 @@ var deviceDetails = await adrClient.GetDeviceAsync(
 if (deviceDetails != null)
 {
     Console.WriteLine($"\nDevice: {deviceDetails.Name}");
-    Console.WriteLine($"Enabled: {deviceDetails.Properties?.Enabled}");
-    Console.WriteLine($"Hardware ID: {deviceDetails.Properties?.Attributes?.HardwareId}");
+    Console.WriteLine($"Properties: {deviceDetails.Properties}");
     
     // Display tags
-    if (deviceDetails.Properties?.Tags != null)
+    if (deviceDetails.Tags.ValueKind == System.Text.Json.JsonValueKind.Object)
     {
         Console.WriteLine("Tags:");
-        foreach (var tag in deviceDetails.Properties.Tags)
+        foreach (var tag in deviceDetails.Tags.EnumerateObject())
         {
-            Console.WriteLine($"  {tag.Key}: {tag.Value}");
+            Console.WriteLine($"  {tag.Name}: {tag.Value}");
         }
     }
 }
@@ -777,22 +574,35 @@ Enable automatic device metadata updates in `appsettings.json`:
     "DeviceUpdate": {
       "Enabled": true,
       "Attributes": {
-        "HardwareId": "RPI4B-12345678",
-        "Manufacturer": "Raspberry Pi Foundation",
-        "Model": "Raspberry Pi 4B",
-        "OperatingSystemVersion": "Raspbian GNU/Linux 11"
+        "manufacturer": "Raspberry Pi Foundation",
+        "model": "Raspberry Pi 4B",
+        "hardwareRevision": "1.4",
+        "softwareRevision": "1.0.5"
       },
       "Tags": {
         "location": "factory-1",
         "department": "manufacturing",
-        "firmware": "1.0.5"
-      }
+        "hardwareId": "RPI4B-12345678"
+      },
+      "DeviceEnabled": true
     }
   }
 }
 ```
 
 The application automatically updates device metadata after provisioning.
+
+There's one API detail worth calling out: the current ARM resource is
+`namespaces/registryDevices` (`2026-11-02-preview`), and it doesn't accept an
+arbitrary `attributes` object. Our `Attributes` configuration name is retained,
+but only exact keys `manufacturer`, `model`, `hardwareRevision` and
+`softwareRevision` are accepted and mapped to properties. Other keys fail
+explicitly; put custom labels in string-valued `Tags`, as with `hardwareId` above.
+
+`DeviceEnabled` maps to `enablementState: "Enabled"` or `"Disabled"`.
+The older `OperatingSystemVersion` configuration name is still accepted and maps
+to `softwareRevision`; if both are supplied, it overrides
+`Attributes.softwareRevision`. It isn't an ARM property of its own.
 
 ## Testing the Complete Solution
 
@@ -850,7 +660,7 @@ az iot hub monitor-events `
 **List devices:**
 
 ```powershell
-az iot ops asset endpoint device list `
+az iot adr ns device list `
   --namespace "my-adrnamespace-uniquesuffix" `
   --resource-group "my-iot-rg" `
   --output table
@@ -859,10 +669,13 @@ az iot ops asset endpoint device list `
 **Expected output:**
 
 ```
-Name        Enabled    HardwareId         Location
-----------  ---------  -----------------  ----------
-my-device   True       RPI4B-12345678     factory-1
+Name        Location
+----------  ----------
+my-device   uksouth
 ```
+
+Column selection can vary. Inspect JSON for `properties.enablementState` and
+the supported metadata properties; custom labels are under the resource's `tags`.
 
 ### Test 4: Device Twin Operations
 
@@ -922,48 +735,35 @@ The device receives the update and responds with reported properties.
 - [ ] Load testing for concurrent provisioning
 - [ ] Certificate renewal testing
 
-## Clean Test Start Script
+## Repeat Tests Without Rebuilding the Environment
 
-For testing, use the provided script to reset device state:
-
-**Run clean test:**
-
-```powershell
-cd scripts
-.\clean-test-start.ps1
-```
-
-**What it does:**
-
-1. Stops running processes
-2. Deletes issued certificates
-3. Removes device from IoT Hub
-4. Removes device from ADR
-5. Waits for propagation
-6. Runs application fresh
-
-This ensures clean provisioning from scratch every time.
+Use the bounded cloud test above first. If you deliberately need fresh
+registration, the new helper requires explicit `-ResetDevice` and matching
+resource names. It targets only that exact device/registration, not the
+resource group, enrollment group or CA. The older `clean-test-start.ps1` helper
+has a broader destructive scope and isn't a prerequisite for this SDK migration.
+See [Clean Test Start](../docs/Clean-Test-Start.md) before any reset.
 
 ## Key Takeaways
 
-✅ **Custom DPS Framework** - Used by this sample's CSR provisioning flow
+✅ **Unified SDK** - One connection for provisioning and Hub feature clients
 ✅ **Two-Phase Authentication** - Bootstrap cert for DPS, operational cert for IoT Hub  
 ✅ **CSR-Based Issuance** - Private key never leaves device  
-✅ **MQTT Protocol** - Direct protocol implementation for preview features  
-✅ **Certificate Lifecycle** - Automatic storage, loading, and renewal logic  
+✅ **Thin Adapter** - Configuration, persistence and ADR ARM helpers, not a custom DPS protocol\
+✅ **Certificate Persistence** - Durable CSR/key and issued chain; no automatic renewal claim\
 ✅ **ADR Integration** - Device metadata management and querying  
-✅ **Production Ready** - Complete testing, monitoring, and deployment guidance  
+✅ **Preview Boundaries** - Local validation is separate from production readiness
 
 ## What We Accomplished
 
 ✅ Cloned the repository and ran full setup automation  
 ✅ Configured the device application with Azure resources  
 ✅ Understood the main program flow and component architecture  
-✅ Explored the custom DPS framework and why it's needed  
+✅ Replaced the custom provisioning protocol with the official unified SDK\
 ✅ Learned how CSR-based provisioning works end-to-end  
 ✅ Integrated with Azure Device Registry for metadata management  
 ✅ Tested the complete solution with telemetry monitoring  
-✅ Prepared for production deployment  
+✅ Reviewed preview limitations and outstanding cloud validation
 
 ## Further Learning
 

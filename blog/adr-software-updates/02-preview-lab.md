@@ -23,7 +23,11 @@ The link workflow handles required service-to-service grants when the operator c
 
 The custom update channel requires a registered device and supported X.509 authentication. Do not copy the GA symmetric-key profile and assume update checks support it. Use a valid enrollment/bootstrap chain following the pinned regular-update sample and current DPS instructions; verify certificate identity, private-key matching, trust and assignment.
 
-This work does not finish the older ADR operational-certificate issuance/renewal series. The new lab must demonstrate its own minimal supported bootstrap without pretending those older drafts are complete.
+The sorter's provisioning now uses the unified `Microsoft.Azure.Iot.Device`
+**2.0.0-preview4** adapter, preserving CSR/key, issued PEM/chain and assignment
+sidecar files. That doesn't replace the software-update client or prove this
+separate environment's X.509 update check/report path. Automatic operational-
+certificate renewal is not implemented.
 
 Store app configuration, updater configuration, device certificates and trust anchors outside releases. Both the sorter provisioning profile and updater must use `/var/lib/skittlesorter/provisioning.lock` or another identical, appropriately permissioned path.
 

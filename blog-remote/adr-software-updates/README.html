@@ -35,7 +35,14 @@
 <!-- /wp:list -->
 
 <!-- wp:paragraph -->
-<p>The current .NET SDK feature matrix does not implement software updates via DPS. This repository demonstrates an unofficial, replaceable client against a pinned published protocol, not Microsoft's unannounced future .NET API. It is not a Microsoft-supported production agent.</p>
+<p><strong>What's changed?</strong> The sorter now uses the unified
+<code>Microsoft.Azure.Iot.Device</code> <strong>2.0.0-preview4</strong> for provisioning and telemetry.
+Its custom provisioning protocol is removed, but this separate update protocol
+isn't: the SDK feature matrix still excludes software updates via DPS.
+The sorter uses MQTTnet 5; the updater retains MQTTnet 4. This repository
+demonstrates an unofficial, replaceable update client against a pinned published
+protocol, not Microsoft's unannounced future .NET update API. It is not a
+Microsoft-supported production agent.</p>
 <!-- /wp:paragraph -->
 
 <!-- wp:paragraph -->

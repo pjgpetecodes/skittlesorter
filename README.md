@@ -2,28 +2,23 @@
 
 ## What's this project about?
 
-This project powers a 3D-printed Skittle sorter with Azure IoT integration. It combines hardware control (sensor + servos) with cloud provisioning via Azure DPS, including preview X.509 CSR issuance workflows that are not yet fully covered by the official C# SDK.
+This project powers a 3D-printed Skittle sorter with Azure IoT integration. It combines hardware control (sensor + servos) with cloud provisioning and telemetry through Microsoft's unified .NET device SDK, including preview X.509 CSR issuance.
 
 The hardware design is based on the [PTC Education Candy Sorter](https://github.com/PTC-Education/Candy-Sorter/) project.
 
-## Use the NuGet Package (Fastest Path)
+## What's changed?
 
-If you only need the DPS/ADR preview integration in your own C# app, use the `AzureDpsFramework` NuGet package instead of copying framework source files.
+- The sorter now pins [`Microsoft.Azure.Iot.Device` **2.0.0-preview4**](https://www.nuget.org/packages/Microsoft.Azure.Iot.Device/2.0.0-preview4). Its unified `ConnectionClient` handles DPS provisioning and Hub connections; `TelemetryClient` sends telemetry. The custom C# DPS protocol and `Microsoft.Azure.Devices.Client` are removed.
+- `AzureDpsFramework` remains a thin configuration, durable certificate/CSR persistence, ADR ARM, and unified-session adapter library. Standard symmetric-key and X.509 profiles and both CSR onboarding flows remain supported.
+- .NET 10, the existing Hub, and cloud resource topology stay unchanged. The SDK discovers the assigned endpoint/profile through DPS; MQTTnet 5 is a sorter dependency, not an instruction to migrate the Hub.
+- `--cloud-self-test --config PATH` performs a bounded provision/connect/telemetry/disconnect check without physical hardware. `--self-test` remains offline.
+- The separate `AzureSoftwareUpdatesFramework` updater still uses its own DPS **software-update** MQTT protocol and MQTTnet 4. The unified SDK does not implement that workflow.
 
-**Why use the package?**
-- Keeps your app code clean (consume API, don’t fork internals)
-- Lets you pin a known version and upgrade intentionally
-- Gives teams a consistent integration path while official SDK support is still pending
+See Microsoft's [SDK design and feature matrix](https://github.com/Azure/azure-iot-sdk/blob/main/dotnet/README.md) and [unified samples](https://github.com/Azure/azure-iot-sdk/tree/releases/public-preview/dotnet/samples/Unified). This is a preview migration, not a production-readiness claim. SDK retry/reprovision and optional IoT Hub certificate-renewal APIs are available; automatic operational-certificate renewal is not implemented here.
 
-**Quick start (consumer app):**
-1. Add a GitHub Packages feed to your `NuGet.config` (owner feed URL):
-  - `https://nuget.pkg.github.com/pjgpetecodes/index.json`
-2. Install a pinned version:
-  - `dotnet add package AzureDpsFramework --version 0.1.2-preview.1`
-3. Restore/build:
-  - `dotnet restore && dotnet build`
+## Reuse the Azure Integration
 
-For full package feed setup and versioning details, see [AzureDpsFramework/README.md](AzureDpsFramework/README.md#nuget-distribution).
+For a new device application, start with the official unified SDK. Reuse this repository's `AzureDpsFramework` adapter when you also need its configuration, persisted CSR/key/issued-chain files, or ADR metadata helpers. Existing published framework versions with custom security providers are not the migrated API; see [AzureDpsFramework/README.md](AzureDpsFramework/README.md#nuget-distribution).
 
 ## Documentation
 - Application updates: [two independent OTA demonstrations](docs/Application-Updates.md) and [GA blog series](blog/device-update-for-iot-hub/README.md), followed by [custom C# ADR Software Updates](blog/adr-software-updates/README.md). Local drafts; real Azure/Pi validation remains outstanding.
@@ -39,7 +34,7 @@ For full package feed setup and versioning details, see [AzureDpsFramework/READM
 - Security: [docs/Security.md](docs/Security.md)
 - Telemetry: [docs/Telemetry.md](docs/Telemetry.md)
 
-> ⚠️ **Preview Features & Unsupported SDK**: This project uses Azure DPS preview API (`2025-07-01-preview`) with X.509 CSR-based certificate issuance. **There is currently no official C# SDK support for these preview features.** This implementation provides direct MQTT protocol integration as a workaround. See [Device Provisioning Flow](#device-provisioning-flow) for implementation details.
+> ⚠️ **Preview features:** The unified package and IoT Hub/ADR certificate-management integration are in preview. Pin the package and review current service and SDK guidance before upgrading.
 
 ## Features
 
@@ -47,7 +42,7 @@ For full package feed setup and versioning details, see [AzureDpsFramework/READM
 - **Automated Sorting**: Servo motors position and sort Skittles into separate chutes
 - **Mock Mode**: Test without physical hardware using mock sensors and servos
 - **Azure DPS with X.509 Certificates** *(Preview)*: Automatic device provisioning and certificate-based authentication using Azure Device Provisioning Service preview API (`2025-07-01-preview`) with CSR-based certificate issuance
-  - ⚠️ **Note**: Direct MQTT protocol implementation (C# SDK does not yet support these preview features)
+  - Uses the official unified SDK; no custom C# DPS provisioning transport
 - **IoT Hub Integration**: Sends detected Skittle colors with timestamps to Azure IoT Hub for real-time monitoring
 - **Configuration-Driven**: All servo angles and chute positions externalized to `appsettings.json`
 
@@ -148,6 +143,14 @@ dotnet build
 dotnet run --project skittlesorter.csproj
 ```
 
+For a bounded cloud check without sensors or servos:
+
+```powershell
+dotnet run --project .\skittlesorter.csproj -- --cloud-self-test --config .\appsettings.json
+```
+
+This has a two-minute bound, makes real Azure requests, waits for one representative telemetry acknowledgement, then disconnects gracefully. For exact-device reset and verification, see the [cloud test runbook](scripts/iot-hub-device-registry/README.md#bounded-unified-sdk-cloud-test); no reset is performed by default.
+
 **Application flow:**
 1. Provision device via DPS
 2. Connect to IoT Hub with issued certificate
@@ -159,40 +162,13 @@ Full quickstart and architecture details: **[docs/Quickstart.md](docs/Quickstart
 
 Extended details: [docs/Architecture.md](docs/Architecture.md)
 
-The solution is organized into two projects:
+The sorter and its Azure adapter form the provisioning/telemetry path. The solution also contains independent update tooling and tests.
 
 ### AzureDpsFramework
 
-A reusable class library implementing Azure Device Provisioning Service with X.509 certificate support. **[📖 Full Documentation](AzureDpsFramework/README.md)**
+A thin integration library for configuration, device-key derivation, certificate generation/persistence, ADR ARM metadata operations, and unified SDK sessions. **[📖 Full Documentation](AzureDpsFramework/README.md)**
 
-**Why a Custom MQTT Implementation?**
-
-The official `Microsoft.Azure.Devices.Provisioning.Client` NuGet package does not yet support:
-- The `2025-07-01-preview` DPS API version
-- CSR-based X.509 provisioning (only supports pre-generated certificates or symmetric keys)
-- The new Azure Device Registry (ADR) certificate issuance workflow
-
-**Solution**: This library provides a **direct MQTT protocol implementation** (using MQTTnet) that communicates directly with the DPS MQTT endpoint, bypassing the SDK limitations. All DPS MQTT protocol specifications are implemented manually, enabling full support for preview features.
-
-**Key Features**:
-- ✅ Symmetric key authentication with device key derivation
-- ✅ Automatic CSR generation (RSA or ECC)
-- ✅ MQTT protocol implementation for DPS (port 8883 TLS)
-- ✅ Certificate issuance via Azure Device Registry credential policies
-- ✅ SAS token generation with proper URL encoding
-- ✅ Polling support for async device assignment
-- ✅ X.509 certificate loading with private key persistence
-
-**Components**:
-
-- **DpsConfiguration**: Loads and validates DPS settings from `appsettings.json`
-- **DpsSasTokenGenerator**: Generates DPS-compatible SAS tokens with symmetric key derivation
-- **CertificateManager**: Handles CSR generation, PEM persistence, and X.509 certificate loading
-- **DpsProvisioningClient**: Orchestrates MQTT-based device registration flow
-
-> **Implementation Note**: Since the official Microsoft.Azure.Devices.Provisioning.Client SDK does not yet support the preview DPS features (CSR-based X.509 provisioning via `2025-07-01-preview` API), this library provides a direct MQTT protocol implementation using MQTTnet. All communication follows the DPS MQTT protocol specification.
-> 
-> For detailed information about the authentication flow, MQTT protocol details, troubleshooting, and API reference, see **[AzureDpsFramework/README.md](AzureDpsFramework/README.md)**.
+The official `ConnectionClient` owns registration, authentication, MQTT transport, retry/reconnection and reprovisioning. `AzureDpsFramework` no longer defines its own security providers, provisioning transports, registration protocol, or SAS-token implementation. `UnifiedDeviceSession` keeps device-owned CSR/private-key files, issued PEM/chain and the `.connection.json` assignment sidecar durable across restarts. It rejects missing issuance in CSR profiles before Hub authentication and holds the shared updater lock only during DPS sessions, including reprovisioning, not for the Hub connection lifetime.
 
 ### skittlesorter (Application)
 
@@ -209,28 +185,28 @@ Main application implementing the sorting logic, located in `src/`:
 - **MockColorSensorConfig.cs**, **MockServoMotor.cs**: Mock implementations for testing without hardware
 
 **Communication services (src/comms/):**
-- **DpsInitializationService.cs**: Orchestrates DPS provisioning and returns authenticated `DeviceClient`
-- **TelemetryService.cs**: Sends detected Skittle colors to IoT Hub
+- **DpsInitializationService.cs**: Selects the configured profile and opens a unified SDK session through the adapter
+- **TelemetryService.cs**: Sends detected Skittle colors through the SDK `TelemetryClient`
 
 ## Device Provisioning Flow
 
-**Two attestation methods supported:**
+**Two attestation methods, with optional operational-certificate issuance:**
 
 **Symmetric Key Flow:**
 1. Derive device key from enrollment group key
-2. Generate SAS token for MQTT authentication
-3. Connect to DPS and submit CSR
-4. Receive newly issued X.509 certificate
-5. Connect to IoT Hub using new certificate
+2. Let the unified SDK authenticate to DPS
+3. Submit a persisted CSR if `RequestOperationalCertificate` is `true`
+4. Receive the assignment and, for CSR profiles, an issued X.509 chain
+5. Connect to IoT Hub using the device key or issued certificate selected by the profile
 
 **X.509 Certificate Flow:**
 1. Load bootstrap certificate (device + intermediate + root chain)
 2. Connect to DPS with X.509 client auth
 3. DPS validates certificate chain (both root and intermediate must be verified)
-4. Submit CSR and receive newly issued certificate
-5. Connect to IoT Hub using new certificate
+4. If requested, submit a persisted CSR and receive a newly issued certificate
+5. Connect to IoT Hub using the existing or newly issued certificate selected by the profile
 
-**Key Point:** Bootstrap credentials (symmetric key or X.509) are only for DPS authentication. All IoT Hub communication uses the newly issued certificate from the credential policy.
+**Key Point:** In CSR profiles, onboarding credentials authenticate to DPS and the issued operational certificate authenticates to IoT Hub. With `RequestOperationalCertificate: false`, standard symmetric-key and X.509 profiles connect without requesting a new certificate; symmetric-key mode continues using its device key. The compatibility default remains `true`.
 
 Full protocol details: **[docs/DPS-Provisioning.md](docs/DPS-Provisioning.md)** | **[docs/ADR-Integration.md](docs/ADR-Integration.md)** | **[AzureDpsFramework/README.md](AzureDpsFramework/README.md)**
 

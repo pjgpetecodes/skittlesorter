@@ -2,6 +2,14 @@
 
 A minimal path to build and run the sorter.
 
+## What's changed?
+
+.NET 10 is unchanged. The sorter pins Microsoft's unified
+`Microsoft.Azure.Iot.Device` **2.0.0-preview4** for DPS and telemetry, with a thin
+`AzureDpsFramework` adapter. Use the existing Hub and current configuration;
+the SDK discovers the assigned endpoint/profile through DPS. No manual Hub or
+cloud-resource migration is required. See [provisioning profiles](DPS-Provisioning.md).
+
 ## Prerequisites
 - .NET SDK (compatible with `net10.0`)
 - Windows with PowerShell (or cross-platform shell)
@@ -40,7 +48,7 @@ After it runs, ensure `appsettings.json` uses tokenized paths so switching ident
 **Note:** For detailed explanation of the certificate hierarchy and verification process, see [Azure Setup](./Azure-Setup.md).
 
 ### 3. Configuration
-Copy and configure [appsettings.json](../appsettings.json):
+Copy and configure the [safe template](../src/configuration/appsettings.template.json):
 ```powershell
 cp src/configuration/appsettings.template.json appsettings.json
 # Edit with your Azure values (IdScope, RegistrationId, etc.)
@@ -58,9 +66,24 @@ dotnet build
 dotnet run --project skittlesorter.csproj
 ```
 
+## Bounded connectivity check
+
+```powershell
+# Offline JSON/configuration validation
+dotnet run --project .\skittlesorter.csproj -- --self-test --config .\appsettings.json
+
+# Real DPS + Hub connection, representative telemetry, then graceful disconnect
+dotnet run --project .\skittlesorter.csproj -- --cloud-self-test --config .\appsettings.json
+```
+
+The cloud check never initializes physical hardware. It does contact Azure and
+may create the configured device record. For repeat runs and explicit exact-device
+reset, use the [unified cloud-test runbook](../scripts/iot-hub-device-registry/README.md#bounded-unified-sdk-cloud-test).
+Neither check implements automatic certificate renewal.
+
 ## Next Steps
 - **Hardware:** See [Hardware](./Hardware.md) for wiring and calibration
-- **Testing again?** See [Clean Test Start](./Clean-Test-Start.md) to reset enrollment groups and devices for a fresh test
+- **Testing again?** Prefer the bounded cloud check above. [Clean Test Start](./Clean-Test-Start.md) documents the guarded exact-device reset.
 - **Troubleshooting:** See [Troubleshooting](./Troubleshooting.md) for common DPS and certificate issues
 - **Telemetry:** See [Telemetry](./Telemetry.md) for monitoring IoT Hub messages
 - **Security:** See [Security](./Security.md) for credential management best practices

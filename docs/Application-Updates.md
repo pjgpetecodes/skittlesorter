@@ -8,6 +8,21 @@
 
 ## What is shared, and what is not
 
+### Provisioning SDK migration, not an update-protocol replacement
+
+The sorter now pins `Microsoft.Azure.Iot.Device` **2.0.0-preview4** and uses
+unified `ConnectionClient`/`TelemetryClient` for DPS provisioning and Hub telemetry.
+`AzureDpsFramework` remains a thin configuration, persistence, ADR ARM and session
+adapter. Standard symmetric-key/X.509 profiles and both CSR onboarding flows remain.
+.NET 10 and existing cloud resources are unchanged; the SDK discovers the assigned
+Hub endpoint and connection profile through DPS.
+
+The SDK's [feature matrix](https://github.com/Azure/azure-iot-sdk/blob/main/dotnet/README.md)
+still excludes **software updates via DPS**. The separate
+`AzureSoftwareUpdatesFramework` updater retains its own update MQTT protocol and
+MQTTnet 4; the sorter uses MQTTnet 5. This migration neither replaces that updater
+nor implements automatic operational-certificate renewal.
+
 | Boundary | GA Device Update | ADR Software Updates preview |
 |---|---|---|
 | Application | Same C# sorter, baseline and session-count builds | Same release archive |
@@ -62,7 +77,7 @@ Run `scripts/updates/common/pi-preflight.sh` on the Pi. Record `/etc/os-release`
 package version. Use `linux-arm64` for ARM64 userland or `linux-arm` for ARMHF.
 Check both .NET 10 and agent compatibility with the actual OS before proceeding.
 
-Read [installer bootstrap/recovery](../deploy/updates/README.md) and review the
+Read the [installer bootstrap/recovery scripts](../deploy/updates/) and review the
 systemd templates under `deploy/systemd`. Keep release directories under `/opt`,
 configuration under `/etc/skittlesorter` and state under `/var/lib/skittlesorter`.
 Use an unprivileged sorter identity with only its required hardware permissions;

@@ -20,41 +20,72 @@ reviewed against current Microsoft Learn guidance <strong>5 November 2026</stron
 <!-- /wp:heading -->
 
 <!-- wp:paragraph -->
-<p>I've refreshed the series to match the current preview. DPS is required, while certificate management is optional. The credential a device uses to get onto DPS is separate from the operational certificate ADR can issue for IoT Hub.</p>
+<p>I've refreshed the series to match the current preview. DPS is required, while
+certificate management is optional. The credential a device uses to get onto
+DPS is separate from the operational certificate ADR can issue for IoT Hub.</p>
 <!-- /wp:paragraph -->
 
 <!-- wp:paragraph -->
-<p>The resource walkthrough now uses the current CLI flow and system-assigned identities, links DPS before IoT Hub, and creates an enrollment group linked to the ADR certificate policy. It doesn't create a device. You can also connect eligible existing services, but linking them is permanent.</p>
+<p>I've also moved the sorter to Microsoft's unified
+<a href="https://www.nuget.org/packages/Microsoft.Azure.Iot.Device/2.0.0-preview4"><code>Microsoft.Azure.Iot.Device</code> <strong>2.0.0-preview4</strong></a>.
+<code>ConnectionClient</code> handles DPS and the Hub connection; <code>TelemetryClient</code> sends
+our Skittle readings. The custom C# provisioning protocol and legacy
+<code>Microsoft.Azure.Devices.Client</code> are gone. <code>AzureDpsFramework</code> stays as a thin
+configuration, durable CSR/key/issued-chain persistence, ADR ARM and session
+adapter. Microsoft's <a href="https://github.com/Azure/azure-iot-sdk/blob/main/dotnet/README.md">SDK design and feature matrix</a>
+and <a href="https://github.com/Azure/azure-iot-sdk/tree/releases/public-preview/dotnet/samples/Unified">unified examples</a>
+are the starting points for the new API. The package is still a preview.</p>
 <!-- /wp:paragraph -->
 
 <!-- wp:paragraph -->
-<p>I've clarified which credentials are for DPS onboarding and which are issued for IoT Hub. The policy belongs to an ADR intermediate CA and sets the operational certificate validity; this example uses a 30-day policy. The Microsoft-managed lifecycle includes renewal and revocation, with limitations for intermediate CAs signed by an external CA. The custom MQTT DPS framework described later is this project's implementation choice, not a requirement for every IoT Hub deployment.</p>
+<p>Standard symmetric-key/X.509 profiles and both CSR onboarding flows remain,
+along with .NET 10 and our existing Hub. The SDK discovers its assigned
+endpoint/profile through DPS. There's a bounded
+<code>--cloud-self-test --config PATH</code> for provision/connect/telemetry/disconnect
+without physical hardware. SDK retry/reprovision and optional IoT Hub renewal
+APIs are available, but automatic certificate renewal isn't implemented here.
+The sorter uses MQTTnet 5; the separate ADR software-updates client keeps
+MQTTnet 4 and its own DPS <strong>update</strong> protocol. The SDK doesn't implement that
+workflow. None of this requires an MQTT5 Hub or a cloud topology change.</p>
 <!-- /wp:paragraph -->
 
-<!-- wp:heading {"textColor":"#f6f6f4"} -->
-<h2 class="wp-block-heading has-f-6-f-6-f-4-color has-text-color">Contents:</h2>
+<!-- wp:paragraph -->
+<p>The resource walkthrough now uses the current CLI flow and system-assigned
+identities, links DPS before IoT Hub, and creates an enrollment group linked to
+the ADR certificate policy. It doesn't create a device. You can also connect
+eligible existing services, but linking them is permanent.</p>
+<!-- /wp:paragraph -->
+
+<!-- wp:paragraph -->
+<p>I've clarified which credentials are for DPS onboarding and which are issued
+for IoT Hub. The policy belongs to an ADR intermediate CA and sets the
+operational certificate validity; this example uses a 30-day policy. The
+Microsoft-managed lifecycle includes renewal and revocation, with limitations
+for intermediate CAs signed by an external CA. I've kept the distinction between
+service capabilities, SDK APIs and the lifecycle code actually in this sample.</p>
+<!-- /wp:paragraph -->
+
+<!-- wp:heading {"level":3} -->
+<h3 class="wp-block-heading">Contents</h3>
 <!-- /wp:heading -->
 
-<!-- wp:list {"ordered":true,"textColor":"#f6f6f4"} -->
-<ol class="wp-block-list has-f-6-f-6-f-4-color has-text-color"><!-- wp:list-item -->
-<li><a href="https://www.petecodes.co.uk/iot-hub-with-adr-and-certificate-management-part-1" target="_blank" rel="noreferrer noopener">Introduction (This post!)</a></li>
+<!-- wp:list {"ordered":true} -->
+<ol class="wp-block-list"><!-- wp:list-item -->
+<li><a href="https://www.petecodes.co.uk/iot-hub-with-adr-and-certificate-management-part-1">Introduction (this post)</a></li>
 <!-- /wp:list-item -->
-
 <!-- wp:list-item -->
-<li><a href="https://www.petecodes.co.uk/iot-hub-with-adr-and-certificate-management-part-2" target="_blank" rel="noreferrer noopener">A DPS Primer</a></li>
+<li><a href="https://www.petecodes.co.uk/iot-hub-with-adr-and-certificate-management-part-2">A DPS Primer</a></li>
 <!-- /wp:list-item -->
-
 <!-- wp:list-item -->
-<li><a href="https://www.petecodes.co.uk/iot-hub-with-adr-and-certificate-management-part-3" target="_blank" rel="noreferrer noopener">Creating DPS, IoT Hub and ADR Instances</a></li>
+<li><a href="https://www.petecodes.co.uk/iot-hub-with-adr-and-certificate-management-part-3">Creating DPS, IoT Hub and ADR Instances</a></li>
 <!-- /wp:list-item -->
-
 <!-- wp:list-item -->
-<li><a href="https://www.petecodes.co.uk/iot-hub-with-adr-and-certificate-management-part-4" target="_blank" rel="noreferrer noopener">Understanding X.509 and CSR Workflows</a></li>
+<li><a href="https://www.petecodes.co.uk/iot-hub-with-adr-and-certificate-management-part-4">Understanding X.509 and CSR Workflows</a></li>
 <!-- /wp:list-item -->
-
 <!-- wp:list-item -->
-<li><a href="https://www.petecodes.co.uk/iot-hub-with-adr-and-certificate-management-part-5" target="_blank" rel="noreferrer noopener">The Device Application</a></li>
-<!-- /wp:list-item --></ol>
+<li><a href="https://www.petecodes.co.uk/iot-hub-with-adr-and-certificate-management-part-5">The Device Application</a></li>
+<!-- /wp:list-item -->
+</ol>
 <!-- /wp:list -->
 
 <!-- wp:heading {"level":3} -->
@@ -91,9 +122,9 @@ reviewed against current Microsoft Learn guidance <strong>5 November 2026</stron
 <p>The series uses a <strong>3D-printed Skittle sorter</strong> for the physical build, but it’s <strong>optional</strong> — you can run everything with mocked hardware. Still, it’s a fun build if you want the full experience.</p>
 <!-- /wp:paragraph -->
 
-<!-- wp:image {"id":4968,"sizeSlug":"full","linkDestination":"media","align":"center"} -->
-<figure class="wp-block-image aligncenter size-full"><a href="https://www.petecodes.co.uk/wp-content/uploads/2026/01/GIF_20260112_230237_613.gif"><img src="https://www.petecodes.co.uk/wp-content/uploads/2026/01/GIF_20260112_230237_613.gif" alt="" class="wp-image-4968"/></a></figure>
-<!-- /wp:image -->
+<!-- wp:paragraph -->
+<p><a href="https://www.petecodes.co.uk/wp-content/uploads/2026/01/GIF_20260112_230237_613.gif"><img src="https://www.petecodes.co.uk/wp-content/uploads/2026/01/GIF_20260112_230237_613.gif" alt="Skittle sorter demonstration"></a></p>
+<!-- /wp:paragraph -->
 
 <!-- wp:quote -->
 <blockquote class="wp-block-quote"><!-- wp:paragraph -->
@@ -132,11 +163,8 @@ enable certificate management.</p>
 used to authenticate to IoT Hub after onboarding with a separate credential.
 The device submits a CSR during provisioning; DPS validates the onboarding
 credential and coordinates issuance from the namespace's ADR certificate
-authority. The device's private key remains on the device.</p>
-<!-- /wp:paragraph -->
-
-<!-- wp:paragraph -->
-<p>The locally created certificates in Part 4 are an example of an X.509
+authority. The device's private key remains on the device.
+The locally created certificates in Part 4 are an example of an X.509
 onboarding credential; they are separate from the ADR-managed operational
 certificate authority and policy.</p>
 <!-- /wp:paragraph -->
@@ -211,10 +239,10 @@ standard rates.</p>
 <!-- /wp:list -->
 
 <!-- wp:paragraph -->
-<p>The sample application later in this series uses a custom DPS framework over
-MQTT. That is an implementation detail of this project, not a requirement for
-every IoT Hub or ADR deployment. Check the current service documentation before
-relying on sample API-version or client-library details.</p>
+<p>The sample later in this series now uses the official unified .NET SDK, not a
+custom provisioning transport. Our adapter retains the application-specific
+configuration and durable certificate files. Check current service and SDK
+documentation before changing pinned preview versions.</p>
 <!-- /wp:paragraph -->
 
 <!-- wp:heading {"level":3} -->
@@ -336,7 +364,7 @@ device application instructions in <a href="https://www.petecodes.co.uk/iot-hub-
 <li>How to use Microsoft's <strong>new certificate management</strong> features</li>
 <!-- /wp:list-item -->
 <!-- wp:list-item -->
-<li>How to build a <strong>custom DPS framework</strong> to access preview APIs</li>
+<li>How to use the <strong>unified .NET device SDK</strong> with a thin application adapter</li>
 <!-- /wp:list-item -->
 <!-- wp:list-item -->
 <li>How to integrate <strong>ADR</strong> for advanced device management</li>

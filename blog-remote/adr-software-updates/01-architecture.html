@@ -29,7 +29,20 @@
 <!-- /wp:paragraph -->
 
 <!-- wp:paragraph -->
-<p>As with this repository's earlier custom DPS framework, we implement an isolated educational C# client against the published wire contract. We do not invent a future .NET API or imply that Microsoft supports this custom agent. Recheck the official SDK matrix before reproducing the article.</p>
+<p><strong>What's changed since the provisioning articles?</strong> The sorter now uses
+<code>Microsoft.Azure.Iot.Device</code> <strong>2.0.0-preview4</strong> for DPS provisioning and telemetry,
+with a thin <code>AzureDpsFramework</code> adapter. That removes the custom <strong>provisioning</strong>
+protocol, not this separate DPS <strong>software-update</strong> client. The sorter uses
+MQTTnet 5; <code>AzureSoftwareUpdatesFramework</code> retains MQTTnet 4. .NET 10 and each
+demonstration's existing cloud resources are unchanged. The SDK discovers the
+assigned Hub endpoint/profile through DPS.</p>
+<!-- /wp:paragraph -->
+
+<!-- wp:paragraph -->
+<p>We still implement an isolated educational C# update client against the published
+wire contract. We do not invent a future .NET update API or imply that Microsoft
+supports this custom agent. Recheck the <a href="https://github.com/Azure/azure-iot-sdk/blob/main/dotnet/README.md">official SDK matrix</a>
+before reproducing the article.</p>
 <!-- /wp:paragraph -->
 
 <!-- wp:heading {"level":2} -->
@@ -37,7 +50,7 @@
 <!-- /wp:heading -->
 
 <!-- wp:paragraph -->
-<p>The sorter retains its IoT Hub telemetry connection. The updater uses X.509 credentials on a DPS update channel and does not create another Hub connection as the same device. Because app registration and update checking may use the same DPS registration/client identity, both processes must coordinate their DPS sessions using the same exclusive lock.</p>
+<p>The sorter retains its IoT Hub telemetry connection. The updater uses X.509 credentials on a DPS update channel and does not create another Hub connection as the same device. Because app registration and update checking may use the same DPS registration/client identity, both processes must coordinate their DPS sessions using the same exclusive lock. The unified-session coordinator holds that lock only during DPS sessions, including SDK reprovisioning, not for the lifetime of the Hub connection.</p>
 <!-- /wp:paragraph -->
 
 <!-- wp:paragraph -->

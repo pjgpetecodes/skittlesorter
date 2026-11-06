@@ -17,6 +17,14 @@ certificate policy. The script creates dedicated resources and an enrollment
 group; it doesn't provision a device. See the [Introduction](https://www.petecodes.co.uk/iot-hub-with-adr-and-certificate-management-part-1)
 for the series-wide changes.
 
+The application now uses Microsoft's unified `Microsoft.Azure.Iot.Device`
+**2.0.0-preview4**. The generated config is compatible with that adapter and
+defaults to symmetric-key onboarding with CSR issuance enabled.
+Set `RequestOperationalCertificate: false` explicitly for standard non-CSR profiles. The SDK
+migration doesn't change the resources below or require an MQTT5 Hub. Once
+configured, `--cloud-self-test --config PATH` gives us a bounded
+provision/connect/telemetry/disconnect check without physical hardware.
+
 ### Contents
 
 1. [Introduction](https://www.petecodes.co.uk/iot-hub-with-adr-and-certificate-management-part-1)

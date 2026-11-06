@@ -2,6 +2,22 @@
 
 Provision Azure resources for IoT and device registration.
 
+## What's changed in the device application?
+
+The sorter now pins `Microsoft.Azure.Iot.Device` **2.0.0-preview4** on .NET 10.
+Its unified SDK handles provisioning and telemetry; `AzureDpsFramework` retains
+configuration, durable CSR/key/issued-chain/assignment files, ADR ARM helpers and
+a thin session adapter. There is no manual Hub or resource-topology migration;
+the SDK discovers the assigned endpoint/profile through DPS.
+
+For a new preview deployment use the current
+[`scripts/iot-hub-device-registry/setup.ps1` runbook](../scripts/iot-hub-device-registry/README.md);
+it generates CSR-enabled unified-compatible configuration. Standard profiles
+explicitly set `RequestOperationalCertificate: false`. Use the bounded
+`--cloud-self-test --config PATH` before involving physical hardware. The
+legacy resource and broad cleanup examples below are not prerequisites for an
+SDK upgrade; never delete an enrollment or CA merely to test the migrated client.
+
 > **📖 Primary Setup Guide:** This project follows Microsoft's official setup workflow. For the authoritative and likely up to date, follow the step-by-step guide here;
 > - **[Get started with ADR integration and Microsoft-backed X.509 certificate management in IoT Hub (Azure CLI)](https://learn.microsoft.com/en-us/azure/iot-hub/iot-hub-device-registry-setup?pivots=azure-cli)** ⭐ **Start here!**
 >

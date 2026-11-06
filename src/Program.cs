@@ -4,7 +4,7 @@ using System.Device.Pwm.Drivers;
 using System.IO;
 using System.Security.Cryptography.X509Certificates;
 using System.Threading;
-using Microsoft.Azure.Devices.Client;
+using AzureDpsFramework;
 using Iot.Device.ServoMotor;
 using System.Runtime.InteropServices;
 
@@ -48,6 +48,24 @@ namespace skittle_sorter
                 })
                 : null;
 
+            if (options.CloudSelfTest)
+            {
+                try
+                {
+                    options.ValidateConfiguration();
+                    using var timeout = CancellationTokenSource.CreateLinkedTokenSource(shutdown.Token);
+                    timeout.CancelAfter(TimeSpan.FromMinutes(2));
+                    var cloudConfig = ConfigurationLoader.LoadIoTHubConfiguration(options.ConfigurationPath);
+                    using var session = await DpsInitializationService.InitializeAsync(cloudConfig, options.ConfigurationPath, timeout.Token);
+                    await new TelemetryService(session.Telemetry, cloudConfig.DeviceId, cloudConfig)
+                        .SendRequiredAsync("red", cancellationToken: timeout.Token);
+                    await session.DisconnectAsync(timeout.Token);
+                    Console.WriteLine("Cloud self-test passed: provisioned/connected, telemetry acknowledged, disconnected (no hardware accessed).");
+                }
+                finally { Console.CancelKeyPress -= onCancel; }
+                return;
+            }
+
             Console.WriteLine($"Skittle sorter {ApplicationRelease.Version} starting…\n");
 
             PrintSection("Configuration");
@@ -70,21 +88,15 @@ namespace skittle_sorter
             servo.Home();
 
             PrintSection("IoT Hub / DPS Initialization");
-            DeviceClient? deviceClient = null;
+            UnifiedDeviceSession? deviceSession = null;
             TelemetryService? telemetryService = null;
 
             try
             {
                 if (iotConfig.SendTelemetry && !shutdown.IsCancellationRequested)
                 {
-                    deviceClient = DpsInitializationService.Initialize(iotConfig, options.ConfigurationPath, shutdown.Token);
-                    if (deviceClient == null && !shutdown.IsCancellationRequested && options.ReadyFile != null)
-                        throw new InvalidOperationException("The selected service profile requires telemetry, but provisioning failed.");
-                    if (deviceClient != null)
-                    {
-                        await deviceClient.OpenAsync(shutdown.Token);
-                        telemetryService = new TelemetryService(deviceClient, iotConfig.DeviceId, iotConfig);
-                    }
+                    deviceSession = await DpsInitializationService.InitializeAsync(iotConfig, options.ConfigurationPath, shutdown.Token);
+                    telemetryService = new TelemetryService(deviceSession.Telemetry, iotConfig.DeviceId, iotConfig);
                 }
 
                 if (options.ReadyFile != null && !shutdown.IsCancellationRequested)
@@ -171,10 +183,24 @@ namespace skittle_sorter
             finally
             {
                 servo.Stop();
-                deviceClient?.Dispose();
-                Console.CancelKeyPress -= onCancel;
-                if (options.ReadyFile != null)
-                    File.Delete(options.ReadyFile);
+                try
+                {
+                    if (deviceSession != null)
+                    {
+                        try
+                        {
+                            using var timeout = new CancellationTokenSource(TimeSpan.FromSeconds(10));
+                            await deviceSession.DisconnectAsync(timeout.Token);
+                        }
+                        finally { deviceSession.Dispose(); }
+                    }
+                }
+                finally
+                {
+                    Console.CancelKeyPress -= onCancel;
+                    if (options.ReadyFile != null)
+                        File.Delete(options.ReadyFile);
+                }
             }
             static void PrintSection(string title)
             {

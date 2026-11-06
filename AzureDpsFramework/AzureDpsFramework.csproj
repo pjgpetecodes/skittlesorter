@@ -12,7 +12,7 @@
     <Version>0.1.0-preview</Version>
     <Authors>Skittle Sorter Contributors</Authors>
     <Company>Skittle Sorter Contributors</Company>
-    <Description>Azure DPS MQTT framework for preview API workflows including CSR-based X.509 certificate issuance and ADR credential policy scenarios.</Description>
+    <Description>Configuration, persistent credentials and ADR helpers for Microsoft's unified Azure IoT device SDK.</Description>
     <PackageTags>azure;iot;dps;adr;mqtt;x509;csr;preview</PackageTags>
     <PackageLicenseExpression>MIT</PackageLicenseExpression>
     <PackageReadmeFile>README.md</PackageReadmeFile>
@@ -23,9 +23,7 @@
   </PropertyGroup>
 
   <ItemGroup>
-    <PackageReference Include="Microsoft.Azure.Devices.Client" Version="1.42.3" />
-    <PackageReference Include="MQTTnet" Version="4.3.3.952" />
-    <PackageReference Include="Newtonsoft.Json" Version="13.0.4" />
+    <PackageReference Include="Microsoft.Azure.Iot.Device" Version="2.0.0-preview4" />
     <PackageReference Include="Azure.Identity" Version="1.17.1" />
   </ItemGroup>
 

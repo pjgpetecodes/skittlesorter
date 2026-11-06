@@ -20,6 +20,16 @@ the IoT Hub preview, but you do need DPS. I've updated the primer to make that
 distinction clearer. See the [Introduction](https://www.petecodes.co.uk/iot-hub-with-adr-and-certificate-management-part-1)
 for the series-wide changes.
 
+The device code now uses `Microsoft.Azure.Iot.Device` **2.0.0-preview4**:
+one unified `ConnectionClient` for DPS and the Hub, and `TelemetryClient` for
+our messages. I've removed the custom C# provisioning protocol, not the
+configuration and durable CSR/key/chain handling. Standard symmetric-key/X.509
+and both CSR flows remain on the existing Hub, with its endpoint/profile discovered
+through DPS. This is still a preview;
+the [SDK matrix](https://github.com/Azure/azure-iot-sdk/blob/main/dotnet/README.md)
+also makes clear that DPS software updates are a separate, unsupported SDK
+workflow. Our separate updater isn't replaced by this change.
+
 ---
 
 > **Note:** This guide uses **PowerShell** for all commands and scripts. While Azure CLI commands work identically in bash/zsh, PowerShell is recommended for Windows environments and provides consistent cross-platform support. If you're using Linux/macOS, you can install [PowerShell Core](https://learn.microsoft.com/powershell/scripting/install/installing-powershell) or adapt the commands to bash syntax.
@@ -76,7 +86,8 @@ When certificate management is enabled, DPS can coordinate ADR issuance of opera
 
 ### What's New: Microsoft Certificate Management
 
-The custom device code in this repository uses the `2025-07-01-preview` API
+The unified SDK now handles this repository's CSR provisioning flow. The
+earlier custom transport used the `2025-07-01-preview` API
 for its CSR provisioning example. The current service workflow is that DPS
 validates the device's onboarding credential and coordinates issuance of an
 **operational certificate** from the ADR namespace's issuing CA:
@@ -358,9 +369,9 @@ The sample application in this series uses the **`2025-07-01-preview` API**:
 -   ✅ Microsoft-managed CA
 
 IoT Hub integration with ADR and certificate management is still in **public
-preview** and isn't recommended for production workloads. The custom DPS
-framework is this project's implementation choice; don't treat its API version
-or client-library assumptions as a general Microsoft SDK support statement.
+preview** and isn't recommended for production workloads. The sorter now uses
+the official unified SDK with a thin application adapter. Don't treat old
+wire-level examples as instructions to rebuild the removed transport.
 
 > **Note:** Check [Microsoft's current IoT Hub preview guidance](https://learn.microsoft.com/en-us/azure/iot-hub/iot-hub-what-is-new) before deployment.
 
@@ -373,7 +384,7 @@ In the following sections, we'll:
 1.  Create DPS, IoT Hub, and ADR instances
 2.  Configure credential policies for certificate issuance
 3.  Set up enrollment groups (symmetric key and X.509)
-4.  Build a .NET device application with custom DPS framework
+4.  Build a .NET device application with the unified SDK and a thin adapter
 5.  Implement CSR generation and certificate management
 6.  Integrate with ADR for device management
 

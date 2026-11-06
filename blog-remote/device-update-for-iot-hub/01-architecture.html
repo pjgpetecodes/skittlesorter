@@ -13,6 +13,16 @@
 <!-- /wp:paragraph -->
 
 <!-- wp:paragraph -->
+<p><strong>What's changed in the sorter?</strong> Provisioning and telemetry now use Microsoft's
+unified <code>Microsoft.Azure.Iot.Device</code> <strong>2.0.0-preview4</strong>, with a thin
+<code>AzureDpsFramework</code> configuration/persistence/session adapter. .NET 10 and the
+existing Hub stay unchanged, with the assigned endpoint/profile discovered
+through DPS. Standard symmetric-key provisioning still
+sets <code>RequestOperationalCertificate: false</code>; the GA update agent and its module
+identity are not replaced by this SDK migration.</p>
+<!-- /wp:paragraph -->
+
+<!-- wp:paragraph -->
 <p>There are three separate responsibilities. The sorter controls hardware and publishes telemetry. Microsoft's standard Linux Device Update agent receives GA deployments. Our local Python installer stages an application release, waits for a safe sorter stop, switches releases and checks readiness. The updater is outside the release being replaced.</p>
 <!-- /wp:paragraph -->
 

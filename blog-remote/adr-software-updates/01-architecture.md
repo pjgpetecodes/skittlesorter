@@ -12,11 +12,22 @@ On the Pi, use one local application installer and only one active cloud update 
 
 A service that delivers application files can update a C# program without offering a native C# client API for its own device protocol. The inspected unified .NET SDK README lists software updates via DPS as unsupported. The corresponding C SDK contains the protocol implementation and examples.
 
-As with this repository's earlier custom DPS framework, we implement an isolated educational C# client against the published wire contract. We do not invent a future .NET API or imply that Microsoft supports this custom agent. Recheck the official SDK matrix before reproducing the article.
+**What's changed since the provisioning articles?** The sorter now uses
+`Microsoft.Azure.Iot.Device` **2.0.0-preview4** for DPS provisioning and telemetry,
+with a thin `AzureDpsFramework` adapter. That removes the custom **provisioning**
+protocol, not this separate DPS **software-update** client. The sorter uses
+MQTTnet 5; `AzureSoftwareUpdatesFramework` retains MQTTnet 4. .NET 10 and each
+demonstration's existing cloud resources are unchanged. The SDK discovers the
+assigned Hub endpoint/profile through DPS.
+
+We still implement an isolated educational C# update client against the published
+wire contract. We do not invent a future .NET update API or imply that Microsoft
+supports this custom agent. Recheck the [official SDK matrix](https://github.com/Azure/azure-iot-sdk/blob/main/dotnet/README.md)
+before reproducing the article.
 
 ## Separate lifecycles
 
-The sorter retains its IoT Hub telemetry connection. The updater uses X.509 credentials on a DPS update channel and does not create another Hub connection as the same device. Because app registration and update checking may use the same DPS registration/client identity, both processes must coordinate their DPS sessions using the same exclusive lock.
+The sorter retains its IoT Hub telemetry connection. The updater uses X.509 credentials on a DPS update channel and does not create another Hub connection as the same device. Because app registration and update checking may use the same DPS registration/client identity, both processes must coordinate their DPS sessions using the same exclusive lock. The unified-session coordinator holds that lock only during DPS sessions, including SDK reprovisioning, not for the lifetime of the Hub connection.
 
 The updater survives replacement of the sorter executable. Its workflow state, terminal reports, trusted keys and certificates remain outside application release directories. The common installer verifies and activates a versioned release; the updater decides whether signed content is acceptable and reports the actual outcome.
 

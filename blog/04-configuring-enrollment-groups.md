@@ -1,5 +1,14 @@
 # Configuring Enrollment Groups
 
+## What's changed?
+
+The enrollment choices below are retained, but the device now uses Microsoft's
+unified `Microsoft.Azure.Iot.Device` **2.0.0-preview4** rather than custom C# DPS
+security providers. `RequestOperationalCertificate: true` selects either CSR
+onboarding flow; set it to `false` for standard symmetric-key or X.509 DPS.
+The compatibility default stays `true`. Existing cloud resources and
+durable CSR/key/chain files are unchanged.
+
 > **Release baseline:** This series uses the latest Azure IoT CLI preview
 > extension, `azure-iot` **1.0.0b2**, released **6 October 2026**. Last
 > reviewed **29 October 2026**. [Release notes](https://github.com/Azure/azure-iot-cli-extension/releases/tag/v1.0.0b2).
@@ -178,7 +187,7 @@ The device will:
 
 ## Next Steps
 
-Now that enrollment groups are configured, we'll use this repository's **custom DPS framework** for its sample CSR flow:
+Now that enrollment groups are configured, we'll use the **unified SDK and thin adapter** for the sample CSR flow:
 - MQTT protocol communication with DPS
 - CSR generation and submission
 - Certificate issuance workflow

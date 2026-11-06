@@ -1,5 +1,16 @@
 # Understanding X.509 and CSR Workflows
 
+## What's changed?
+
+The sorter now pins `Microsoft.Azure.Iot.Device` **2.0.0-preview4** and uses
+its unified connection/telemetry APIs. The custom C# provisioning protocol is
+removed; `AzureDpsFramework` retains configuration, durable CSR/key/chain
+persistence, ADR ARM and a thin session adapter. Standard symmetric-key/X.509
+and both CSR onboarding flows remain on .NET 10 and the existing Hub. The SDK
+discovers its assigned endpoint/profile through DPS.
+See the [SDK design and matrix](https://github.com/Azure/azure-iot-sdk/blob/main/dotnet/README.md).
+Optional renewal APIs are available, but automatic renewal isn't implemented.
+
 > **Release baseline:** This series uses the latest Azure IoT CLI preview
 > extension, `azure-iot` **1.0.0b2**, released **6 October 2026**. Last
 > reviewed **29 October 2026**. [Release notes](https://github.com/Azure/azure-iot-cli-extension/releases/tag/v1.0.0b2).
@@ -663,10 +674,9 @@ Now we flip to the CSR model: the device makes its own key, asks DPS/ADR to sign
 ✅ **Supported Protocols:** HTTP and MQTT during provisioning  
 ✅ **Zero-Touch:** Device provisions itself on first boot
 
-> **Note:** This repository's sample uses the `2025-07-01-preview` API and a
-> custom DPS framework for its MQTT-based CSR flow. That is an implementation
-> choice for this sample, not a general SDK limitation or deployment
-> requirement. Individual device certificates can be revoked; revocation of
+> **Note:** The official unified SDK now owns the CSR provisioning flow.
+> Our adapter preserves the device-owned CSR/key and issued-chain files.
+> Individual device certificates can be revoked; revocation of
 > intermediate CAs signed by an external CA has limitations.
 
 ## Comparing the Two Phases
@@ -822,9 +832,12 @@ setup guide allows validity periods from 1 to 30 days:
 }
 ```
 
-**Automatic Renewal Flow:**
+**Illustrative DPS-based renewal flow, not implemented automation:**
 
-The device is responsible for monitoring its operational certificate expiration and initiating renewal. Renewal uses the same mechanism as first-time issuance:
+The device is responsible for monitoring expiration and initiating a supported
+renewal workflow. The timeline below illustrates the older DPS/CSR approach;
+seven days is an example, not a universal service requirement. The unified SDK
+also offers IoT Hub certificate-renewal APIs without DPS reprovisioning.
 
 ```
 Day 0:   Device provisions, receives operational certificate (valid 30 days)
@@ -838,7 +851,10 @@ Day 30:  Old certificate expires (but already replaced)
 
 **Renewal logic:**
 
-The device should periodically check if its operational certificate is within the renewal window (typically 7 days before expiry). When renewal is needed, the device initiates another DPS registration call with a new CSR. The CSR is forwarded to the appropriate issuing CA to request a renewed leaf certificate.
+Choose a supported renewal workflow and persist replacement keys/chains
+durably. This sorter does not implement an automatic operational-certificate
+renewal scheduler; the example timeline is not a description of running code.
+SDK retry/reprovision behavior is separate from certificate lifecycle automation.
 
 **Best Practice:** Microsoft recommends devices use Device Twin reported properties to report certificate issuance and expiration dates for observability and dashboard monitoring.
 

@@ -6,6 +6,28 @@
 
 Welcome to this comprehensive blog series on building a real-world IoT device using Azure's latest IoT Hub, Azure Device Provisioning Service (DPS) features, along with Microsoft-managed certificate infrastructure.
 
+## What's changed?
+
+I've moved the sorter to Microsoft's unified
+[`Microsoft.Azure.Iot.Device` **2.0.0-preview4**](https://www.nuget.org/packages/Microsoft.Azure.Iot.Device/2.0.0-preview4).
+One `ConnectionClient` handles DPS provisioning and the Hub connection;
+`TelemetryClient` sends the colour readings. That lets me remove the custom C#
+DPS protocol rather than maintain it alongside the SDK.
+
+`AzureDpsFramework` stays as a thin configuration, durable CSR/key/certificate
+persistence, ADR ARM and session adapter. Standard symmetric-key/X.509 profiles
+and both CSR onboarding flows remain, as do .NET 10 and our existing Hub.
+The SDK discovers its assigned endpoint and profile through DPS.
+The new bounded `--cloud-self-test --config PATH` checks provisioning, connection
+and telemetry without physical hardware. Retry/reprovision and optional renewal
+APIs are available in the SDK; automatic certificate renewal isn't implemented.
+
+This is still a preview. Read Microsoft's [SDK overview and feature matrix](https://github.com/Azure/azure-iot-sdk/blob/main/dotnet/README.md)
+and [unified samples](https://github.com/Azure/azure-iot-sdk/tree/releases/public-preview/dotnet/samples/Unified).
+The separate ADR software-updates client keeps its own DPS update protocol and
+MQTTnet 4; the sorter moves to MQTTnet 5. The SDK doesn't implement that update
+workflow, and this migration doesn't change our cloud resource topology.
+
 ## What You'll Build
 
 By the end of this series, you'll have:
@@ -26,10 +48,10 @@ This series focuses on **patterns and principles**. We’ll use self-signed cert
 
 The IoT Hub integration with Azure Device Registry (ADR) and certificate
 management remain in public preview and aren't recommended for production.
-The sample application in this repository uses a custom DPS framework over
-MQTT for its CSR provisioning flow; that is an implementation choice for this
-sample, not a requirement for every IoT Hub or ADR deployment. Check current
-Microsoft documentation for the latest API and client-library support.
+The sample uses the official unified SDK for provisioning, including CSR
+issuance. Our adapter keeps the configuration and certificate-file details out
+of the sorting loop. Pin the preview package and check current Microsoft
+documentation before upgrading.
 
 ## What's New: Azure IoT Hub with ADR (Preview)
 
@@ -40,7 +62,7 @@ certificate management remain in public preview. Certificate management is
 optional and issues operational certificates after a separate device
 onboarding credential is validated by DPS.
 
-![Azure IoT Hub with ADR Architecture](path/to/architecture-diagram.png)
+See the [application architecture](../docs/Architecture.md) for the component boundaries.
 
 ## What's New in 2025-2026
 
@@ -49,7 +71,7 @@ This series focuses on the current IoT Hub preview guidance:
 ### 🆕 Azure IoT Hub + Azure Device Registry (ADR) Integration (Preview)
 - IoT Hub integrates with ADR to provide a **unified device registry** across IoT Hub and IoT Operations
 - ADR namespaces enable centralized device metadata and identity management
-- Existing IoT Hubs can't be upgraded to add ADR integration; create a new hub
+- Eligible existing IoT Hubs can be connected permanently; this series creates a dedicated new Hub
 
 ### 🆕 Microsoft-Backed X.509 Certificate Management (Preview)
 - ADR offers **certificate management** using Microsoft-managed PKI
@@ -104,7 +126,7 @@ cd skittlesorter/scripts
 
 # Then run the device app
 cd ..
-dotnet run --project src/skittlesorter.csproj
+dotnet run --project .\skittlesorter.csproj
 ```
 
 See **[Creating Azure Resources](02-creating-azure-resources.md)** for detailed script examples.
@@ -115,7 +137,7 @@ Follow along post-by-post to understand **why** and **how** everything works. Yo
 - Azure resource setup
 - X.509 certificate workflows
 - .NET implementation details
-7. **[Testing & Troubleshooting](07-testing-troubleshooting.md)** - Testing and operational checks
+7. **[What's Changed](07-whats-changed-since-previous-preview.md)** - Testing and migration notes
 
 ## Prerequisites
 
@@ -128,18 +150,18 @@ Follow along post-by-post to understand **why** and **how** everything works. Yo
 ## Series Outline
 
 1. **[A Primer on DPS](01-primer-on-dps.md)** - Understanding Device Provisioning Service
-2. **[Creating DPS and IoT Hub](02-creating-dps-and-iot-hub.md)** - Azure resource setup
-3. **[X.509 Certificate Hierarchy](03-x509-certificate-hierarchy.md)** - Certificate workflows
-4. **[DPS Configuration & Enrollment](04-dps-configuration-enrollment.md)** - Connecting devices
-5. **[Building the Device Application](05-building-device-application.md)** - .NET implementation
-6. **[ADR Integration](06-adr-integration.md)** - Device Registry features
-7. **[Testing & Troubleshooting](07-testing-troubleshooting.md)** - Production readiness
+2. **[Creating DPS and IoT Hub](02-creating-azure-resources.md)** - Azure resource setup
+3. **[X.509 and CSR Workflows](03-x509-and-csr-workflows.md)** - Certificate workflows
+4. **[Configuring Enrollment Groups](04-configuring-enrollment-groups.md)** - Connecting devices
+5. **[Keeping a Thin DPS Adapter](05-building-dps-framework.md)** - Replacing the custom provisioning protocol
+6. **[Building the Device Application](06-building-device-application.md)** - .NET implementation and ADR metadata
+7. **[What's Changed](07-whats-changed-since-previous-preview.md)** - Preview and SDK migration notes
 
 ## Why This Series?
 
 Most IoT tutorials use **symmetric keys** or **manual X.509 certificate generation**. This series shows you:
 - How to use Microsoft's **new certificate management** features
-- How to build a **custom DPS framework** to access preview APIs
+- How to use the **unified .NET device SDK** with a thin application adapter
 - How to integrate **ADR** for advanced device management
 - How to apply **production-minded** IoT patterns that carry over to trusted, CA-issued certificates
 

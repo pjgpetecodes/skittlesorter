@@ -7,7 +7,7 @@ A comprehensive series covering Azure IoT Device Provisioning Service (DPS), Azu
 This series demonstrates an IoT device sample using Azure services and preview features:
 - 🆕 **Microsoft Certificate Management** - Dynamic certificate issuance during provisioning
 - 🆕 **Azure Device Registry (ADR)** - Device identity and management layer
-- 🆕 **DPS MQTT Protocol** - Direct access to preview API features
+- 🆕 **Unified .NET device SDK** - `Microsoft.Azure.Iot.Device` 2.0.0-preview4 for provisioning and telemetry
 - 🆕 **CSR-Based Provisioning** - Devices generate keys and request certificates
 
 ## Blog Posts
@@ -17,9 +17,9 @@ This series demonstrates an IoT device sample using Azure services and preview f
 3. **[Creating Azure Resources](02-creating-azure-resources.md)** - Setting up DPS, IoT Hub, and ADR
 4. **[Understanding X.509 and CSR Workflows](03-x509-and-csr-workflows.md)** - Certificate concepts and workflows
 5. **[Configuring Enrollment Groups](04-configuring-enrollment-groups.md)** - DPS enrollment configuration
-6. **[Building the Custom DPS Framework](05-building-dps-framework.md)** - MQTT protocol implementation
+6. **[Keeping a Thin DPS Adapter](05-building-dps-framework.md)** - Replacing the historical custom provisioning protocol with the official SDK
 7. **[Building the Device Application](06-building-device-application.md)** - Complete .NET implementation
-8. **[ADR Integration and Testing](07-adr-integration-testing.md)** - Device management and troubleshooting
+8. **[What's Changed since the Previous Preview](07-whats-changed-since-previous-preview.md)** - Service and SDK migration notes
 
 ## Quick Start vs Step-by-Step
 
@@ -37,7 +37,7 @@ Follow the blog posts in order to understand every component and decision.
 
 By the end of this series, you'll have:
 - ✅ Azure infrastructure (DPS, IoT Hub, ADR)
-- ✅ Custom DPS framework with preview API support
+- ✅ Unified SDK with thin configuration, persistence and ADR ARM adapter
 - ✅ Complete .NET device application
 - ✅ Certificate-based authentication
 - ✅ Device telemetry and twin support
@@ -76,7 +76,7 @@ skittlesorter/
 ├── blog/                       # Blog post series (you are here)
 ├── docs/                       # Technical documentation
 ├── src/                        # Device application code
-├── AzureDpsFramework/          # Custom DPS framework
+├── AzureDpsFramework/          # Thin unified SDK adapter
 ├── scripts/                    # PowerShell automation scripts
 └── appsettings.json           # Configuration
 ```

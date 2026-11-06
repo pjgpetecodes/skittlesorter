@@ -11,6 +11,13 @@ This follow-on reuses the C# Skittle Sorter and local installer from the [GA Dev
 5. [Deploying through groups and jobs](05-groups-and-jobs.md)
 6. [Failures and future official SDK adoption](06-failures-and-sdk.md)
 
-The current .NET SDK feature matrix does not implement software updates via DPS. This repository demonstrates an unofficial, replaceable client against a pinned published protocol, not Microsoft's unannounced future .NET API. It is not a Microsoft-supported production agent.
+**What's changed?** The sorter now uses the unified
+`Microsoft.Azure.Iot.Device` **2.0.0-preview4** for provisioning and telemetry.
+Its custom provisioning protocol is removed, but this separate update protocol
+isn't: the SDK feature matrix still excludes software updates via DPS.
+The sorter uses MQTTnet 5; the updater retains MQTTnet 4. This repository
+demonstrates an unofficial, replaceable update client against a pinned published
+protocol, not Microsoft's unannounced future .NET update API. It is not a
+Microsoft-supported production agent.
 
 The source is isolated under `AzureSoftwareUpdatesFramework` and `tools\SkittleSorter.Updater`. See the [runbook](../../docs/Application-Updates.md) for executable boundaries and validation gates. These articles need real service/Pi evidence before publication. Markdown and adjacent local WordPress HTML stay synchronized; there are no remote post IDs or automatic pushes.

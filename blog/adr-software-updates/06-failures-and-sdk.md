@@ -26,7 +26,14 @@ When official .NET support arrives, first read its actual software-update capabi
 
 Keep the application payload and trusted local installation boundary. Replace protocol, trust/state machinery and host integration explicitly, then repeat authentication, no-update, signed offer, rollback, duplicate and report-replay proofs. Avoid running two update clients simultaneously as a “migration test.”
 
-The older `AzureDpsFramework` CSR issuance implementation remains a separate concern. This series does not silently upgrade that protocol or declare unfinished certificate renewal complete.
+**What's changed in provisioning?** The sorter now pins
+`Microsoft.Azure.Iot.Device` **2.0.0-preview4** and uses its unified
+`ConnectionClient`/`TelemetryClient`. `AzureDpsFramework` retains configuration,
+durable certificate/CSR persistence, ADR ARM helpers and a thin session adapter;
+its custom provisioning protocol is removed. The SDK still doesn't implement DPS
+software updates, so `AzureSoftwareUpdatesFramework` keeps its own update protocol
+and MQTTnet 4 while the sorter uses MQTTnet 5. Optional SDK renewal APIs do not
+mean automatic certificate renewal has been implemented in the app.
 
 Before publishing either series, replace outstanding validation notes with real, redacted observations: target OS/architecture, exact agent/client versions, actual service/API availability, successful update, rejected tampering, healthy rollback and restart evidence. Until then these are implementation-backed drafts, not a production deployment guide.
 

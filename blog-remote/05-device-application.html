@@ -36,60 +36,87 @@ billed at standard rates.</p>
 authenticates with a separate onboarding credential. The certificate policy
 belongs to an ADR intermediate CA and is selected on the DPS enrollment. ADR
 synchronizes CA certificates with linked IoT Hubs and manages CA lifecycle and
-rotation operations. The renewal code later in this article describes this
-repository's sample implementation, not the complete current Azure
-certificate-management workflow. See Microsoft's <a href="https://learn.microsoft.com/en-gb/azure/iot/device-registry/get-started-azure-device-registry">ADR connected-services
-guide</a>, <a href="https://learn.microsoft.com/en-gb/azure/iot/concept-managed-ca-hierarchy">CA hierarchy</a>,
+rotation operations. SDK renewal APIs are available, but this application does
+not implement automatic operational-certificate renewal. See Microsoft's <a href="https://learn.microsoft.com/en-gb/azure/iot/device-registry/get-started-azure-device-registry">ADR connected-services
+guide</a>,
+<a href="https://learn.microsoft.com/en-gb/azure/iot/concept-managed-ca-hierarchy">CA hierarchy</a>,
 <a href="https://learn.microsoft.com/en-gb/azure/iot/how-to-create-policy?tabs=cli">managed CA setup</a>,
 and <a href="https://learn.microsoft.com/en-us/azure/iot/how-to-create-edit-certificate-policy?tabs=cli">certificate-policy enrollment
-guide</a> before creating or changing Azure resources.</p>
+guide</a>
+before creating or changing Azure resources.</p>
 <!-- /wp:paragraph -->
 
 <!-- wp:heading {"level":3} -->
-<h3 class="wp-block-heading">What's new in this edition?</h3>
+<h3 class="wp-block-heading">What's changed in this edition?</h3>
 <!-- /wp:heading -->
 
 <!-- wp:paragraph -->
-<p>This post still follows the custom MQTT application in this repository; it isn't a general guide to building an ADR client. I've updated the setup and cleanup notes to match Part 3, and called out where the Azure-managed certificate lifecycle ends and the sample's own code begins. See the <a href="https://www.petecodes.co.uk/iot-hub-with-adr-and-certificate-management-part-1">Introduction</a> for the series-wide changes.</p>
+<p>I've replaced the custom C# DPS provisioning protocol and the legacy
+<code>Microsoft.Azure.Devices.Client</code> with Microsoft's unified
+<a href="https://www.nuget.org/packages/Microsoft.Azure.Iot.Device/2.0.0-preview4"><code>Microsoft.Azure.Iot.Device</code> <strong>2.0.0-preview4</strong></a>.
+One <code>ConnectionClient</code> handles provisioning and the Hub connection;
+<code>TelemetryClient</code> shares it for our Skittle readings. <code>AzureDpsFramework</code> stays
+as a thin configuration, certificate-persistence, ADR ARM and session adapter.</p>
 <!-- /wp:paragraph -->
 
-<!-- wp:heading {"textColor":"#f6f6f4"} -->
-<h2 class="wp-block-heading has-f-6-f-6-f-4-color has-text-color">Contents:</h2>
+<!-- wp:paragraph -->
+<p>Both standard symmetric-key/X.509 profiles and both CSR onboarding flows remain.
+.NET 10, our existing Hub and Azure resources are unchanged. The SDK discovers
+the assigned endpoint/profile through DPS, not a hostname constructed from the
+Hub name. The sorter
+now uses MQTTnet 5; the separate software-updates client stays on MQTTnet 4 and
+its own DPS <strong>update</strong> protocol. That workflow isn't implemented by this SDK.</p>
+<!-- /wp:paragraph -->
+
+<!-- wp:paragraph -->
+<p>The new bounded <code>--cloud-self-test --config PATH</code> provisions, connects, sends
+representative telemetry and disconnects without physical hardware. SDK retry
+and reprovisioning are available, but automatic certificate renewal isn't
+implemented. Microsoft's <a href="https://github.com/Azure/azure-iot-sdk/blob/main/dotnet/README.md">SDK design and feature matrix</a>
+and <a href="https://github.com/Azure/azure-iot-sdk/tree/releases/public-preview/dotnet/samples/Unified">unified samples</a>
+explain the new API. This is still a preview. See the
+<a href="https://www.petecodes.co.uk/iot-hub-with-adr-and-certificate-management-part-1">Introduction</a>
+for the series-wide changes.</p>
+<!-- /wp:paragraph -->
+
+<!-- wp:heading {"level":3} -->
+<h3 class="wp-block-heading">Contents</h3>
 <!-- /wp:heading -->
 
-<!-- wp:list {"ordered":true,"textColor":"#f6f6f4"} -->
-<ol class="wp-block-list has-f-6-f-6-f-4-color has-text-color"><!-- wp:list-item -->
-<li><a href="https://www.petecodes.co.uk/iot-hub-with-adr-and-certificate-management-part-1" target="_blank" rel="noreferrer noopener">Introduction</a></li>
+<!-- wp:list {"ordered":true} -->
+<ol class="wp-block-list"><!-- wp:list-item -->
+<li><a href="https://www.petecodes.co.uk/iot-hub-with-adr-and-certificate-management-part-1">Introduction</a></li>
 <!-- /wp:list-item -->
-
 <!-- wp:list-item -->
-<li><a href="https://www.petecodes.co.uk/iot-hub-with-adr-and-certificate-management-part-2" target="_blank" rel="noreferrer noopener">A DPS Primer</a></li>
+<li><a href="https://www.petecodes.co.uk/iot-hub-with-adr-and-certificate-management-part-2">A DPS Primer</a></li>
 <!-- /wp:list-item -->
-
 <!-- wp:list-item -->
-<li><a href="https://www.petecodes.co.uk/iot-hub-with-adr-and-certificate-management-part-3" target="_blank" rel="noreferrer noopener">Creating DPS, IoT Hub and ADR Instances</a></li>
+<li><a href="https://www.petecodes.co.uk/iot-hub-with-adr-and-certificate-management-part-3">Creating DPS, IoT Hub and ADR Instances</a></li>
 <!-- /wp:list-item -->
-
 <!-- wp:list-item -->
-<li><a href="https://www.petecodes.co.uk/iot-hub-with-adr-and-certificate-management-part-4" target="_blank" rel="noreferrer noopener">Understanding X.509 and CSR Workflows</a></li>
+<li><a href="https://www.petecodes.co.uk/iot-hub-with-adr-and-certificate-management-part-4">Understanding X.509 and CSR Workflows</a></li>
 <!-- /wp:list-item -->
-
 <!-- wp:list-item -->
-<li><a href="https://www.petecodes.co.uk/iot-hub-with-adr-and-certificate-management-part-5" target="_blank" rel="noreferrer noopener">The Device Application</a> (This Post)</li>
-<!-- /wp:list-item --></ol>
+<li><a href="https://www.petecodes.co.uk/iot-hub-with-adr-and-certificate-management-part-5">The Device Application (this post)</a></li>
+<!-- /wp:list-item -->
+</ol>
 <!-- /wp:list -->
 
 <!-- wp:heading {"level":3} -->
-<h3 class="wp-block-heading">Why This Sample Uses a Custom DPS Framework</h3>
+<h3 class="wp-block-heading">Why Keep a DPS Adapter?</h3>
 <!-- /wp:heading -->
 
 <!-- wp:quote -->
 <blockquote class="wp-block-quote"><!-- wp:paragraph -->
-<p>This repository's sample uses a custom MQTT-based DPS framework for its CSR-based certificate issuance flow. Check the current Microsoft Learn documentation for service requirements and supported client workflows.</p>
+<p>I no longer need to maintain security providers, SAS tokens, registration
+polling or a DPS MQTT transport in C#. The official unified SDK handles those.
+Our adapter still keeps configuration, CSR/key and issued-chain files durable,
+and ADR ARM metadata operations out of the sorting loop.</p>
 <!-- /wp:paragraph -->
-
-<!-- wp:paragraph {"className":"is-style-warning","fontSize":"medium"} -->
-<p class="is-style-warning has-medium-font-size"><strong><em>Note: The cleanup commands in older versions of this post use a previous resource setup. For the refreshed deployment, follow the resource review and cleanup guidance in the Part 3 setup README.</em></strong></p>
+<!-- wp:paragraph -->
+<p><strong>Note:</strong> The cleanup commands in older versions of this post use a previous
+resource setup. For the refreshed deployment, follow the resource review and
+cleanup guidance in the Part 3 setup README.</p>
 <!-- /wp:paragraph --></blockquote>
 <!-- /wp:quote -->
 
@@ -114,7 +141,7 @@ guide</a> before creating or changing Azure resources.</p>
                   ▼             ▼
           ┌─────────────────────────┐
           │  Azure DPS Framework    │
-          │  (Custom MQTT + CSR)    │
+          │  (Thin SDK adapter)     │
           └──────────┬──────────────┘
                      │
                      ▼
@@ -124,6 +151,11 @@ guide</a> before creating or changing Azure resources.</p>
 
 </code></pre>
 <!-- /wp:code -->
+
+<!-- wp:paragraph -->
+<p>The adapter opens the SDK <code>ConnectionClient</code>; telemetry uses <code>TelemetryClient</code>
+on the same connection. No second custom provisioning transport sits underneath.</p>
+<!-- /wp:paragraph -->
 
 <!-- wp:heading {"level":3} -->
 <h3 class="wp-block-heading">Getting Started</h3>
@@ -206,16 +238,15 @@ configuration.</p>
         &quot;Red&quot;,
         &quot;Green&quot;
       ]
-    },
-    ...
-  }
+    }
+  },
   &quot;IoTHub&quot;: {
     &quot;DpsProvisioning&quot;: {
       &quot;ProvisioningHost&quot;: &quot;global.azure-devices-provisioning.net&quot;,
       &quot;IdScope&quot;: &quot;YOUR_DPS_ID_SCOPE&quot;,
       &quot;RegistrationId&quot;: &quot;YOUR_DEVICE_REGISTRATION_ID&quot;,
-      &quot;AttestationMethod&quot;: &quot;SymmetricKey&quot;,
-      &quot;EnrollmentGroupKeyBase64&quot;: &quot;YOUR_ENROLLMENT_GROUP_PRIMARY_KEY&quot;,
+      &quot;AttestationMethod&quot;: &quot;X509&quot;,
+      &quot;RequestOperationalCertificate&quot;: true,
       &quot;AttestationCertPath&quot;: &quot;scripts/certs/device/{RegistrationId}-device.pem&quot;,
       &quot;AttestationKeyPath&quot;: &quot;scripts/certs/device/{RegistrationId}-device.key&quot;,
       &quot;AttestationCertChainPath&quot;: &quot;scripts/certs/ca/{RegistrationId}-chain.pem&quot;,
@@ -228,7 +259,7 @@ configuration.</p>
       &quot;MqttPort&quot;: 8883,
       &quot;EnableDebugLogging&quot;: true
     },
-    &quot;DeviceId&quot;: &quot;my-device&quot;,
+    &quot;DeviceId&quot;: &quot;{RegistrationId}&quot;,
     &quot;SendTelemetry&quot;: true,
     &quot;TelemetryIntervalMs&quot;: 5000
   },
@@ -254,13 +285,30 @@ configuration.</p>
 <li><strong>DeviceId</strong>: Must match your registration ID</li>
 <!-- /wp:list-item -->
 <!-- wp:list-item -->
-<li><strong>IssuedCertPath</strong>: Where the operational certificate from DPS will be saved</li>
+<li><strong>IssuedCertFilePath</strong>: Where the operational certificate chain from DPS will be saved</li>
 <!-- /wp:list-item -->
 <!-- wp:list-item -->
-<li><strong>Mock</strong>: Enable hardware simulation for testing without physical devices</li>
+<li><strong>Hardware.MockMode</strong>: Enable hardware simulation for testing without physical devices</li>
 <!-- /wp:list-item -->
 </ul>
 <!-- /wp:list -->
+
+<!-- wp:paragraph -->
+<p>This is the X.509 + CSR profile from Part 4. For symmetric-key onboarding,
+select <code>SymmetricKey</code> and supply <code>DeviceKeyBase64</code> (prefer a device-specific
+key over a group master key). Set <code>RequestOperationalCertificate</code> to <code>false</code>
+for standard symmetric-key or X.509 provisioning without issuance; the default
+stays <code>true</code> for compatibility with the earlier CSR examples.</p>
+<!-- /wp:paragraph -->
+
+<!-- wp:paragraph -->
+<p>Keep the CSR, matching key and issued chain across restarts. Paths retain the
+existing <a href="https://github.com/pjgpetecodes/skittlesorter/blob/main/docs/Configuration.md">configuration resolution rules</a>;
+don't package those files with an
+application release. The Part 3 setup script produces unified-compatible
+configuration with symmetric-key onboarding and CSR issuance enabled; select
+X.509 explicitly for this Part 4 profile.</p>
+<!-- /wp:paragraph -->
 
 <!-- wp:heading {"level":4} -->
 <h4 class="wp-block-heading">Step 4: Run the Application</h4>
@@ -271,13 +319,12 @@ configuration.</p>
 <!-- /wp:paragraph -->
 
 <!-- wp:code {"className":"language-powershell"} -->
-<pre class="wp-block-code language-powershell"><code>cd ..
-dotnet run
+<pre class="wp-block-code language-powershell"><code>dotnet run --project .\skittlesorter.csproj -- --config .\appsettings.json
 </code></pre>
 <!-- /wp:code -->
 
 <!-- wp:paragraph -->
-<p><strong>Expected output:</strong></p>
+<p><strong>Illustrative CSR-profile output</strong> (SDK diagnostics differ from the old custom logs):</p>
 <!-- /wp:paragraph -->
 
 <!-- wp:code {"className":"language-plaintext"} -->
@@ -300,7 +347,7 @@ Certificate Subject: CN=my-device
 Issuer: CN=Microsoft-Managed-ICA-...
 Valid from: 2026-02-07 10:00:00Z
 Valid until: 2026-03-09 10:00:00Z
-✓ Certificate saved to: ./certs/issued/device.pfx
+✓ Certificate chain saved to the configured IssuedCertFilePath
 
 === Connecting to IoT Hub ===
 Connecting to: my-iothub-001.azure-devices.net
@@ -343,6 +390,43 @@ Detected: green (R:50 G:255 B:50 C:1180)
 </ol>
 <!-- /wp:list -->
 
+<!-- wp:heading {"level":4} -->
+<h4 class="wp-block-heading">A Bounded Cloud Check Before Moving Anything</h4>
+<!-- /wp:heading -->
+
+<!-- wp:paragraph -->
+<p>I like to prove the connection before involving the motors:</p>
+<!-- /wp:paragraph -->
+
+<!-- wp:code {"className":"language-powershell"} -->
+<pre class="wp-block-code language-powershell"><code># Offline configuration check
+dotnet run --project .\skittlesorter.csproj -- --self-test --config .\appsettings.json
+
+# Real provisioning + Hub + representative telemetry, then disconnect
+dotnet run --project .\skittlesorter.csproj -- --cloud-self-test --config .\appsettings.json
+</code></pre>
+<!-- /wp:code -->
+
+<!-- wp:paragraph -->
+<p>The cloud check has a two-minute bound and waits for one telemetry acknowledgement;
+it doesn't initialize physical sensors or servos. It does contact Azure, so use
+the intended subscription and identity. The helper
+<code>scripts\iot-hub-device-registry\test-unified.ps1 -AppConfigPath PATH</code>
+doesn't reset by default. Only use explicit <code>-ResetDevice</code> with matching resource
+names to reset that exact device/registration; it never deletes a resource
+group, enrollment group or CA. See the <a href="https://github.com/pjgpetecodes/skittlesorter/blob/main/scripts/iot-hub-device-registry/README.md#bounded-unified-sdk-cloud-test">cloud-test runbook</a>.</p>
+<!-- /wp:paragraph -->
+
+<!-- wp:paragraph -->
+<p>Reset also needs operator <strong>Hub data-plane registry read/delete</strong> permissions,
+such as scoped IoT Hub Registry Contributor, not just resource-management access.
+On a Hub with <code>DisableLocalAuth=true</code>, use Entra CLI authentication
+(<code>--auth-type login</code>); SAS is disabled. The helper checks Hub registry access
+before destructive work and stops if permission is missing. A successful
+device connection doesn't grant the operator registry access, so don't change
+RBAC unilaterally to force the reset through.</p>
+<!-- /wp:paragraph -->
+
 <!-- wp:heading {"level":3} -->
 <h3 class="wp-block-heading">Verify in the Portal</h3>
 <!-- /wp:heading -->
@@ -351,17 +435,17 @@ Detected: green (R:50 G:255 B:50 C:1180)
 <p>You should now be able to navigate to your resource group in the Azure Portal and see your device happily registered and showing as a first class citizen;</p>
 <!-- /wp:paragraph -->
 
-<!-- wp:image {"id":5091,"sizeSlug":"full","linkDestination":"media"} -->
-<figure class="wp-block-image size-full"><a href="https://www.petecodes.co.uk/wp-content/uploads/2026/02/image-1.png"><img src="https://www.petecodes.co.uk/wp-content/uploads/2026/02/image-1.png" alt="" class="wp-image-5091"/></a></figure>
-<!-- /wp:image -->
+<!-- wp:paragraph -->
+<p><a href="https://www.petecodes.co.uk/wp-content/uploads/2026/02/image-1.png"><img src="https://www.petecodes.co.uk/wp-content/uploads/2026/02/image-1.png" alt="ADR device resource in the Azure portal"></a></p>
+<!-- /wp:paragraph -->
 
 <!-- wp:paragraph -->
 <p>If you Navigate to your IoT Hub, and then to Device Management, and Devices, you should see your traditional IoT Hub Device present too;</p>
 <!-- /wp:paragraph -->
 
-<!-- wp:image {"id":5092,"sizeSlug":"large","linkDestination":"media"} -->
-<figure class="wp-block-image size-large"><a href="https://www.petecodes.co.uk/wp-content/uploads/2026/02/image-2.png"><img src="https://www.petecodes.co.uk/wp-content/uploads/2026/02/image-2-1024x192.png" alt="" class="wp-image-5092"/></a></figure>
-<!-- /wp:image -->
+<!-- wp:paragraph -->
+<p><a href="https://www.petecodes.co.uk/wp-content/uploads/2026/02/image-2.png"><img src="https://www.petecodes.co.uk/wp-content/uploads/2026/02/image-2-1024x192.png" alt="IoT Hub device management view"></a></p>
+<!-- /wp:paragraph -->
 
 <!-- wp:heading {"level":3} -->
 <h3 class="wp-block-heading">Setting Up More Devices</h3>
@@ -422,9 +506,9 @@ Detected: green (R:50 G:255 B:50 C:1180)
 <p>Finally, you can start the application, and you should have a newly provisioning device in your DPS, IoT Hub and in ADR along with the portal arm resource.</p>
 <!-- /wp:paragraph -->
 
-<!-- wp:image {"id":5090,"sizeSlug":"full","linkDestination":"media"} -->
-<figure class="wp-block-image size-full"><a href="https://www.petecodes.co.uk/wp-content/uploads/2026/02/image.png"><img src="https://www.petecodes.co.uk/wp-content/uploads/2026/02/image.png" alt="" class="wp-image-5090"/></a></figure>
-<!-- /wp:image -->
+<!-- wp:paragraph -->
+<p><a href="https://www.petecodes.co.uk/wp-content/uploads/2026/02/image.png"><img src="https://www.petecodes.co.uk/wp-content/uploads/2026/02/image.png" alt="Additional device registered in DPS, IoT Hub, and ADR"></a></p>
+<!-- /wp:paragraph -->
 
 <!-- wp:heading {"level":3} -->
 <h3 class="wp-block-heading">Troubleshooting Common Issues</h3>
@@ -564,14 +648,10 @@ Test-Path &quot;./scripts/certs/device/&lt;YOUR_DEVICE_REGISTRATION_ID&gt;-devic
 <!-- /wp:paragraph -->
 
 <!-- wp:paragraph -->
-<p><strong>Delete and re-provision:</strong></p>
+<p>Check the selected profile, saved chain, matching CSR key and assigned Hub first.
+Don't delete a shared certificate directory to fix one device. Use the reviewed
+exact-device cloud-test reset only when you intend to reprovision that identity.</p>
 <!-- /wp:paragraph -->
-
-<!-- wp:code {"className":"language-powershell"} -->
-<pre class="wp-block-code language-powershell"><code>Remove-Item &quot;./certs/issued/device.pfx&quot; -ErrorAction SilentlyContinue
-dotnet run
-</code></pre>
-<!-- /wp:code -->
 
 <!-- wp:paragraph -->
 <p><strong>Problem: Missing <code>appsettings.json</code> configuration</strong></p>
@@ -591,13 +671,13 @@ dotnet run
 <li>Ensure <code>appsettings.json</code> exists in project root</li>
 <!-- /wp:list-item -->
 <!-- wp:list-item -->
-<li>Copy from <code>appsettings.x509.json</code> template if needed:</li>
+<li>Copy from the safe X.509 template if needed:</li>
 <!-- /wp:list-item -->
 </ul>
 <!-- /wp:list -->
 
 <!-- wp:code {"className":"language-powershell"} -->
-<pre class="wp-block-code language-powershell"><code>Copy-Item &quot;appsettings.x509.json&quot; &quot;appsettings.json&quot;
+<pre class="wp-block-code language-powershell"><code>Copy-Item &quot;.\src\configuration\appsettings.x509.template.json&quot; &quot;.\appsettings.json&quot;
 </code></pre>
 <!-- /wp:code -->
 
@@ -625,28 +705,25 @@ dotnet run
 
 <!-- wp:list -->
 <ul class="wp-block-list"><!-- wp:list-item -->
-<li>Delete expired certificate and re-provision</li>
+<li>Check the certificate policy, persisted chain and matching private key.</li>
 <!-- /wp:list-item -->
 <!-- wp:list-item -->
 <li>Operational certificate validity is set by the ADR certificate policy.</li>
 <!-- /wp:list-item -->
 <!-- wp:list-item -->
-<li>The sample's renewal behavior is application code, not a service-wide
-seven-day renewal requirement. See the <a href="https://learn.microsoft.com/en-us/azure/iot/how-to-create-edit-certificate-policy?tabs=cli">current certificate-policy
-guide</a> and the service's <a href="https://learn.microsoft.com/en-us/azure/iot/iot-certificate-management-overview">renewal documentation</a>.</li>
+<li>There is no automatic renewal scheduler in this application, and no
+service-wide seven-day renewal requirement. See the <a href="https://learn.microsoft.com/en-us/azure/iot/how-to-create-edit-certificate-policy?tabs=cli">current certificate-policy
+guide</a>
+and the service's <a href="https://learn.microsoft.com/en-us/azure/iot/iot-certificate-management-overview">renewal documentation</a>.</li>
 <!-- /wp:list-item -->
 </ul>
 <!-- /wp:list -->
 
 <!-- wp:paragraph -->
-<p><strong>Force renewal:</strong></p>
+<p>The SDK offers optional IoT Hub renewal APIs without DPS reprovisioning.
+Using those safely needs a deliberate lifecycle implementation; deleting a
+certificate isn't the same thing. Preserve keys and chains while diagnosing.</p>
 <!-- /wp:paragraph -->
-
-<!-- wp:code {"className":"language-powershell"} -->
-<pre class="wp-block-code language-powershell"><code>Remove-Item &quot;./certs/issued/device.pfx&quot; -ErrorAction SilentlyContinue
-dotnet run
-</code></pre>
-<!-- /wp:code -->
 
 <!-- wp:paragraph -->
 <p><strong>Still having issues?</strong></p>
@@ -708,14 +785,10 @@ dotnet run
 │       ├── SkittleSorterService.cs     # Main business logic
 │       ├── TCS3472x.cs                 # Color sensor driver
 │       └── ServoController.cs          # Servo control
-├── AzureDpsFramework/                  # Custom DPS framework
-│   ├── ProvisioningDeviceClient.cs
-│   ├── DpsConfiguration.cs
-│   ├── SecurityProvider*.cs
-│   ├── Transport/
-│   │   └── ProvisioningTransportHandlerMqtt.cs
-│   └── Adr/
-│       └── AdrDeviceRegistryClient.cs
+├── AzureDpsFramework/                  # Thin SDK/session adapter
+│   ├── DpsConfiguration.cs             # Existing profile configuration
+│   ├── CertificateManager.cs           # CSR, private key and chain persistence
+│   └── Adr/                           # ADR ARM metadata operations
 └── appsettings.json                    # Device configuration
 </code></pre>
 <!-- /wp:code -->
@@ -725,428 +798,103 @@ dotnet run
 <!-- /wp:heading -->
 
 <!-- wp:paragraph -->
-<p>The main program orchestrates the device lifecycle:</p>
+<p>The main program still loads configuration, initializes mock or real hardware
+for a normal run, opens the cloud session and runs pick → detect → sort → drop.
+The cloud-self-test takes a separate bounded path and never initializes physical
+hardware. Shutdown disconnects the SDK session gracefully.</p>
 <!-- /wp:paragraph -->
-
-<!-- wp:code {"className":"language-csharp"} -->
-<pre class="wp-block-code language-csharp"><code>static async Task Main(string&#91;] args)
-{
-    // 1. Load configuration
-    var iotConfig = ConfigurationLoader.LoadIoTHubConfiguration();
-    var mockConfig = ConfigurationLoader.LoadMockConfiguration();
-    
-    // 2. Initialize hardware (mocked or real)
-    using var colorSensor = mockConfig.EnableMockColorSensor 
-        ? new TCS3472x(true, mockConfig.MockColorSequence)
-        : new TCS3472x();
-    
-    var servo = new ServoController(mockConfig.EnableMockServos);
-    
-    // 3. Initialize DPS and connect to IoT Hub
-    DeviceClient? deviceClient = DpsInitializationService.Initialize(iotConfig);
-    
-    // 4. Create telemetry service
-    TelemetryService? telemetryService = null;
-    if (deviceClient != null)
-    {
-        telemetryService = new TelemetryService(deviceClient, iotConfig.DeviceId);
-    }
-    
-    // 5. Main sorting loop
-    while (true)
-    {
-        // Pick, scan, sort, and report telemetry
-        servo.MoveToPickPosition();
-        var (clear, red, green, blue) = colorSensor.ReadColor();
-        string color = colorSensor.ClassifySkittleColor(red, green, blue, clear);
-        
-        if (telemetryService != null)
-        {
-            await telemetryService.SendSkittleColorTelemetryAsync(color);
-        }
-        
-        servo.MoveToColorChute(color);
-    }
-}
-</code></pre>
-<!-- /wp:code -->
-
-<!-- wp:paragraph -->
-<p><strong>Key responsibilities:</strong></p>
-<!-- /wp:paragraph -->
-
-<!-- wp:list {"ordered":true} -->
-<ol class="wp-block-list"><!-- wp:list-item -->
-<li><strong>Configuration loading</strong> - Reads <code>appsettings.json</code> for DPS, IoT Hub, and hardware settings</li>
-<!-- /wp:list-item -->
-<!-- wp:list-item -->
-<li><strong>Hardware initialization</strong> - Sets up color sensor and servo controllers (real or mocked)</li>
-<!-- /wp:list-item -->
-<!-- wp:list-item -->
-<li><strong>DPS provisioning</strong> - Calls our custom framework to get operational certificate</li>
-<!-- /wp:list-item -->
-<!-- wp:list-item -->
-<li><strong>IoT Hub connection</strong> - Establishes MQTT connection using X.509 certificate</li>
-<!-- /wp:list-item -->
-<!-- wp:list-item -->
-<li><strong>Business logic</strong> - Runs the main sorting loop with telemetry reporting</li>
-<!-- /wp:list-item -->
-</ol>
-<!-- /wp:list -->
 
 <!-- wp:heading {"level":4} -->
 <h4 class="wp-block-heading">DPS Initialization Service (src/comms/DpsInitializationService.cs)</h4>
 <!-- /wp:heading -->
 
 <!-- wp:paragraph -->
-<p>This service handles the complete provisioning workflow:</p>
+<p>This service selects the configured attestation/issuance profile and delegates
+session creation to <code>AzureDpsFramework</code>. <code>ConnectionClient</code> handles the actual
+DPS registration, credentials and Hub connection.</p>
 <!-- /wp:paragraph -->
 
 <!-- wp:paragraph -->
-<p><strong>Phase 1: Check for existing certificate</strong></p>
+<p>For CSR profiles, the adapter loads or creates the durable CSR/key pair,
+supplies it to the SDK, then persists the returned operational chain with the
+matching key. The <code>.connection.json</code> assignment sidecar alongside the issued PEM
+lets restarts restore the operational certificate and assigned Hub. A required-
+certificate wrapper rejects a missing issued chain before Hub authentication.
+For standard profiles, the adapter doesn't request a new certificate.
+The onboarding certificate and operational certificate remain different
+credentials; moving to an SDK hasn't merged their roles.</p>
 <!-- /wp:paragraph -->
-
-<!-- wp:code {"className":"language-csharp"} -->
-<pre class="wp-block-code language-csharp"><code>if (File.Exists(dpsCfg.IssuedCertPath))
-{
-    Console.WriteLine(&quot;Device already provisioned. Using existing certificate.&quot;);
-    return ConnectToIoTHub(dpsCfg, iotConfig);
-}
-</code></pre>
-<!-- /wp:code -->
-
-<!-- wp:paragraph -->
-<p><strong>Phase 2: Provision device with bootstrap credentials</strong></p>
-<!-- /wp:paragraph -->
-
-<!-- wp:code {"className":"language-csharp"} -->
-<pre class="wp-block-code language-csharp"><code>// Load bootstrap certificate
-var bootstrapCert = new X509Certificate2(
-    dpsCfg.AttestationCertPath, 
-    dpsCfg.AttestationCertPassword
-);
-
-// Generate new key for operational certificate
-RSA rsa = RSA.Create(2048);
-
-// Create security provider
-var security = new SecurityProviderX509CsrWithCert(
-    dpsCfg.RegistrationId,
-    bootstrapCert,
-    rsa
-);
-
-// Create provisioning client
-var client = ProvisioningDeviceClient.Create(
-    dpsCfg.ProvisioningHost,
-    dpsCfg.IdScope,
-    security,
-    new ProvisioningTransportHandlerMqtt()
-);
-
-// Register device
-var result = client.RegisterAsync().GetAwaiter().GetResult();
-</code></pre>
-<!-- /wp:code -->
-
-<!-- wp:paragraph -->
-<p><strong>Phase 3: Save issued certificate</strong></p>
-<!-- /wp:paragraph -->
-
-<!-- wp:code {"className":"language-csharp"} -->
-<pre class="wp-block-code language-csharp"><code>// Parse issued certificate from DPS response
-byte&#91;] certBytes = Convert.FromBase64String(result.IssuedCertificateChain&#91;0]);
-var certificate = new X509Certificate2(certBytes);
-
-// Combine with private key
-var certWithKey = certificate.CopyWithPrivateKey(rsa);
-
-// Export to PFX for storage
-byte&#91;] pfx = certWithKey.Export(X509ContentType.Pfx, dpsCfg.IssuedCertPassword);
-File.WriteAllBytes(dpsCfg.IssuedCertPath, pfx);
-</code></pre>
-<!-- /wp:code -->
-
-<!-- wp:paragraph -->
-<p><strong>Phase 4: Connect to IoT Hub</strong></p>
-<!-- /wp:paragraph -->
-
-<!-- wp:code {"className":"language-csharp"} -->
-<pre class="wp-block-code language-csharp"><code>var certificate = new X509Certificate2(
-    dpsCfg.IssuedCertPath, 
-    dpsCfg.IssuedCertPassword
-);
-
-var auth = new DeviceAuthenticationWithX509Certificate(
-    iotConfig.DeviceId, 
-    certificate
-);
-
-var deviceClient = DeviceClient.Create(
-    assignedHub, 
-    auth, 
-    TransportType.Mqtt
-);
-</code></pre>
-<!-- /wp:code -->
 
 <!-- wp:heading {"level":4} -->
-<h4 class="wp-block-heading">Custom DPS Framework (AzureDpsFramework/)</h4>
+<h4 class="wp-block-heading">Thin AzureDpsFramework Adapter (AzureDpsFramework/)</h4>
 <!-- /wp:heading -->
 
 <!-- wp:paragraph -->
-<p><strong>Why I built it:</strong></p>
+<p>I've kept the pieces specific to this application: configuration, device-key
+derivation where needed, certificate files, optional ADR ARM metadata helpers
+and the unified-session adapter. The old security-provider, transport,
+registration and SAS-token protocol classes are removed, not wrapped.</p>
 <!-- /wp:paragraph -->
 
 <!-- wp:paragraph -->
-<p>This repository's custom DPS framework implements the <code>2025-07-01-preview</code>
-CSR workflow used by the sample application. The service features demonstrated
-include:</p>
-<!-- /wp:paragraph -->
-
-<!-- wp:list -->
-<ul class="wp-block-list"><!-- wp:list-item -->
-<li>Certificate Signing Request (CSR) submission during registration</li>
-<!-- /wp:list-item -->
-<!-- wp:list-item -->
-<li>Receiving issued certificates in the registration response</li>
-<!-- /wp:list-item -->
-<!-- wp:list-item -->
-<li>Microsoft-managed PKI via Azure Device Registry</li>
-<!-- /wp:list-item -->
-</ul>
-<!-- /wp:list -->
-
-<!-- wp:paragraph -->
-<p><strong>What it does:</strong></p>
+<p>The <code>UnifiedDeviceSession</code> adapter delegates MQTT to the SDK. Its coordinator
+holds the updater's shared lock only during DPS sessions, including reprovisioning,
+not for the lifetime of the Hub telemetry connection.</p>
 <!-- /wp:paragraph -->
 
 <!-- wp:paragraph -->
-<p>My custom framework implements the preview API using raw MQTT communication:</p>
+<p>For the SDK API itself, follow the <a href="https://github.com/Azure/azure-iot-sdk/tree/releases/public-preview/dotnet/samples/Unified">official unified samples</a>.
+For our file/configuration boundary, read the
+<a href="https://github.com/pjgpetecodes/skittlesorter/blob/main/AzureDpsFramework/README.md">adapter README</a>.</p>
 <!-- /wp:paragraph -->
 
 <!-- wp:paragraph -->
-<p><strong>1. Security Providers</strong> (SecurityProvider*.cs)</p>
+<p>The smaller boundary looks like this (with a loaded <code>DpsConfiguration</code> and
+cancellation token):</p>
 <!-- /wp:paragraph -->
 
 <!-- wp:code {"className":"language-csharp"} -->
-<pre class="wp-block-code language-csharp"><code>// SecurityProviderX509CsrWithCert.cs
-public class SecurityProviderX509CsrWithCert : SecurityProvider
+<pre class="wp-block-code language-csharp"><code>using var session = UnifiedDeviceSession.Create(dpsConfiguration);
+try
 {
-    private readonly X509Certificate2 _bootstrapCertificate;
-    private readonly RSA _operationalKey;
-    
-    public SecurityProviderX509CsrWithCert(
-        string registrationId,
-        X509Certificate2 bootstrapCert,
-        RSA operationalKey)
-    {
-        _bootstrapCertificate = bootstrapCert;
-        _operationalKey = operationalKey;
-    }
-    
-    public string GenerateCsr()
-    {
-        // Create Certificate Signing Request
-        var request = new CertificateRequest(
-            $&quot;CN={RegistrationId}&quot;,
-            _operationalKey,
-            HashAlgorithmName.SHA256,
-            RSASignaturePadding.Pkcs1
-        );
-        
-        return Convert.ToBase64String(request.CreateSigningRequest());
-    }
+    await session.ConnectAsync(cancellationToken);
+    // TelemetryService receives session.Telemetry, the SDK TelemetryClient.
+}
+finally
+{
+    await session.DisconnectAsync();
 }
 </code></pre>
 <!-- /wp:code -->
 
 <!-- wp:paragraph -->
-<p>This generates a CSR using the new operational key pair, not the bootstrap certificate's key.</p>
+<p><code>session.Connection</code> is the SDK <code>ConnectionClient</code>; <code>session.Telemetry</code> shares
+that connection. There's no legacy <code>DeviceClient</code> or custom register/poll loop.</p>
 <!-- /wp:paragraph -->
-
-<!-- wp:paragraph -->
-<p><strong>2. MQTT Transport Handler</strong> (ProvisioningTransportHandlerMqtt.cs)</p>
-<!-- /wp:paragraph -->
-
-<!-- wp:code {"className":"language-csharp"} -->
-<pre class="wp-block-code language-csharp"><code>public async Task&lt;DeviceRegistrationResult&gt; RegisterAsync(
-    string idScope,
-    SecurityProvider security)
-{
-    // Connect to DPS with bootstrap credentials
-    var mqttClient = await ConnectAsync(security);
-    
-    // Subscribe to response topics
-    await mqttClient.SubscribeAsync(&quot;$dps/registrations/res/#&quot;);
-    
-    // Build registration payload with CSR
-    var payload = new
-    {
-        registrationId = security.RegistrationId,
-        certificateSigningRequest = security.GenerateCsr()
-    };
-    
-    // Publish registration request
-    await mqttClient.PublishAsync(
-        $&quot;$dps/registrations/PUT/iotdps-register/?$rid={operationId}&amp;api-version=2025-07-01-preview&quot;,
-        JsonSerializer.Serialize(payload)
-    );
-    
-    // Wait for response
-    var response = await WaitForResponseAsync(mqttClient, operationId);
-    
-    // Parse issued certificate from response
-    return new DeviceRegistrationResult
-    {
-        AssignedHub = response.AssignedHub,
-        DeviceId = response.DeviceId,
-        IssuedCertificateChain = response.IssuedCertificateChain
-    };
-}
-</code></pre>
-<!-- /wp:code -->
-
-<!-- wp:paragraph -->
-<p><strong>Key features:</strong></p>
-<!-- /wp:paragraph -->
-
-<!-- wp:list -->
-<ul class="wp-block-list"><!-- wp:list-item -->
-<li>Uses <strong>preview API version</strong> (<code>2025-07-01-preview</code>)</li>
-<!-- /wp:list-item -->
-<!-- wp:list-item -->
-<li>Includes <strong>CSR in registration payload</strong></li>
-<!-- /wp:list-item -->
-<!-- wp:list-item -->
-<li>Extracts <strong>issued certificate from response</strong></li>
-<!-- /wp:list-item -->
-<!-- wp:list-item -->
-<li>Handles <strong>MQTT QoS and response correlation</strong></li>
-<!-- /wp:list-item -->
-</ul>
-<!-- /wp:list -->
-
-<!-- wp:paragraph -->
-<p><strong>3. Provisioning Client</strong> (ProvisioningDeviceClient.cs)</p>
-<!-- /wp:paragraph -->
-
-<!-- wp:code {"className":"language-csharp"} -->
-<pre class="wp-block-code language-csharp"><code>public class ProvisioningDeviceClient
-{
-    public static ProvisioningDeviceClient Create(
-        string provisioningHost,
-        string idScope,
-        SecurityProvider security,
-        ProvisioningTransportHandler transport)
-    {
-        return new ProvisioningDeviceClient(
-            provisioningHost, 
-            idScope, 
-            security, 
-            transport
-        );
-    }
-    
-    public async Task&lt;DeviceRegistrationResult&gt; RegisterAsync()
-    {
-        // Delegate to transport handler
-        return await _transport.RegisterAsync(_idScope, _security);
-    }
-}
-</code></pre>
-<!-- /wp:code -->
 
 <!-- wp:heading {"level":4} -->
 <h4 class="wp-block-heading">Telemetry Service (src/comms/TelemetryService.cs)</h4>
 <!-- /wp:heading -->
 
 <!-- wp:paragraph -->
-<p>Handles sending device telemetry to IoT Hub:</p>
+<p><code>TelemetryService</code> now uses the SDK's <code>TelemetryClient</code> on the same connection.
+It preserves the application's JSON telemetry and message-property contract;
+we aren't changing cloud routes or introducing a second Hub connection.
+The optional session-count feature remains independent of this SDK migration.</p>
 <!-- /wp:paragraph -->
-
-<!-- wp:code {"className":"language-csharp"} -->
-<pre class="wp-block-code language-csharp"><code>public async Task SendSkittleColorTelemetryAsync(string color)
-{
-    var telemetry = new
-    {
-        deviceId = _deviceId,
-        timestamp = DateTime.UtcNow,
-        color = color,
-        count = _colorCounts.GetValueOrDefault(color, 1)
-    };
-    
-    string json = JsonSerializer.Serialize(telemetry);
-    var message = new Message(Encoding.UTF8.GetBytes(json))
-    {
-        ContentType = &quot;application/json&quot;,
-        ContentEncoding = &quot;utf-8&quot;
-    };
-    
-    message.Properties.Add(&quot;skittleColor&quot;, color);
-    message.Properties.Add(&quot;deviceType&quot;, &quot;skittle-sorter&quot;);
-    
-    await _deviceClient.SendEventAsync(message);
-}
-</code></pre>
-<!-- /wp:code -->
-
-<!-- wp:paragraph -->
-<p><strong>Features:</strong></p>
-<!-- /wp:paragraph -->
-
-<!-- wp:list -->
-<ul class="wp-block-list"><!-- wp:list-item -->
-<li>JSON-formatted telemetry messages</li>
-<!-- /wp:list-item -->
-<!-- wp:list-item -->
-<li>Custom message properties for routing</li>
-<!-- /wp:list-item -->
-<!-- wp:list-item -->
-<li>Per-color count tracking</li>
-<!-- /wp:list-item -->
-<!-- wp:list-item -->
-<li>Batch summary reporting</li>
-<!-- /wp:list-item -->
-</ul>
-<!-- /wp:list -->
 
 <!-- wp:heading {"level":4} -->
 <h4 class="wp-block-heading">Certificate Renewal</h4>
 <!-- /wp:heading -->
 
 <!-- wp:paragraph -->
-<p>The following example shows this repository's sample expiration check and
-DPS-based refresh behavior. It isn't the complete current Azure
-certificate-management renewal flow: current IoT Hub workflows support
-operational-certificate renewal without requiring reprovisioning. Review the
-<a href="https://learn.microsoft.com/en-us/azure/iot/iot-certificate-management-overview">current certificate-management overview</a>
-before using or adapting this code.</p>
+<p>SDK retry/reconnection and reprovisioning are available through <code>ConnectionClient</code>.
+They aren't an automatic certificate-renewal scheduler. Optional IoT Hub renewal
+APIs are also available, but I haven't wired automatic operational-certificate
+renewal into this application. The old “delete the certificate seven days
+before expiry” snippet wasn't a complete lifecycle implementation, so I've
+removed it. Durable replacement and recovery need their own tests.</p>
 <!-- /wp:paragraph -->
-
-<!-- wp:code {"className":"language-csharp"} -->
-<pre class="wp-block-code language-csharp"><code>public static async Task CheckCertificateRenewal(DpsConfiguration dpsCfg)
-{
-    var cert = new X509Certificate2(
-        dpsCfg.IssuedCertPath, 
-        dpsCfg.IssuedCertPassword
-    );
-    
-    // Check if within renewal window (7 days before expiry)
-    var renewalWindow = cert.NotAfter.AddDays(-7);
-    
-    if (DateTime.UtcNow &gt;= renewalWindow)
-    {
-        Console.WriteLine(&quot;Certificate renewal window reached. Re-provisioning...&quot;);
-        
-        // Delete old certificate
-        File.Delete(dpsCfg.IssuedCertPath);
-        
-        // Trigger re-provisioning (same flow as initial)
-    }
-}
-</code></pre>
-<!-- /wp:code -->
 
 <!-- wp:heading {"level":3} -->
 <h3 class="wp-block-heading">Azure Device Registry (ADR) Integration</h3>
@@ -1166,13 +914,13 @@ before using or adapting this code.</p>
 
 <!-- wp:list -->
 <ul class="wp-block-list"><!-- wp:list-item -->
-<li>Attributes (hardware ID, model, version)</li>
+<li>Registry properties: manufacturer, model, hardware revision and software revision</li>
 <!-- /wp:list-item -->
 <!-- wp:list-item -->
-<li>Tags (location, tenant, environment)</li>
+<li>Tags for custom labels such as hardware ID, location, tenant and environment</li>
 <!-- /wp:list-item -->
 <!-- wp:list-item -->
-<li>Custom properties</li>
+<li>Enablement state: <code>Enabled</code> or <code>Disabled</code></li>
 <!-- /wp:list-item -->
 </ul>
 <!-- /wp:list -->
@@ -1241,7 +989,7 @@ var devices = await adrClient.ListDevicesAsync(
 Console.WriteLine($&quot;Found {devices.Count} devices:&quot;);
 foreach (var device in devices)
 {
-    Console.WriteLine($&quot;  - {device.Name} ({device.Properties?.Enabled ?? false})&quot;);
+    Console.WriteLine($&quot;  - {device.Name}: {device.Properties}&quot;);
 }
 
 // Get specific device details
@@ -1255,16 +1003,15 @@ var deviceDetails = await adrClient.GetDeviceAsync(
 if (deviceDetails != null)
 {
     Console.WriteLine($&quot;\nDevice: {deviceDetails.Name}&quot;);
-    Console.WriteLine($&quot;Enabled: {deviceDetails.Properties?.Enabled}&quot;);
-    Console.WriteLine($&quot;Hardware ID: {deviceDetails.Properties?.Attributes?.HardwareId}&quot;);
+    Console.WriteLine($&quot;Properties: {deviceDetails.Properties}&quot;);
     
     // Display tags
-    if (deviceDetails.Properties?.Tags != null)
+    if (deviceDetails.Tags.ValueKind == System.Text.Json.JsonValueKind.Object)
     {
         Console.WriteLine(&quot;Tags:&quot;);
-        foreach (var tag in deviceDetails.Properties.Tags)
+        foreach (var tag in deviceDetails.Tags.EnumerateObject())
         {
-            Console.WriteLine($&quot;  {tag.Key}: {tag.Value}&quot;);
+            Console.WriteLine($&quot;  {tag.Name}: {tag.Value}&quot;);
         }
     }
 }
@@ -1289,16 +1036,17 @@ if (deviceDetails != null)
     &quot;DeviceUpdate&quot;: {
       &quot;Enabled&quot;: true,
       &quot;Attributes&quot;: {
-        &quot;HardwareId&quot;: &quot;RPI4B-12345678&quot;,
-        &quot;Manufacturer&quot;: &quot;Raspberry Pi Foundation&quot;,
-        &quot;Model&quot;: &quot;Raspberry Pi 4B&quot;,
-        &quot;OperatingSystemVersion&quot;: &quot;Raspbian GNU/Linux 11&quot;
+        &quot;manufacturer&quot;: &quot;Raspberry Pi Foundation&quot;,
+        &quot;model&quot;: &quot;Raspberry Pi 4B&quot;,
+        &quot;hardwareRevision&quot;: &quot;1.4&quot;,
+        &quot;softwareRevision&quot;: &quot;1.0.5&quot;
       },
       &quot;Tags&quot;: {
         &quot;location&quot;: &quot;factory-1&quot;,
         &quot;department&quot;: &quot;manufacturing&quot;,
-        &quot;firmware&quot;: &quot;1.0.5&quot;
-      }
+        &quot;hardwareId&quot;: &quot;RPI4B-12345678&quot;
+      },
+      &quot;DeviceEnabled&quot;: true
     }
   }
 }
@@ -1307,6 +1055,22 @@ if (deviceDetails != null)
 
 <!-- wp:paragraph -->
 <p>The application automatically updates device metadata after provisioning.</p>
+<!-- /wp:paragraph -->
+
+<!-- wp:paragraph -->
+<p>There's one API detail worth calling out: the current ARM resource is
+<code>namespaces/registryDevices</code> (<code>2026-11-02-preview</code>), and it doesn't accept an
+arbitrary <code>attributes</code> object. Our <code>Attributes</code> configuration name is retained,
+but only exact keys <code>manufacturer</code>, <code>model</code>, <code>hardwareRevision</code> and
+<code>softwareRevision</code> are accepted and mapped to properties. Other keys fail
+explicitly; put custom labels in string-valued <code>Tags</code>, as with <code>hardwareId</code> above.</p>
+<!-- /wp:paragraph -->
+
+<!-- wp:paragraph -->
+<p><code>DeviceEnabled</code> maps to <code>enablementState: &quot;Enabled&quot;</code> or <code>&quot;Disabled&quot;</code>.
+The older <code>OperatingSystemVersion</code> configuration name is still accepted and maps
+to <code>softwareRevision</code>; if both are supplied, it overrides
+<code>Attributes.softwareRevision</code>. It isn't an ARM property of its own.</p>
 <!-- /wp:paragraph -->
 
 <!-- wp:heading {"level":3} -->
@@ -1387,7 +1151,7 @@ if (deviceDetails != null)
 <!-- /wp:paragraph -->
 
 <!-- wp:code {"className":"language-powershell"} -->
-<pre class="wp-block-code language-powershell"><code>az iot ops asset endpoint device list `
+<pre class="wp-block-code language-powershell"><code>az iot adr ns device list `
   --namespace &quot;my-adrnamespace-uniquesuffix&quot; `
   --resource-group &quot;my-iot-rg&quot; `
   --output table
@@ -1399,11 +1163,16 @@ if (deviceDetails != null)
 <!-- /wp:paragraph -->
 
 <!-- wp:code {"className":"language-plaintext"} -->
-<pre class="wp-block-code language-plaintext"><code>Name        Enabled    HardwareId         Location
-----------  ---------  -----------------  ----------
-my-device   True       RPI4B-12345678     factory-1
+<pre class="wp-block-code language-plaintext"><code>Name        Location
+----------  ----------
+my-device   uksouth
 </code></pre>
 <!-- /wp:code -->
+
+<!-- wp:paragraph -->
+<p>Column selection can vary. Inspect JSON for <code>properties.enablementState</code> and
+the supported metadata properties; custom labels are under the resource's <code>tags</code>.</p>
+<!-- /wp:paragraph -->
 
 <!-- wp:heading {"level":3} -->
 <h3 class="wp-block-heading">Test 4: Device Twin Operations</h3>
@@ -1573,11 +1342,11 @@ substitute for reviewing what is linked and billable.</p>
 <!-- /wp:heading -->
 
 <!-- wp:paragraph -->
-<p>✅ <strong>Custom DPS Framework</strong> - This sample uses a custom MQTT implementation
+<p>✅ <strong>Unified SDK</strong> - One connection for provisioning and Hub feature clients
 ✅ <strong>Two-Phase Authentication</strong> - Bootstrap cert for DPS, operational cert for IoT Hub<br>
 ✅ <strong>CSR-Based Issuance</strong> - Private key never leaves device<br>
-✅ <strong>MQTT Protocol</strong> - Direct protocol implementation for preview features<br>
-✅ <strong>Certificate Lifecycle</strong> - Automatic storage, loading, and renewal logic<br>
+✅ <strong>Thin Adapter</strong> - Configuration, persistence and ADR ARM helpers, not a custom DPS protocol<br>
+✅ <strong>Certificate Persistence</strong> - Durable CSR/key and issued chain; no automatic renewal claim<br>
 ✅ <strong>Mock Hardware Support</strong> - Test without physical devices</p>
 <!-- /wp:paragraph -->
 
@@ -1589,7 +1358,7 @@ substitute for reviewing what is linked and billable.</p>
 <p>✅  Cloned the repository and ran full setup automation<br>
 ✅ Configured the device application with Azure resources<br>
 ✅ Understood the main program flow and component architecture<br>
-✅ Explored the custom DPS framework used by this sample
+✅ Replaced the custom provisioning protocol with the official unified SDK
 ✅ Learned how CSR-based provisioning works end-to-end<br>
 ✅ Integrated with Azure Device Registry for metadata management<br>
 ✅ Tested the complete solution with telemetry monitoring<br>
@@ -1644,8 +1413,4 @@ substitute for reviewing what is linked and billable.</p>
 
 <!-- wp:paragraph -->
 <p>Thank you for following this series! Happy IoT building! 🚀</p>
-<!-- /wp:paragraph -->
-
-<!-- wp:paragraph -->
-<p></p>
 <!-- /wp:paragraph -->

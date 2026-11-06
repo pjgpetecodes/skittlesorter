@@ -47,7 +47,11 @@ az extension show --name azure-iot --query version
 <!-- /wp:paragraph -->
 
 <!-- wp:paragraph -->
-<p>This work does not finish the older ADR operational-certificate issuance/renewal series. The new lab must demonstrate its own minimal supported bootstrap without pretending those older drafts are complete.</p>
+<p>The sorter's provisioning now uses the unified <code>Microsoft.Azure.Iot.Device</code>
+<strong>2.0.0-preview4</strong> adapter, preserving CSR/key, issued PEM/chain and assignment
+sidecar files. That doesn't replace the software-update client or prove this
+separate environment's X.509 update check/report path. Automatic operational-
+certificate renewal is not implemented.</p>
 <!-- /wp:paragraph -->
 
 <!-- wp:paragraph -->

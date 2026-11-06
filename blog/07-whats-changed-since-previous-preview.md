@@ -9,6 +9,39 @@ integration with Azure Device Registry (ADR) and Microsoft-backed X.509
 certificate management. This update aligns the series with the current
 Microsoft Learn guidance.
 
+## What's changed in the device implementation?
+
+I've now migrated provisioning and telemetry to the official unified
+[`Microsoft.Azure.Iot.Device` **2.0.0-preview4**](https://www.nuget.org/packages/Microsoft.Azure.Iot.Device/2.0.0-preview4)
+package. `ConnectionClient` owns DPS provisioning and the Hub connection;
+`TelemetryClient` shares it. The custom C# security providers, transports,
+registration/SAS-token protocol and `Microsoft.Azure.Devices.Client` are removed.
+
+`AzureDpsFramework` remains a thin configuration, certificate/CSR persistence,
+ADR ARM and `UnifiedDeviceSession` adapter library. Standard symmetric-key/X.509
+profiles and both CSR onboarding flows remain. CSR/key, issued PEM/chain and the
+`.connection.json` assignment sidecar survive restarts. A required-certificate
+wrapper rejects missing issuance before Hub authentication; the coordinator
+holds the updater lock only during DPS sessions, including reprovisioning.
+
+.NET 10, the existing Hub and cloud topology stay put. The SDK discovers its
+assigned endpoint/profile through DPS. The sorter uses
+MQTTnet 5; the separate updater retains MQTTnet 4 and its own DPS **software-update**
+protocol. The SDK does not implement that workflow.
+
+The bounded `--cloud-self-test --config PATH` performs a two-minute,
+hardware-free provision/connect/one-telemetry-ack/disconnect check. The new helper
+uses `-AppConfigPath` and resets only an exact device/registration when explicit
+`-ResetDevice` and matching resource names are supplied, never a resource group,
+enrollment group or CA. Setup now generates CSR-enabled configuration; standard
+profiles explicitly set `RequestOperationalCertificate: false`.
+
+The SDK offers retry/reprovision and optional IoT Hub renewal APIs, but I haven't
+implemented automatic operational-certificate renewal. This is still a preview;
+local tests don't establish a successful live Azure or Pi run. See Microsoft's
+[SDK design/feature matrix](https://github.com/Azure/azure-iot-sdk/blob/main/dotnet/README.md)
+and [unified samples](https://github.com/Azure/azure-iot-sdk/tree/releases/public-preview/dotnet/samples/Unified).
+
 **Important:** IoT Hub integration with ADR and certificate management is still
 in public preview and isn't recommended for production workloads. ADR is
 generally available for Azure IoT Operations, but its IoT Hub integration
@@ -27,7 +60,7 @@ management. Certificate management is optional; DPS is not.
 The current getting-started guide supports connecting eligible existing DPS and
 standard-tier IoT Hub resources, or creating new ones. Connecting them to a
 namespace is permanent. Connect DPS first, then the Hub, and verify the current
-supported-region list before creating the lab. For the new update demonstrations,
+supported-region list before creating the environment. For the new update demonstrations,
 use dedicated resources; a Hub associated with GA Device Update cannot also be
 used for ADR Software Updates.
 
@@ -86,9 +119,8 @@ now:
   certificate.
 - Reflect the documented renewal and revocation lifecycle, while noting the
   documented limitation for externally signed intermediate CAs.
-- Describe the custom MQTT-based DPS framework as an implementation choice in
-  this repository's sample, not a general requirement or a verified statement
-  about all official client SDKs.
+- Replace the custom C# DPS provisioning protocol with the official unified SDK,
+  retaining configuration, persistence and ADR ARM operations as a thin adapter.
 
 These edits do not establish that every documented capability was newly
 introduced in this preview, or that the downstream certificate-issuance
@@ -106,8 +138,9 @@ installer, but use separate Azure resources and update clients.
 The app adds safe cycle-boundary shutdown, external configuration, readiness,
 version telemetry and an optional session-count feature release. GA provisioning
 can explicitly opt out of operational certificate issuance. The custom C# ADR
-update client is isolated from the older provisioning transport and does not
-claim official .NET SDK support or finish the older certificate-lifecycle work.
+update client remains isolated from provisioning and retains its own DPS update
+protocol. The unified .NET SDK does not implement software updates, and this
+migration does not declare automatic certificate renewal complete.
 
 Both series are local implementation-backed drafts: real Azure/Pi update and
 failure evidence is still required. Their Markdown and adjacent local WordPress

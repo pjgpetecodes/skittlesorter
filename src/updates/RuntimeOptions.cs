@@ -2,7 +2,7 @@ using System.Text.Json;
 
 namespace skittle_sorter;
 
-public sealed record RuntimeOptions(string ConfigurationPath, string? ReadyFile, bool SelfTest, bool ShowVersion)
+public sealed record RuntimeOptions(string ConfigurationPath, string? ReadyFile, bool SelfTest, bool ShowVersion, bool CloudSelfTest = false)
 {
     public static RuntimeOptions Parse(string[] args)
     {
@@ -10,6 +10,7 @@ public sealed record RuntimeOptions(string ConfigurationPath, string? ReadyFile,
         string? readyFile = null;
         var selfTest = false;
         var showVersion = false;
+        var cloudSelfTest = false;
         for (var i = 0; i < args.Length; i++)
         {
             switch (args[i])
@@ -28,12 +29,17 @@ public sealed record RuntimeOptions(string ConfigurationPath, string? ReadyFile,
                 case "--version":
                     showVersion = true;
                     break;
+                case "--cloud-self-test":
+                    cloudSelfTest = true;
+                    break;
                 default:
                     throw new ArgumentException($"Unknown argument: {args[i]}");
             }
         }
+        if (cloudSelfTest && (selfTest || showVersion || readyFile != null))
+            throw new ArgumentException("--cloud-self-test cannot be combined with --self-test, --version or --ready-file.");
         return new RuntimeOptions(Path.GetFullPath(config),
-            readyFile is null ? null : Path.GetFullPath(readyFile), selfTest, showVersion);
+            readyFile is null ? null : Path.GetFullPath(readyFile), selfTest, showVersion, cloudSelfTest);
     }
 
     public void ValidateConfiguration()

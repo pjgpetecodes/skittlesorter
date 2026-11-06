@@ -33,6 +33,11 @@ param(
 
     [string]$PolicyName = 'default',
 
+    [string]$RegistryOperatorObjectId,
+
+    [ValidateSet('User', 'ServicePrincipal', 'Group')]
+    [string]$RegistryOperatorPrincipalType = 'User',
+
     [ValidateRange(1, 90)]
     [int]$CertificateValidityDays = 30
 )
@@ -133,7 +138,7 @@ function Invoke-AzCliCreateIfMissing {
 
 if (-not $PSCmdlet.ShouldProcess(
     "subscription '$SubscriptionId', resource group '$ResourceGroupName'",
-    'Create ADR certificate management, an S1 IoT Hub, DPS, and an enrollment group'
+    'Create ADR certificate management, an S1 IoT Hub, DPS, an enrollment group, and any requested Hub registry role assignment'
 )) {
     return
 }
@@ -371,6 +376,13 @@ $hubResourceId = Get-AzCliValue -Description 'Getting IoT Hub resource ID' -Argu
     '--output', 'tsv'
 )
 
+if ($RegistryOperatorObjectId) {
+    & (Join-Path $PSScriptRoot 'grant-registry-access.ps1') `
+        -HubResourceId $hubResourceId `
+        -OperatorObjectId $RegistryOperatorObjectId `
+        -PrincipalType $RegistryOperatorPrincipalType
+}
+
 Invoke-AzCliCreateIfMissing -Description 'Linking IoT Hub to the Device Registry namespace' `
     -CheckArguments @(
         'iot', 'adr', 'ns', 'link', 'hub', 'list',
@@ -444,7 +456,7 @@ if ($writeAppConfig) {
         [Convert]::FromBase64String($enrollmentGroupKey)
     )
     try {
-        $registrationBytes = [System.Text.Encoding]::ASCII.GetBytes($RegistrationId.ToLowerInvariant())
+        $registrationBytes = [System.Text.Encoding]::UTF8.GetBytes($RegistrationId)
         $deviceKey = [Convert]::ToBase64String($hmac.ComputeHash($registrationBytes))
     } finally {
         $hmac.Dispose()
@@ -464,9 +476,8 @@ if ($writeAppConfig) {
     $appConfig.IoTHub.DpsProvisioning.AttestationMethod = 'SymmetricKey'
     $appConfig.IoTHub.DpsProvisioning.EnrollmentGroupKeyBase64 = ''
     $appConfig.IoTHub.DpsProvisioning.DeviceKeyBase64 = $deviceKey
-    $appConfig.IoTHub.DpsProvisioning.ApiVersion = '2019-03-31'
-    $appConfig.IoTHub.DpsProvisioning.RequestOperationalCertificate = $false
-    $appConfig.IoTHub.DpsProvisioning.AutoGenerateCsr = $false
+    $appConfig.IoTHub.DpsProvisioning.RequestOperationalCertificate = $true
+    $appConfig.IoTHub.DpsProvisioning.AutoGenerateCsr = $true
     $appConfig.IoTHub.DpsProvisioning.EnableDebugLogging = $false
     $appConfig.Adr.Enabled = $false
     $appConfig.Hardware.MockMode.EnableMockColorSensor = $true

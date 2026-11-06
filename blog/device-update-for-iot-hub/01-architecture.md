@@ -4,6 +4,14 @@
 
 Our sorter already reads a colour sensor, moves two servos and sends IoT Hub telemetry. The update demonstration keeps that application in C#. We are updating its published binaries, not replacing Raspberry Pi OS, installing firmware or converting the application into an IoT Edge module.
 
+**What's changed in the sorter?** Provisioning and telemetry now use Microsoft's
+unified `Microsoft.Azure.Iot.Device` **2.0.0-preview4**, with a thin
+`AzureDpsFramework` configuration/persistence/session adapter. .NET 10 and the
+existing Hub stay unchanged, with the assigned endpoint/profile discovered
+through DPS. Standard symmetric-key provisioning still
+sets `RequestOperationalCertificate: false`; the GA update agent and its module
+identity are not replaced by this SDK migration.
+
 There are three separate responsibilities. The sorter controls hardware and publishes telemetry. Microsoft's standard Linux Device Update agent receives GA deployments. Our local Python installer stages an application release, waits for a safe sorter stop, switches releases and checks readiness. The updater is outside the release being replaced.
 
 The agent connects as a **module identity** underneath the sorter device. The sorter keeps its normal device connection; two clients must not compete for the same IoT Hub device MQTT identity. DPS provisions the sorter, but does not create that agent module. We create it explicitly after the device exists.

@@ -1,594 +1,162 @@
-# Building the Custom DPS Framework
+# Keeping a Thin DPS Adapter with the Unified SDK
 
-> **Release baseline:** This series uses the latest Azure IoT CLI preview
-> extension, `azure-iot` **1.0.0b2**, released **6 October 2026**. Last
-> reviewed **29 October 2026**. [Release notes](https://github.com/Azure/azure-iot-cli-extension/releases/tag/v1.0.0b2).
+> **SDK baseline:** `Microsoft.Azure.Iot.Device` **2.0.0-preview4**, on
+> **.NET 10**. The Azure IoT CLI examples still use `azure-iot` **1.0.0b2**.
 
 [← Previous: Configuring Enrollment Groups](04-configuring-enrollment-groups.md) | [Next: Building the Device Application →](06-building-device-application.md)
 
 ---
 
-In this post, we'll dive into the **custom Azure DPS framework** used by this
-repository's sample to implement its CSR provisioning flow over MQTT. This is
-an implementation choice for this sample; consult current Microsoft
-documentation for the latest API and SDK support before choosing a client for
-another deployment.
+## What's changed?
 
-## Why a Custom Framework?
+This used to be the “building a custom DPS framework” post. I originally wrote
+the MQTT registration, security providers and SAS-token handling myself to get
+the CSR flow working. Microsoft's unified .NET SDK now covers that provisioning
+and connection work, so I've removed those pieces rather than keeping a second
+implementation alive.
 
-The framework in this repository uses the `2025-07-01-preview` API and a
-direct MQTT implementation for its CSR-based sample. This page describes that
-code path and does not make a general claim about current Microsoft SDK
-capabilities. IoT Hub integration with ADR and certificate management remain
-in public preview; see [What's Changed since the Previous Preview](07-whats-changed-since-previous-preview.md).
+The filename stays put so existing links still work, but the code examples for
+the old custom providers and transports are deliberately gone. They describe a
+previous implementation, not APIs you should use with the current repository.
+
+We're pinning [`Microsoft.Azure.Iot.Device` **2.0.0-preview4**](https://www.nuget.org/packages/Microsoft.Azure.Iot.Device/2.0.0-preview4).
+It is still a preview. Microsoft's [SDK overview and feature matrix](https://github.com/Azure/azure-iot-sdk/blob/main/dotnet/README.md)
+and [unified examples](https://github.com/Azure/azure-iot-sdk/tree/releases/public-preview/dotnet/samples/Unified)
+are the useful starting points for the API, rather than my old look-alike classes.
+
+## Why keep AzureDpsFramework?
+
+There's still some useful glue here! The sorter has existing configuration
+profiles, certificate paths and optional ADR metadata updates. None of those
+need to become part of the sorting loop.
+
+`AzureDpsFramework` is now a thin adapter responsible for:
+
+- Reading and validating our configuration.
+- Loading a device key or bootstrap certificate and its chain.
+- Generating/loading the CSR and preserving its matching private key.
+- Saving the issued certificate chain durably.
+- Opening a unified SDK session with those inputs.
+- Keeping ADR ARM queries and metadata updates separate from the device protocol.
+
+The SDK's `ConnectionClient` owns DPS registration, authentication, connection
+retry and reprovisioning. `TelemetryClient` shares that connection to send the
+colour readings. We no longer build DPS MQTT topics, poll registration responses,
+or generate SAS tokens in our own C# transport.
 
 ## Framework Architecture
 
-```
-┌──────────────────────────────────────┐
-│   ProvisioningDeviceClient           │  ← Main API (matches Microsoft SDK)
-└────────────┬─────────────────────────┘
-             │
-             │ Uses
-             ▼
-┌──────────────────────────────────────┐
-│   ProvisioningTransportHandler       │  ← MQTT communication layer
-└────────────┬─────────────────────────┘
-             │
-             │ Uses
-             ▼
-┌──────────────────────────────────────┐
-│   SecurityProvider                   │  ← Authentication methods
-│   ├─ SymmetricKey                    │     (Symmetric key, X.509)
-│   ├─ X509                            │
-│   ├─ X509Csr (with CSR generation)   │
-│   └─ X509CsrWithCert (X509 + CSR)    │
-└──────────────────────────────────────┘
+```text
+Configuration + durable CSR/key/certificate files
+                       |
+                       v
+             AzureDpsFramework adapter ----> ADR ARM metadata helpers
+                       |
+                       v
+          Unified SDK ConnectionClient
+             DPS provisioning + Hub connection
+                       |
+                       v
+               SDK TelemetryClient
 ```
 
-## Core Components
+The application still calls its initialization and telemetry services. They
+don't need to know how a DPS registration response is encoded on the wire.
 
-### 1. ProvisioningDeviceClient
+## Keeping Both Attestation Methods
 
-The main entry point that matches the official Microsoft SDK API:
+The two-phase certificate story from the earlier posts hasn't changed:
+an onboarding credential proves who the device is to DPS; a separate CSR key
+belongs to the operational certificate used with IoT Hub.
 
-```csharp
-// Create client (familiar API pattern)
-var client = ProvisioningDeviceClient.Create(
-    globalDeviceEndpoint: "global.azure-devices-provisioning.net",
-    idScope: "0ne00XXXXXX",
-    securityProvider: securityProvider,
-    transport: new ProvisioningTransportHandlerMqtt()
-);
+We also preserve the ordinary DPS profiles that don't request a new certificate:
 
-// Register device (returns assignment + certificate)
-DeviceRegistrationResult result = await client.RegisterAsync();
+| Onboarding | Request operational certificate? | IoT Hub credential |
+|---|---|---|
+| Symmetric key | No | Device-specific symmetric key |
+| X.509 | No | Existing device certificate/key |
+| Symmetric key + CSR | Yes | ADR-issued operational certificate |
+| X.509 + CSR | Yes | ADR-issued operational certificate |
 
-// Get assigned IoT Hub and issued certificate
-string assignedHub = result.AssignedHub;
-string[] certificateChain = result.IssuedCertificateChain;
+Set `RequestOperationalCertificate` explicitly. Its default remains `true` to
+preserve the original CSR examples; use `false` for standard DPS. Prefer a
+device-specific `DeviceKeyBase64` over handing every device a group master key.
+
+## Certificate Handling Still Matters
+
+Moving to an SDK doesn't make our filesystem disappear. Keep the CSR, matching
+private key and issued chain across restarts:
+
+- `CsrFilePath` is the CSR we submit.
+- `CsrKeyFilePath` is the key that must match the returned certificate.
+- `IssuedCertFilePath` holds the issued certificate chain.
+- The `.connection.json` sidecar alongside the issued PEM keeps the assignment
+  needed to restore the operational certificate and assigned Hub on restart.
+
+Those paths can use `{RegistrationId}` and retain the existing
+[configuration path rules](../docs/Configuration.md). Keep the files outside application releases and out of Git.
+Retrying after a network interruption must not silently replace the key under a
+certificate we've already saved.
+
+`UnifiedDeviceSession` delegates all MQTT to the SDK; its coordinator holds the
+updater lock only during DPS sessions, including reprovisioning, not for the
+Hub connection lifetime. CSR profiles reject a missing issued chain before
+Hub authentication rather than falling back to the onboarding credential.
+
+## Retry and Renewal Aren't the Same Thing
+
+`ConnectionClient` provides retry/reconnection and reprovisioning. The SDK also
+offers optional IoT Hub certificate-renewal APIs, so renewal needn't always mean
+going back through DPS.
+
+That is SDK capability, not a claim that I've implemented automatic renewal in
+this sorter. Scheduling renewal, persisting a replacement chain and recovering
+from an interrupted replacement are still separate lifecycle work. There's no
+new automatic seven-day renewal job hidden in this migration.
+
+## What Hasn't Changed
+
+We're still on .NET 10 and the same IoT Hub. The SDK discovers the assigned
+endpoint/profile through DPS; we don't construct the hostname or force a
+protocol. The SDK brings MQTTnet 5 into the sorter, but a library's major version
+isn't a reason to migrate the Hub or rebuild our Azure resources.
+
+The separate `AzureSoftwareUpdatesFramework` updater is also still separate.
+It uses its own DPS **software-update** MQTT protocol and MQTTnet 4. The unified
+.NET SDK doesn't implement that workflow, so removing custom provisioning code
+doesn't remove the update client.
+
+## Testing the New Boundary
+
+From the repository root:
+
+```powershell
+# No network or physical hardware
+dotnet run --project .\skittlesorter.csproj -- --self-test --config .\appsettings.json
+
+# Real DPS + Hub, representative telemetry, graceful disconnect
+dotnet run --project .\skittlesorter.csproj -- --cloud-self-test --config .\appsettings.json
 ```
 
-### 2. SecurityProvider
-
-Abstract base class for authentication methods:
-
-```csharp
-public abstract class SecurityProvider
-{
-    // Device identity
-    public abstract string GetRegistrationID();
-    
-    // Generate authentication credentials
-    public abstract Task<string> GetAuthenticationAsync();
-    
-    // Optional: CSR for certificate issuance
-    public virtual byte[]? GetCertificateSigningRequest() => null;
-}
-```
-
-**Implementations:**
-
-#### SecurityProviderSymmetricKey
-```csharp
-public class SecurityProviderSymmetricKey : SecurityProvider
-{
-    private readonly string _registrationId;
-    private readonly string _primaryKey;
-    
-    public SecurityProviderSymmetricKey(string registrationId, string primaryKey)
-    {
-        _registrationId = registrationId;
-        _primaryKey = primaryKey;
-    }
-    
-    public override string GetRegistrationID() => _registrationId;
-    
-    public override Task<string> GetAuthenticationAsync()
-    {
-        // Generate SAS token for DPS
-        var sasToken = DpsSasTokenGenerator.GenerateSasToken(
-            idScope, _registrationId, _primaryKey);
-        return Task.FromResult(sasToken);
-    }
-}
-```
-
-#### SecurityProviderX509Csr (NEW)
-```csharp
-public class SecurityProviderX509Csr : SecurityProvider
-{
-    private readonly string _registrationId;
-    private readonly RSA _rsa;
-    private byte[]? _csrDer;
-    
-    public SecurityProviderX509Csr(string registrationId, RSA? rsa = null)
-    {
-        _registrationId = registrationId;
-        _rsa = rsa ?? RSA.Create(2048);
-    }
-    
-    public override string GetRegistrationID() => _registrationId;
-    
-    public override Task<string> GetAuthenticationAsync()
-    {
-        // For symmetric key attestation, this would return SAS token
-        // For X.509, the MQTT transport handles TLS client cert auth
-        throw new NotImplementedException("Use SecurityProviderSymmetricKey");
-    }
-    
-    public override byte[]? GetCertificateSigningRequest()
-    {
-        if (_csrDer == null)
-        {
-            // Generate CSR once
-            var request = new CertificateRequest(
-                $"CN={_registrationId}",
-                _rsa,
-                HashAlgorithmName.SHA256,
-                RSASignaturePadding.Pkcs1
-            );
-            
-            _csrDer = request.CreateSigningRequest();
-        }
-        
-        return _csrDer;
-    }
-    
-    public RSA GetRSA() => _rsa;  // For combining with issued cert
-}
-```
-
-### 3. ProvisioningTransportHandler
-
-Handles MQTT communication with DPS:
-
-```csharp
-public class ProvisioningTransportHandlerMqtt : ProvisioningTransportHandler
-{
-    private const string MqttBroker = "global.azure-devices-provisioning.net";
-    private const int MqttPort = 8883;
-    
-    public override async Task<DeviceRegistrationResult> RegisterAsync(
-        ProvisioningTransportRegisterMessage message,
-        CancellationToken cancellationToken)
-    {
-        // 1. Build MQTT client options
-        var options = new MqttClientOptionsBuilder()
-            .WithTcpServer(MqttBroker, MqttPort)
-            .WithTls()  // TLS 1.2+
-            .WithClientId(message.RegistrationId)
-            .WithCredentials(
-                username: BuildUsername(message.IdScope, message.RegistrationId),
-                password: message.Authentication  // SAS token
-            )
-            .Build();
-        
-        // 2. Connect to DPS
-        var mqttClient = new MqttFactory().CreateMqttClient();
-        await mqttClient.ConnectAsync(options, cancellationToken);
-        
-        // 3. Subscribe to response topic
-        await mqttClient.SubscribeAsync("$dps/registrations/res/#");
-        
-        // 4. Build registration payload
-        var payload = new {
-            registrationId = message.RegistrationId,
-            csr = message.Csr != null 
-                ? Convert.ToBase64String(message.Csr) 
-                : null
-        };
-        
-        // 5. Publish registration request
-        string requestId = Guid.NewGuid().ToString();
-        string topic = $"$dps/registrations/PUT/iotdps-register/?$rid={requestId}";
-        
-        await mqttClient.PublishAsync(new MqttApplicationMessageBuilder()
-            .WithTopic(topic)
-            .WithPayload(JsonSerializer.Serialize(payload))
-            .WithQualityOfServiceLevel(MqttQualityOfServiceLevel.AtLeastOnce)
-            .Build());
-        
-        // 6. Wait for response and poll if needed
-        return await WaitForRegistrationResult(mqttClient, message, cancellationToken);
-    }
-    
-    private string BuildUsername(string idScope, string registrationId)
-    {
-        return $"{idScope}/registrations/{registrationId}/api-version=2025-07-01-preview&ClientVersion=1.0.0";
-    }
-}
-```
-
-## MQTT Protocol Details
-
-### Connection Parameters
-
-```
-Broker:   global.azure-devices-provisioning.net:8883
-Protocol: MQTT 3.1.1 over TLS 1.2+
-ClientID: {registrationId}
-Username: {idScope}/registrations/{registrationId}/api-version=2025-07-01-preview&ClientVersion=1.0.0
-Password: {SAS-token}  (for symmetric key attestation)
-```
-
-### Topics
-
-**Subscribe (receive responses):**
-```
-$dps/registrations/res/#
-```
-
-**Publish (register device):**
-```
-$dps/registrations/PUT/iotdps-register/?$rid={requestId}
-```
-
-**Publish (check status):**
-```
-$dps/registrations/GET/iotdps-get-operationstatus/?$rid={requestId}&operationId={operationId}
-```
-
-### Registration Payload
-
-```json
-{
-  "registrationId": "dev001-skittlesorter",
-  "csr": "MIICXTCCAUUCAQAwGDEWMBQGA1UEAxMNZGV2MDAxLXNraXR0bGVzb3J0ZXIwggEi..."
-}
-```
-
-**CSR Format:** Base64-encoded DER (not PEM!)
-
-### Response Payloads
-
-**Initial Response (assigning):**
-```json
-{
-  "operationId": "5.afa73db6918a13a9.cf71e45a-b81b-437d-9b4f-6b4c574be43a",
-  "status": "assigning"
-}
-```
-
-**Final Response (assigned):**
-```json
-{
-  "operationId": "5.afa73db6918a13a9.cf71e45a-b81b-437d-9b4f-6b4c574be43a",
-  "status": "assigned",
-  "registrationState": {
-    "deviceId": "dev001-skittlesorter",
-    "assignedHub": "dev001-skittlesorter-hub.azure-devices.net",
-    "issuedCertificateChain": [
-      "MIIDXzCCAkegAwIBAgIRALq...",  // Device certificate
-      "MIIDYzCCAkugAwIBAgIRANd...",  // Intermediate CA
-      "MIICHzCCAaOgAwIBAgIRAMg..."   // Root CA (optional)
-    ]
-  }
-}
-```
-
-## Using the Framework
-
-### Example 1: Symmetric Key with CSR
-
-```csharp
-using AzureDpsFramework;
-using AzureDpsFramework.Security;
-using AzureDpsFramework.Transport;
-using System.Security.Cryptography;
-
-// 1. Derive device key from enrollment group key
-string enrollmentGroupKey = "your-enrollment-group-key";
-string registrationId = "dev001-skittlesorter";
-string deviceKey = DeriveDeviceKey(enrollmentGroupKey, registrationId);
-
-// 2. Create security provider with CSR support
-var rsa = RSA.Create(2048);
-var securityProvider = new SecurityProviderX509CsrWithSymmetricKey(
-    registrationId, 
-    deviceKey,
-    rsa
-);
-
-// 3. Create provisioning client
-var client = ProvisioningDeviceClient.Create(
-    "global.azure-devices-provisioning.net",
-    "0ne00XXXXXX",
-    securityProvider,
-    new ProvisioningTransportHandlerMqtt()
-);
-
-// 4. Register device
-DeviceRegistrationResult result = await client.RegisterAsync();
-
-Console.WriteLine($"Assigned Hub: {result.AssignedHub}");
-Console.WriteLine($"Device ID: {result.DeviceId}");
-
-// 5. Parse issued certificate
-if (result.IssuedCertificateChain != null && result.IssuedCertificateChain.Length > 0)
-{
-    byte[] certBytes = Convert.FromBase64String(result.IssuedCertificateChain[0]);
-    var certificate = new X509Certificate2(certBytes);
-    
-    // 6. Combine with private key
-    var certWithKey = certificate.CopyWithPrivateKey(rsa);
-    
-    // 7. Export to PFX for persistence
-    byte[] pfx = certWithKey.Export(X509ContentType.Pfx, "password");
-    File.WriteAllBytes("device-cert.pfx", pfx);
-    
-    Console.WriteLine($"Certificate saved: device-cert.pfx");
-    Console.WriteLine($"Valid until: {certificate.NotAfter}");
-}
-
-static string DeriveDeviceKey(string enrollmentKey, string registrationId)
-{
-    byte[] keyBytes = Convert.FromBase64String(enrollmentKey);
-    using var hmac = new HMACSHA256(keyBytes);
-    byte[] deviceKeyBytes = hmac.ComputeHash(Encoding.UTF8.GetBytes(registrationId));
-    return Convert.ToBase64String(deviceKeyBytes);
-}
-```
-
-### Example 2: X.509 Bootstrap Certificate with CSR
-
-```csharp
-// 1. Load existing bootstrap certificate
-var bootstrapCert = new X509Certificate2("bootstrap.pfx", "password");
-
-// 2. Create security provider with bootstrap cert + CSR
-var rsa = RSA.Create(2048);  // New key for operational cert
-var securityProvider = new SecurityProviderX509CsrWithCert(
-    registrationId,
-    bootstrapCert,
-    rsa
-);
-
-// 3. Create provisioning client
-var client = ProvisioningDeviceClient.Create(
-    "global.azure-devices-provisioning.net",
-    "0ne00XXXXXX",
-    securityProvider,
-    new ProvisioningTransportHandlerMqtt()
-);
-
-// 4. Register (authenticates with bootstrap cert, receives new cert)
-DeviceRegistrationResult result = await client.RegisterAsync();
-
-// 5. Process new certificate (same as Example 1)
-```
-
-## SAS Token Generation
-
-For symmetric key attestation, the framework generates SAS tokens:
-
-```csharp
-public static class DpsSasTokenGenerator
-{
-    public static string GenerateSasToken(
-        string idScope, 
-        string registrationId, 
-        string primaryKey)
-    {
-        // Resource URI
-        string resourceUri = $"{idScope}/registrations/{registrationId}";
-        string urlEncodedResourceUri = Uri.EscapeDataString(resourceUri);
-        
-        // Expiry (1 hour from now)
-        long expiryTimestamp = DateTimeOffset.UtcNow.AddHours(1).ToUnixTimeSeconds();
-        
-        // Message to sign
-        string stringToSign = $"{urlEncodedResourceUri}\n{expiryTimestamp}";
-        
-        // Signature
-        byte[] keyBytes = Convert.FromBase64String(primaryKey);
-        using var hmac = new HMACSHA256(keyBytes);
-        byte[] signatureBytes = hmac.ComputeHash(Encoding.UTF8.GetBytes(stringToSign));
-        string signature = Convert.ToBase64String(signatureBytes);
-        string urlEncodedSignature = Uri.EscapeDataString(signature);
-        
-        // SAS token
-        return $"SharedAccessSignature sr={urlEncodedResourceUri}&sig={urlEncodedSignature}&se={expiryTimestamp}&skn=registration";
-    }
-}
-```
-
-## Certificate Handling
-
-After receiving the issued certificate, the device must:
-
-### 1. Parse Certificate Chain
-
-```csharp
-var issuedChain = result.IssuedCertificateChain;
-
-// [0] = Device certificate
-// [1] = Intermediate CA
-// [2] = Root CA (optional)
-
-byte[] deviceCertBytes = Convert.FromBase64String(issuedChain[0]);
-var deviceCert = new X509Certificate2(deviceCertBytes);
-```
-
-### 2. Combine with Private Key
-
-```csharp
-// The CSR private key must be combined with the certificate
-var certWithKey = deviceCert.CopyWithPrivateKey(rsa);
-```
-
-### 3. Export to PFX
-
-Windows requires exporting to PFX format to persist the private key association:
-
-```csharp
-// Export to PFX with password
-byte[] pfxBytes = certWithKey.Export(X509ContentType.Pfx, "password");
-File.WriteAllBytes("device-cert.pfx", pfxBytes);
-
-// Reload for use
-var persistedCert = new X509Certificate2("device-cert.pfx", "password");
-```
-
-### 4. Install Certificate Chain (Optional)
-
-```csharp
-// Install intermediate and root CAs to system trust store
-for (int i = 1; i < issuedChain.Length; i++)
-{
-    byte[] caCertBytes = Convert.FromBase64String(issuedChain[i]);
-    var caCert = new X509Certificate2(caCertBytes);
-    
-    using var store = new X509Store(StoreName.CertificateAuthority, StoreLocation.CurrentUser);
-    store.Open(OpenFlags.ReadWrite);
-    store.Add(caCert);
-    store.Close();
-}
-```
-
-## Polling for Assignment
-
-DPS provisioning is asynchronous. The framework polls for results:
-
-```csharp
-private async Task<DeviceRegistrationResult> WaitForRegistrationResult(
-    IMqttClient mqttClient,
-    ProvisioningTransportRegisterMessage message,
-    CancellationToken cancellationToken)
-{
-    string? operationId = null;
-    int pollCount = 0;
-    const int maxPolls = 20;
-    
-    while (pollCount < maxPolls)
-    {
-        // Wait for MQTT message
-        var response = await WaitForMqttResponseAsync(mqttClient, cancellationToken);
-        
-        // Parse JSON response
-        var json = JsonDocument.Parse(response);
-        var status = json.RootElement.GetProperty("status").GetString();
-        
-        if (status == "assigned")
-        {
-            // Success! Extract assignment details
-            return ParseRegistrationResult(json);
-        }
-        else if (status == "assigning")
-        {
-            // Get operation ID for polling
-            operationId = json.RootElement.GetProperty("operationId").GetString();
-            
-            // Wait before polling
-            await Task.Delay(2000, cancellationToken);
-            
-            // Poll for status
-            await PollOperationStatusAsync(mqttClient, message, operationId, cancellationToken);
-            
-            pollCount++;
-        }
-        else if (status == "failed")
-        {
-            throw new Exception($"Registration failed: {json}");
-        }
-    }
-    
-    throw new TimeoutException("Device registration polling exceeded maximum attempts");
-}
-```
-
-## Error Handling
-
-```csharp
-try
-{
-    var result = await client.RegisterAsync();
-}
-catch (MqttCommunicationException ex)
-{
-    Console.WriteLine($"MQTT connection failed: {ex.Message}");
-    // Check network, DPS endpoint, TLS version
-}
-catch (UnauthorizedAccessException ex)
-{
-    Console.WriteLine($"Authentication failed: {ex.Message}");
-    // Check ID Scope, registration ID, device key, enrollment group
-}
-catch (TimeoutException ex)
-{
-    Console.WriteLine($"Registration timed out: {ex.Message}");
-    // DPS may be provisioning, retry after delay
-}
-catch (Exception ex)
-{
-    Console.WriteLine($"Unexpected error: {ex.Message}");
-}
-```
-
-## Logging and Diagnostics
-
-The framework includes logging stubs matching the official SDK:
-
-```csharp
-public static class Logging
-{
-    public static void Associate(object parent, object child)
-    {
-        // Log relationship between components
-        Console.WriteLine($"[Associate] {parent.GetType().Name} -> {child.GetType().Name}");
-    }
-    
-    public static void Info(string message)
-    {
-        Console.WriteLine($"[INFO] {message}");
-    }
-    
-    public static void Error(string message, Exception? ex = null)
-    {
-        Console.WriteLine($"[ERROR] {message}");
-        if (ex != null)
-            Console.WriteLine($"  Exception: {ex}");
-    }
-}
-```
+The second command has a two-minute bound, waits for one telemetry acknowledgement
+and doesn't initialize physical sensors or servos.
+It does use real Azure credentials. For deliberate fresh-registration tests,
+follow the [cloud-test runbook](../scripts/iot-hub-device-registry/README.md#bounded-unified-sdk-cloud-test):
+the helper doesn't reset by default, and explicit `-ResetDevice` targets only
+the named device/registration, never the enrollment, CA or resource group.
 
 ## What We Accomplished
 
-✅ Built a custom DPS framework for preview API access  
-✅ Implemented MQTT protocol communication  
-✅ Created security providers for symmetric key and X.509  
-✅ Added CSR generation and certificate handling  
-✅ Matched official Microsoft SDK API patterns  
-✅ Enabled CSR-based certificate issuance  
+- ✅ Removed the custom provisioning protocol instead of maintaining two versions
+- ✅ Kept configuration and durable certificate handling behind a thin adapter
+- ✅ Preserved standard DPS and both CSR onboarding flows
+- ✅ Kept ADR metadata operations and software updates at their own boundaries
+- ✅ Added a bounded way to check the cloud connection without the sorter hardware
 
 ## Next Steps
 
-In the next post, we'll build the **complete device application** that uses this framework:
-- Loading configuration from appsettings.json
-- DPS initialization and provisioning
-- IoT Hub connection with issued certificate
-- Sending telemetry
-- Handling device twin updates
+Now we'll put that smaller adapter into the **device application**: load the
+configuration, open the unified connection and send the Skittle telemetry.
 
 ---
 

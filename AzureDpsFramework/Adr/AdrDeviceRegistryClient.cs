@@ -40,7 +40,7 @@ namespace AzureDpsFramework.Adr
             var results = new List<DeviceResource>();
             string? url =
                 $"https://management.azure.com/subscriptions/{subscriptionId}/resourceGroups/{resourceGroupName}" +
-                $"/providers/Microsoft.DeviceRegistry/namespaces/{namespaceName}/devices?api-version=2025-11-01-preview";
+                $"/providers/Microsoft.DeviceRegistry/namespaces/{namespaceName}/registryDevices?api-version=2026-11-02-preview";
 
             while (!string.IsNullOrEmpty(url))
             {
@@ -79,7 +79,7 @@ namespace AzureDpsFramework.Adr
 
             var url =
                 $"https://management.azure.com/subscriptions/{subscriptionId}/resourceGroups/{resourceGroupName}" +
-                $"/providers/Microsoft.DeviceRegistry/namespaces/{namespaceName}/devices/{deviceName}?api-version=2025-11-01-preview";
+                $"/providers/Microsoft.DeviceRegistry/namespaces/{namespaceName}/registryDevices/{deviceName}?api-version=2026-11-02-preview";
 
             var token = await _credential.GetTokenAsync(new TokenRequestContext(new[] { ArmScope }), ct);
             using var req = new HttpRequestMessage(HttpMethod.Get, url);
@@ -119,16 +119,21 @@ namespace AzureDpsFramework.Adr
 
             var url =
                 $"https://management.azure.com/subscriptions/{subscriptionId}/resourceGroups/{resourceGroupName}" +
-                $"/providers/Microsoft.DeviceRegistry/namespaces/{namespaceName}/devices/{deviceName}?api-version=2025-11-01-preview";
+                $"/providers/Microsoft.DeviceRegistry/namespaces/{namespaceName}/registryDevices/{deviceName}?api-version=2026-11-02-preview";
 
+            var properties = new Dictionary<string, object>();
+            if (attributes != null)
+                foreach (var attribute in attributes)
+                {
+                    if (attribute.Key is not ("manufacturer" or "model" or "hardwareRevision" or "softwareRevision"))
+                        throw new ArgumentException($"Registry devices do not support arbitrary attributes ('{attribute.Key}'). Use tags, manufacturer, model, hardwareRevision or softwareRevision.");
+                    properties[attribute.Key] = attribute.Value;
+                }
+            if (enabled.HasValue) properties["enablementState"] = enabled.Value ? "Enabled" : "Disabled";
+            if (operatingSystemVersion != null) properties["softwareRevision"] = operatingSystemVersion;
             var body = new
             {
-                properties = new
-                {
-                    attributes = attributes,
-                    enabled = enabled,
-                    operatingSystemVersion = operatingSystemVersion
-                },
+                properties,
                 tags = tags
             };
 

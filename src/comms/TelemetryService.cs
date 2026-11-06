@@ -2,17 +2,18 @@ using System;
 using System.Collections.Generic;
 using System.Text.Json;
 using System.Threading.Tasks;
-using Microsoft.Azure.Devices.Client;
+using Microsoft.Azure.Iot.Device.Models.Telemetry;
+using Microsoft.Azure.Iot.Device.Unified.Telemetry;
 
 namespace skittle_sorter
 {
     public class TelemetryService
     {
-        private readonly DeviceClient _deviceClient;
+        private readonly TelemetryClient _deviceClient;
         private readonly string _deviceId;
         private readonly IoTHubConfig _config;
 
-        public TelemetryService(DeviceClient deviceClient, string deviceId, IoTHubConfig config)
+        public TelemetryService(TelemetryClient deviceClient, string deviceId, IoTHubConfig config)
         {
             _deviceClient = deviceClient;
             _deviceId = deviceId;
@@ -28,18 +29,9 @@ namespace skittle_sorter
 
             try
             {
-                var telemetryData = CreateTelemetry(detectedColor, _deviceId, counts);
-
-                string json = JsonSerializer.Serialize(telemetryData);
-                using var message = new Message(System.Text.Encoding.UTF8.GetBytes(json))
-                {
-                    ContentType = "application/json",
-                    ContentEncoding = "utf-8"
-                };
-
                 Console.WriteLine($"[Telemetry] Sending color: {detectedColor}");
                 using var timeout = new CancellationTokenSource(TimeSpan.FromSeconds(10));
-                await _deviceClient.SendEventAsync(message, timeout.Token);
+                await SendRequiredAsync(detectedColor, counts, timeout.Token);
                 Console.WriteLine($"[Telemetry] Message sent successfully");
             }
             catch (Exception ex)
@@ -52,6 +44,14 @@ namespace skittle_sorter
                 }
             }
         }
+
+        public Task SendRequiredAsync(string detectedColor, SessionCounts? counts = null, CancellationToken cancellationToken = default) =>
+            _deviceClient.SendTelemetryAsync(new DeviceToCloudTelemetry
+            {
+                Payload = JsonSerializer.SerializeToUtf8Bytes(CreateTelemetry(detectedColor, _deviceId, counts)),
+                ContentType = "application/json",
+                ContentEncoding = "utf-8"
+            }, cancellationToken);
 
         public void LogColorDetected(string color)
         {

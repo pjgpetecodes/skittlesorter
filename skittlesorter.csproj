@@ -20,10 +20,8 @@
 
   <ItemGroup>
     <PackageReference Include="Iot.Device.Bindings" Version="4.0.1" />
-    <PackageReference Include="Microsoft.Azure.Devices.Client" Version="1.42.3" />
     <PackageReference Include="System.Device.Gpio" Version="4.0.1" />
     <PackageReference Include="Newtonsoft.Json" Version="13.0.4" />
-    <PackageReference Include="MQTTnet" Version="4.3.3.952" />
   </ItemGroup>
 
   <ItemGroup>

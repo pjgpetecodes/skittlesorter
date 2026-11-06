@@ -9,6 +9,14 @@
 
 ## Time to Build
 
+**What's changed in the application?** We're now using Microsoft's unified
+`Microsoft.Azure.Iot.Device` **2.0.0-preview4**, not a custom C# DPS transport.
+This doesn't require new cloud resources or an MQTT5 Hub. The script generates
+unified-compatible configuration with symmetric-key onboarding and CSR issuance
+enabled. Set `RequestOperationalCertificate: false` explicitly for standard
+non-CSR profiles. See the [bounded cloud test](../scripts/iot-hub-device-registry/README.md#bounded-unified-sdk-cloud-test)
+before running physical hardware.
+
 The refreshed public preview brings Device Registry, IoT Hub, DPS, and
 certificate management together in a new setup flow. This article uses the
 current Azure CLI commands and system-assigned identities.

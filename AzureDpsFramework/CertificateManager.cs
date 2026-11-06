@@ -64,7 +64,7 @@ namespace AzureDpsFramework
                     true));
                 
                 // Create self-signed certificate
-                var cert = req.CreateSelfSigned(DateTimeOffset.UtcNow, DateTimeOffset.UtcNow.AddDays(validityDays));
+                using var cert = req.CreateSelfSigned(DateTimeOffset.UtcNow, DateTimeOffset.UtcNow.AddDays(validityDays));
                 
                 // Export certificate to PEM
                 byte[] certDer = cert.Export(X509ContentType.Cert);
@@ -91,7 +91,7 @@ namespace AzureDpsFramework
                     true));
                 
                 // Create self-signed certificate
-                var cert = req.CreateSelfSigned(DateTimeOffset.UtcNow, DateTimeOffset.UtcNow.AddDays(validityDays));
+                using var cert = req.CreateSelfSigned(DateTimeOffset.UtcNow, DateTimeOffset.UtcNow.AddDays(validityDays));
                 
                 // Export certificate to PEM
                 byte[] certDer = cert.Export(X509ContentType.Cert);
@@ -107,14 +107,24 @@ namespace AzureDpsFramework
 
         public static void SaveText(string path, string content)
         {
-            Directory.CreateDirectory(Path.GetDirectoryName(path) ?? ".");
-            File.WriteAllText(path, content);
+            Directory.CreateDirectory(Path.GetDirectoryName(Path.GetFullPath(path))!);
+            var temporary = path + "." + Guid.NewGuid().ToString("N") + ".tmp";
+            try
+            {
+                var options = new FileStreamOptions { Mode = FileMode.CreateNew, Access = FileAccess.Write };
+                if (!OperatingSystem.IsWindows())
+                    options.UnixCreateMode = UnixFileMode.UserRead | UnixFileMode.UserWrite;
+                using (var stream = new FileStream(temporary, options))
+                using (var writer = new StreamWriter(stream))
+                    writer.Write(content);
+                File.Move(temporary, path, overwrite: true);
+            }
+            finally { if (File.Exists(temporary)) File.Delete(temporary); }
         }
 
         public static void SaveIssuedCertificatePem(string path, string pemChain)
         {
-            Directory.CreateDirectory(Path.GetDirectoryName(path) ?? ".");
-            File.WriteAllText(path, pemChain);
+            SaveText(path, pemChain);
         }
 
         public static X509Certificate2 LoadX509WithPrivateKey(string certPemPath, string keyPemPath)
@@ -135,7 +145,7 @@ namespace AzureDpsFramework
             var combinedPem = deviceCertPem + "\n" + keyText;
             
             // Load the certificate with private key (ephemeral)
-            var certEphemeral = X509Certificate2.CreateFromPem(combinedPem, combinedPem);
+            using var certEphemeral = X509Certificate2.CreateFromPem(combinedPem, combinedPem);
             
             // Export to PFX/PKCS12 format and re-import to make the private key persistent
             // This is required for TLS authentication with Azure IoT Hub

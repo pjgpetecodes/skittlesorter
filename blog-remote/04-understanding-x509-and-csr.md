@@ -22,6 +22,11 @@ the enrollment example to show where that policy fits. See the
 [Introduction](https://www.petecodes.co.uk/iot-hub-with-adr-and-certificate-management-part-1)
 for the series-wide changes.
 
+The device also now uses the official unified `Microsoft.Azure.Iot.Device`
+**2.0.0-preview4** rather than a custom C# DPS transport. Our adapter keeps the
+CSR/key and issued chain durable; both CSR onboarding flows and standard
+non-CSR profiles remain. That doesn't add automatic renewal or change our Hub.
+
 ---
 
 ### Contents
@@ -54,6 +59,21 @@ The new certificate management service makes use of a **two-phase approach**:
 -   **Security:** Higher security, no key transport
 
 ## How It Works
+
+### What's changed in the device code?
+
+The certificate story is the same, but I've moved provisioning to the official
+unified `Microsoft.Azure.Iot.Device` **2.0.0-preview4** package. The custom C#
+DPS protocol is gone. Our adapter keeps configuration, durable CSR/key/issued
+chain files and ADR ARM helpers; `ConnectionClient` owns provisioning and the
+Hub connection and `TelemetryClient` shares it. Both CSR onboarding flows and
+standard non-CSR symmetric-key/X.509 profiles remain on .NET 10 and our existing
+Hub, with its endpoint/profile discovered through DPS.
+
+See the [SDK feature matrix and design](https://github.com/Azure/azure-iot-sdk/blob/main/dotnet/README.md).
+Optional IoT Hub renewal APIs are available, but automatic certificate renewal
+isn't implemented in this application. The separate DPS software-updates client
+isn't replaced by this provisioning change.
 
 The following diagram shows the complete provisioning flow:
 
@@ -460,8 +480,9 @@ You've now completed all manual setup steps:
 ## Certificate Renewal and Revocation
 
 The current IoT Hub certificate-management workflow supports operational
-certificate renewal without requiring the device to reprovision. This differs
-from the sample implementation's renewal logic; review the current
+certificate renewal without requiring the device to reprovision. The SDK
+exposes optional renewal APIs, but this sample doesn't implement automatic
+operational-certificate renewal; review the current
 [certificate-management overview](https://learn.microsoft.com/en-us/azure/iot/iot-certificate-management-overview)
 and device workflow before relying on a fixed renewal interval.
 

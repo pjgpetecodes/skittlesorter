@@ -1,5 +1,15 @@
 # Understanding X.509 and CSR Workflows
 
+## What's changed?
+
+The certificate roles below stay the same, but the device now uses Microsoft's
+unified `Microsoft.Azure.Iot.Device` **2.0.0-preview4** for provisioning and
+connection, not custom C# DPS security providers or transports. Our thin adapter
+retains durable CSR/key and issued-chain files. Both symmetric-key and X.509 CSR
+onboarding remain; standard non-CSR profiles set `RequestOperationalCertificate:
+false`. The existing Hub and .NET 10 are unchanged; the SDK discovers the assigned
+endpoint/profile through DPS.
+
 > **Release baseline:** This series uses the latest Azure IoT CLI preview
 > extension, `azure-iot` **1.0.0b2**, released **6 October 2026**. Last
 > reviewed **29 October 2026**. [Release notes](https://github.com/Azure/azure-iot-cli-extension/releases/tag/v1.0.0b2).
@@ -415,16 +425,16 @@ You've now completed all manual setup steps:
 7. Device uses operational certificate for all IoT Hub connections
 
 **For Detailed Explanations:**
-See [Understanding X.509 and CSR Workflows (Deep Dive)](03a-x509-and-csr-workflows-deep-dive.md) for complete technical details, certificate architecture, and advanced scenarios.
+See [Understanding X.509 and CSR Workflows (Deep Dive)](03a-x509-and-csr-workflows.md) for complete technical details, certificate architecture, and advanced scenarios.
 
 ## Certificate Renewal
 
 Devices are responsible for monitoring operational certificate expiration:
 
 - Check `Valid until` date periodically
-- Initiate renewal before expiration (recommended: 7 days before)
-- Generate new CSR and submit to DPS (same as initial provisioning)
-- Receive renewed certificate from ADR
+- Plan renewal before expiration according to the policy and supported device workflow
+- The unified SDK exposes optional IoT Hub renewal APIs without DPS reprovisioning
+- This application does not implement automatic operational-certificate renewal
 
 **Best Practice:** Use Device Twin reported properties to track certificate issuance/expiration dates for monitoring.
 
@@ -435,9 +445,9 @@ Revocation of intermediate CAs signed by an external CA has limitations; see
 the current service documentation.
 ⚠️ **Production Use:** IoT Hub integration and certificate management remain
 in public preview and aren't recommended for production.
-⚠️ **Implementation:** This repository's sample uses a custom MQTT-based DPS
-framework for its CSR provisioning flow. This is a sample implementation
-choice, not a general requirement for IoT Hub or ADR deployments.
+⚠️ **Implementation:** The official unified SDK handles provisioning. API
+availability doesn't imply an automatic renewal scheduler in this application;
+see the [SDK matrix](https://github.com/Azure/azure-iot-sdk/blob/main/dotnet/README.md).
 
 ## Learn More
 
@@ -447,7 +457,7 @@ choice, not a general requirement for IoT Hub or ADR deployments.
 - [Certificate Management Concepts](https://learn.microsoft.com/en-us/azure/iot-hub/iot-hub-certificate-management-concepts)
 
 **Deep Dive:**
-- [Understanding X.509 and CSR Workflows (Deep Dive)](03a-x509-and-csr-workflows-deep-dive.md) - Detailed technical explanation with manual steps
+- [Understanding X.509 and CSR Workflows (Deep Dive)](03a-x509-and-csr-workflows.md) - Detailed technical explanation with manual steps
 
 ## Next Steps
 

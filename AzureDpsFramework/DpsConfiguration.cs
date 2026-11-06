@@ -2,6 +2,8 @@ using System;
 using System.IO;
 using System.Text.Json;
 using System.Linq;
+using System.Security.Cryptography;
+using System.Text;
 
 namespace AzureDpsFramework
 {
@@ -19,7 +21,6 @@ namespace AzureDpsFramework
         public string? AttestationKeyPath { get; set; }
         public string? AttestationCertChainPath { get; set; }
         public int SasExpirySeconds { get; set; } = 3600;
-        public string ApiVersion { get; set; } = "2025-07-01-preview";
         public int MqttPort { get; set; } = 8883;
         public bool AutoGenerateCsr { get; set; } = true;
         public bool RequestOperationalCertificate { get; set; } = true;
@@ -48,6 +49,8 @@ namespace AzureDpsFramework
             {
                 throw new InvalidOperationException("IoTHub.DpsProvisioning section missing in appsettings.json");
             }
+            if (dps.TryGetProperty("ApiVersion", out _))
+                Console.WriteLine("[DPS] ApiVersion is now SDK-owned; the legacy configuration setting is ignored.");
 
             string GetString(JsonElement el, string name, string def = "")
             {
@@ -92,7 +95,6 @@ namespace AzureDpsFramework
                 ? null
                 : ResolveRelativePath(cfg.AttestationCertChainPath, appSettingsPath);
             cfg.SasExpirySeconds = GetInt(dps, nameof(SasExpirySeconds), cfg.SasExpirySeconds);
-            cfg.ApiVersion = GetString(dps, nameof(ApiVersion), cfg.ApiVersion);
             cfg.MqttPort = GetInt(dps, nameof(MqttPort), cfg.MqttPort);
             cfg.AutoGenerateCsr = GetBool(dps, nameof(AutoGenerateCsr), cfg.AutoGenerateCsr);
             cfg.RequestOperationalCertificate = GetBool(dps, nameof(RequestOperationalCertificate), cfg.RequestOperationalCertificate);
@@ -122,6 +124,10 @@ namespace AzureDpsFramework
             if (string.IsNullOrWhiteSpace(IdScope)) throw new InvalidOperationException("DPS IdScope is required");
             if (string.IsNullOrWhiteSpace(RegistrationId)) throw new InvalidOperationException("DPS RegistrationId is required");
             if (string.IsNullOrWhiteSpace(ProvisioningHost)) throw new InvalidOperationException("DPS ProvisioningHost is required");
+            if (MqttPort != 8883)
+                throw new InvalidOperationException("The unified SDK configuration supports MQTT TLS on port 8883 only.");
+            if (SasExpirySeconds <= 0)
+                throw new InvalidOperationException("SasExpirySeconds must be positive.");
             
             // Validate based on attestation method
             if (AttestationMethod == "SymmetricKey")
@@ -143,10 +149,10 @@ namespace AzureDpsFramework
 
             if (RequestOperationalCertificate && string.IsNullOrWhiteSpace(IssuedCertFilePath))
                 throw new InvalidOperationException("IssuedCertFilePath is required");
-            if (RequestOperationalCertificate && AutoGenerateCsr)
+            if (RequestOperationalCertificate)
             {
                 if (string.IsNullOrWhiteSpace(CsrFilePath) || string.IsNullOrWhiteSpace(CsrKeyFilePath))
-                    throw new InvalidOperationException("CsrFilePath and CsrKeyFilePath are required when AutoGenerateCsr is true");
+                    throw new InvalidOperationException("CsrFilePath and CsrKeyFilePath are required when requesting an operational certificate");
             }
         }
 
@@ -155,7 +161,8 @@ namespace AzureDpsFramework
             if (!string.IsNullOrWhiteSpace(DeviceKeyBase64)) return DeviceKeyBase64!;
             if (string.IsNullOrWhiteSpace(EnrollmentGroupKeyBase64))
                 throw new InvalidOperationException("EnrollmentGroupKeyBase64 is required to derive device key");
-            return DpsSasTokenGenerator.DeriveDeviceKey(RegistrationId, EnrollmentGroupKeyBase64!);
+            using var hmac = new HMACSHA256(Convert.FromBase64String(EnrollmentGroupKeyBase64));
+            return Convert.ToBase64String(hmac.ComputeHash(Encoding.UTF8.GetBytes(RegistrationId)));
         }
 
         private static string ResolveRegistrationIdToken(string value, string registrationId)

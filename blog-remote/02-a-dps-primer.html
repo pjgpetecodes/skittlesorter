@@ -28,7 +28,24 @@ reviewed against current Microsoft Learn guidance <strong>5 November 2026</stron
 <!-- /wp:heading -->
 
 <!-- wp:paragraph -->
-<p>One thing that's easy to mix up: the device first proves its identity to DPS; if you enable certificate management, ADR can then issue a separate certificate for use with IoT Hub. You don't need certificate management for the IoT Hub preview, but you do need DPS. I've updated the primer to make that distinction clearer. See the <a href="https://www.petecodes.co.uk/iot-hub-with-adr-and-certificate-management-part-1">Introduction</a> for the series-wide changes.</p>
+<p>One thing that's easy to mix up: the device first proves its identity to DPS;
+if you enable certificate management, ADR can then issue a separate
+certificate for use with IoT Hub. You don't need certificate management for
+the IoT Hub preview, but you do need DPS. I've updated the primer to make that
+distinction clearer. See the <a href="https://www.petecodes.co.uk/iot-hub-with-adr-and-certificate-management-part-1">Introduction</a>
+for the series-wide changes.</p>
+<!-- /wp:paragraph -->
+
+<!-- wp:paragraph -->
+<p>The device code now uses <code>Microsoft.Azure.Iot.Device</code> <strong>2.0.0-preview4</strong>:
+one unified <code>ConnectionClient</code> for DPS and the Hub, and <code>TelemetryClient</code> for
+our messages. I've removed the custom C# provisioning protocol, not the
+configuration and durable CSR/key/chain handling. Standard symmetric-key/X.509
+and both CSR flows remain on the existing Hub, with its endpoint/profile discovered
+through DPS. This is still a preview;
+the <a href="https://github.com/Azure/azure-iot-sdk/blob/main/dotnet/README.md">SDK matrix</a>
+also makes clear that DPS software updates are a separate, unsupported SDK
+workflow. Our separate updater isn't replaced by this change.</p>
 <!-- /wp:paragraph -->
 
 <!-- wp:separator -->
@@ -45,30 +62,27 @@ reviewed against current Microsoft Learn guidance <strong>5 November 2026</stron
 <hr class="wp-block-separator has-alpha-channel-opacity"/>
 <!-- /wp:separator -->
 
-<!-- wp:heading {"textColor":"#f6f6f4"} -->
-<h2 class="wp-block-heading has-f-6-f-6-f-4-color has-text-color">Contents:</h2>
+<!-- wp:heading {"level":3} -->
+<h3 class="wp-block-heading">Contents</h3>
 <!-- /wp:heading -->
 
-<!-- wp:list {"ordered":true,"textColor":"#f6f6f4"} -->
-<ol class="wp-block-list has-f-6-f-6-f-4-color has-text-color"><!-- wp:list-item -->
-<li><a href="https://www.petecodes.co.uk/iot-hub-with-adr-and-certificate-management-part-1" target="_blank" rel="noreferrer noopener">Introduction</a></li>
+<!-- wp:list {"ordered":true} -->
+<ol class="wp-block-list"><!-- wp:list-item -->
+<li><a href="https://www.petecodes.co.uk/iot-hub-with-adr-and-certificate-management-part-1">Introduction</a></li>
 <!-- /wp:list-item -->
-
 <!-- wp:list-item -->
-<li><a href="https://www.petecodes.co.uk/iot-hub-with-adr-and-certificate-management-part-2" target="_blank" rel="noreferrer noopener">A DPS Primer</a> (This Post)</li>
+<li><a href="https://www.petecodes.co.uk/iot-hub-with-adr-and-certificate-management-part-2">A DPS Primer (this post)</a></li>
 <!-- /wp:list-item -->
-
 <!-- wp:list-item -->
-<li><a href="https://www.petecodes.co.uk/iot-hub-with-adr-and-certificate-management-part-3" target="_blank" rel="noreferrer noopener">Creating DPS, IoT Hub and ADR Instances</a></li>
+<li><a href="https://www.petecodes.co.uk/iot-hub-with-adr-and-certificate-management-part-3">Creating DPS, IoT Hub and ADR Instances</a></li>
 <!-- /wp:list-item -->
-
 <!-- wp:list-item -->
-<li><a href="https://www.petecodes.co.uk/iot-hub-with-adr-and-certificate-management-part-4" target="_blank" rel="noreferrer noopener">Understanding X.509 and CSR Workflows</a></li>
+<li><a href="https://www.petecodes.co.uk/iot-hub-with-adr-and-certificate-management-part-4">Understanding X.509 and CSR Workflows</a></li>
 <!-- /wp:list-item -->
-
 <!-- wp:list-item -->
-<li><a href="https://www.petecodes.co.uk/iot-hub-with-adr-and-certificate-management-part-5" target="_blank" rel="noreferrer noopener">The Device Application</a></li>
-<!-- /wp:list-item --></ol>
+<li><a href="https://www.petecodes.co.uk/iot-hub-with-adr-and-certificate-management-part-5">The Device Application</a></li>
+<!-- /wp:list-item -->
+</ol>
 <!-- /wp:list -->
 
 <!-- wp:heading {"level":3} -->
@@ -177,7 +191,8 @@ reviewed against current Microsoft Learn guidance <strong>5 November 2026</stron
 <!-- /wp:heading -->
 
 <!-- wp:paragraph -->
-<p>The custom device code in this repository uses the <code>2025-07-01-preview</code> API
+<p>The unified SDK now handles this repository's CSR provisioning flow. The
+earlier custom transport used the <code>2025-07-01-preview</code> API
 for its CSR provisioning example. The current service workflow is that DPS
 validates the device's onboarding credential and coordinates issuance of an
 <strong>operational certificate</strong> from the ADR namespace's issuing CA:</p>
@@ -310,7 +325,8 @@ Azure IoT Hub is a separate <strong>public preview</strong>. Each IoT Hub links 
 namespace, while multiple hubs can share a namespace. You can create a new Hub
 or connect an eligible existing Hub. Connecting an existing Hub to a namespace
 is permanent and can't be reversed. This series' setup script creates a
-dedicated new Hub; see the <a href="https://learn.microsoft.com/en-gb/azure/iot/device-registry/get-started-azure-device-registry">current getting-started guide</a>
+dedicated new Hub; see the <a href="https://learn.microsoft.com/en-gb/azure/iot/device-registry/get-started-azure-device-registry">current getting-started
+guide</a>
 for the existing-resource path.</p>
 <!-- /wp:paragraph -->
 
@@ -417,8 +433,8 @@ ADR intermediate CA can have one certificate policy.</p>
 <p>Certificate management is optional, but <strong>DPS is required for all IoT Hub
 preview scenarios</strong>, even when certificate management isn't enabled.
 Operational certificates can be renewed and revoked, and ADR manages CA
-CA lifecycle and rotation operations. IoT Hub integration remains in public preview and isn't recommended
-for production workloads.</p>
+lifecycle and rotation operations. IoT Hub integration remains in public
+preview and isn't recommended for production workloads.</p>
 <!-- /wp:paragraph -->
 
 <!-- wp:heading {"level":3} -->
@@ -680,9 +696,9 @@ for production workloads.</p>
 
 <!-- wp:paragraph -->
 <p>IoT Hub integration with ADR and certificate management is still in <strong>public
-preview</strong> and isn't recommended for production workloads. The custom DPS
-framework is this project's implementation choice; don't treat its API version
-or client-library assumptions as a general Microsoft SDK support statement.</p>
+preview</strong> and isn't recommended for production workloads. The sorter now uses
+the official unified SDK with a thin application adapter. Don't treat old
+wire-level examples as instructions to rebuild the removed transport.</p>
 <!-- /wp:paragraph -->
 
 <!-- wp:quote -->
@@ -714,7 +730,7 @@ or client-library assumptions as a general Microsoft SDK support statement.</p>
 <li>Set up enrollment groups (symmetric key and X.509)</li>
 <!-- /wp:list-item -->
 <!-- wp:list-item -->
-<li>Build a .NET device application with custom DPS framework</li>
+<li>Build a .NET device application with the unified SDK and a thin adapter</li>
 <!-- /wp:list-item -->
 <!-- wp:list-item -->
 <li>Implement CSR generation and certificate management</li>
