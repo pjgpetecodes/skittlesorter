@@ -10,6 +10,8 @@ param(
     [string]$EnrollmentId,
     [string]$HubName,
     [string]$NamespaceName,
+    [ValidateSet('login', 'key')]
+    [string]$HubAuthType = 'login',
     [switch]$ResetOnly
 )
 
@@ -28,15 +30,22 @@ if ($ResetOnly -and -not $ResetDevice) {
 
 function Invoke-Azure {
     param([string[]]$Arguments)
+    $operation = ($Arguments -join ' ') -replace '\s--?.*$', ''
+    Write-Host "[$(Get-Date -Format HH:mm:ss)] Running az $operation..."
+    $timer = [Diagnostics.Stopwatch]::StartNew()
     $result = & az @Arguments --subscription $SubscriptionId --only-show-errors --output json
+    Write-Host ("[{0:HH:mm:ss}] az {1} returned after {2:N1}s." -f (Get-Date), $operation, $timer.Elapsed.TotalSeconds)
     if ($LASTEXITCODE -ne 0) { throw "Azure command failed: az $($Arguments -join ' ')" }
     if ($result) { return ($result -join "`n" | ConvertFrom-Json) }
 }
 
 function Test-HubDevice {
+    Write-Host "[$(Get-Date -Format HH:mm:ss)] Checking Hub identity '$registration' ($HubAuthType)..."
+    $timer = [Diagnostics.Stopwatch]::StartNew()
     $result = & az iot hub device-identity show -g $ResourceGroupName --hub-name $HubName `
-        --device-id $registration --auth-type login --subscription $SubscriptionId `
+        --device-id $registration --auth-type $HubAuthType --subscription $SubscriptionId `
         --query 'deviceId' --only-show-errors --output json 2>&1
+    Write-Host ("[{0:HH:mm:ss}] Hub identity check returned after {1:N1}s." -f (Get-Date), $timer.Elapsed.TotalSeconds)
     if ($LASTEXITCODE -ne 0) {
         $message = ($result | ForEach-Object { "$_" }) -join "`n"
         if ($message -match 'ErrorCode:DeviceNotFound;404') { return $false }
@@ -92,13 +101,13 @@ if ($ResetDevice) {
 
     if ($registration -in $devices) {
         $null = Invoke-Azure @('iot', 'adr', 'ns', 'device', 'delete', '-g', $ResourceGroupName,
-            '--namespace', $NamespaceName, '-n', $registration, '--yes')
+            '--namespace', $NamespaceName, '-n', $registration, '--yes', '--no-wait')
         $null = Invoke-Azure @('iot', 'adr', 'ns', 'device', 'wait', '-g', $ResourceGroupName,
             '--namespace', $NamespaceName, '-n', $registration, '--deleted', '--timeout', '120')
     }
     if (Test-HubDevice) {
         $null = Invoke-Azure @('iot', 'hub', 'device-identity', 'delete', '-g', $ResourceGroupName,
-            '--hub-name', $HubName, '--device-id', $registration, '--auth-type', 'login')
+            '--hub-name', $HubName, '--device-id', $registration, '--auth-type', $HubAuthType)
     }
     $null = Invoke-Azure @('iot', 'dps', 'enrollment-group', 'registration', 'delete', '-g', $ResourceGroupName,
         '--dps-name', $DpsName, '--registration-id', $registration)

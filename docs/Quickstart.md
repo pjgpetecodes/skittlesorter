@@ -86,6 +86,80 @@ may create the configured device record. For repeat runs and explicit exact-devi
 reset, use the [unified cloud-test runbook](../scripts/iot-hub-device-registry/README.md#bounded-unified-sdk-cloud-test).
 Neither check implements automatic certificate renewal.
 
+## Raspberry Pi: update and provision
+
+Use `main` on both the development PC and Pi. The fixes from
+`fix-broken-servo-control`, including physical PWM and chute control, are already
+merged into `main`. An older branch can still run the legacy DPS/certificate
+code even when its configuration has been updated.
+
+Stop the sorter, then check the Pi's checkout:
+
+```bash
+git branch --show-current
+git rev-parse --short HEAD
+git status --short
+```
+
+Preserve local changes before switching branches. In particular, older checkouts
+may have these three untracked templates, which are tracked on `main`. If they
+are shown as untracked, move them aside rather than deleting them:
+
+```bash
+mkdir -p pi-update-backup
+mv -t pi-update-backup appsettings.sas.template.json appsettings.template.json appsettings.x509.template.json
+```
+
+Then update and rebuild:
+
+```bash
+git switch main
+git pull --ff-only
+dotnet clean
+dotnet run -- --self-test
+dotnet run -- --cloud-self-test
+```
+
+Do not force the switch or discard tracked hardware/image changes if Git
+reports a conflict. Compare the resulting revision with the development PC.
+Keep the ignored `appsettings.json` and private certificate files; Git does not
+transfer those files to the Pi.
+
+Use separate identities, for example `skittlesorter` on the mock-hardware PC
+and `skittlesorter2` on the physical Pi. On the Pi, keep
+`EnableMockColorSensor` and `EnableMockServos` set to `false`. Set
+`RegistrationId` to the Pi certificate's subject CN and obtain `IdScope` from
+the actual DPS service, not from an older resource group's profile:
+
+```bash
+az iot dps show --name "<dps-name>" --resource-group "<resource-group>" --query properties.idScope --output tsv
+```
+
+If bootstrap certificates were regenerated for a different trusted CA, securely
+copy the new device certificate, its private key, and public issuer chain to
+the configured Pi locations. For example, the `-002` bootstrap filenames are:
+
+- `scripts\certs\device\skittlesorter2-device-002.pem`
+- `scripts\certs\device\skittlesorter2-device-002.key`
+- `scripts\certs\ca\skittlesorter2-chain-002.pem`
+
+`-002` identifies that certificate set; it does not change the registration ID.
+Do not rename old certificates to these names: their issuer must match the CA
+trusted by the selected DPS enrollment. Never copy CA private keys to the Pi.
+Protect the device key so only the account running the sorter can read it.
+Retain the separate operational CSR/key, issued chain, and assignment sidecar
+across restarts.
+
+For this X.509/CSR flow, use `RequestOperationalCertificate: true` (also the
+default) and leave the unused `IoTHub.DeviceConnectionString` empty. Do not
+retain an old Hub's connection string in the profile or paste its secret into
+logs/issues; rotate any exposed device key.
+
+The cloud self-test verifies DPS, Hub connection, and telemetry without moving
+the hardware. After it passes, use `dotnet run` for normal sorting. Azure CLI
+is not required for device X.509 authentication; it is needed only if you choose
+CLI-based access for the app's optional [ADR management calls](ADR-Integration.md#authentication-on-a-raspberry-pi).
+
 ## Next Steps
 - **Hardware:** See [Hardware](./Hardware.md) for wiring and calibration
 - **Testing again?** Prefer the bounded cloud check above. [Clean Test Start](./Clean-Test-Start.md) documents the guarded exact-device reset.

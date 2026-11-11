@@ -16,7 +16,9 @@ param(
     [Parameter(Mandatory = $true)]
     [string]$DeviceId,
     [Parameter(Mandatory = $true)]
-    [string]$AdrNamespace
+    [string]$AdrNamespace,
+    [ValidateSet('login', 'key')]
+    [string]$HubAuthType = 'login'
 )
 
 $ErrorActionPreference = 'Stop'
@@ -43,6 +45,7 @@ $resetParameters = @{
     EnrollmentId = $EnrollmentGroupName
     HubName = $IotHubName
     NamespaceName = $AdrNamespace
+    HubAuthType = $HubAuthType
 }
 $previousConfirmPreference = $ConfirmPreference
 try {

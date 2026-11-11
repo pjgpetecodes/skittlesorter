@@ -23,6 +23,7 @@ For a new device application, start with the official unified SDK. Reuse this re
 ## Documentation
 - Application updates: [two independent OTA demonstrations](docs/Application-Updates.md) and [GA blog series](blog/device-update-for-iot-hub/README.md), followed by [custom C# ADR Software Updates](blog/adr-software-updates/README.md). Local drafts; real Azure/Pi validation remains outstanding.
 - Quickstart: [docs/Quickstart.md](docs/Quickstart.md)
+- Demo cheat sheet: [clean start, run, list resources, and monitor communications](docs/Demo-Cheat-Sheet.md)
 - Hardware: [docs/Hardware.md](docs/Hardware.md)
 - Azure Setup: [docs/Azure-Setup.md](docs/Azure-Setup.md)
 - DPS Provisioning: [docs/DPS-Provisioning.md](docs/DPS-Provisioning.md)
