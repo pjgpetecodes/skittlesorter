@@ -37,7 +37,7 @@ Follow the blog posts in order to understand every component and decision.
 
 By the end of this series, you'll have:
 - ✅ Azure infrastructure (DPS, IoT Hub, ADR)
-- ✅ Unified SDK with thin configuration, persistence and ADR ARM adapter
+- ✅ Unified SDK with configuration, persistence and ADR ARM helpers
 - ✅ Complete .NET device application
 - ✅ Certificate-based authentication
 - ✅ Device telemetry and twin support
@@ -76,7 +76,7 @@ skittlesorter/
 ├── blog/                       # Blog post series (you are here)
 ├── docs/                       # Technical documentation
 ├── src/                        # Device application code
-├── AzureDpsFramework/          # Thin unified SDK adapter
+├── AzureDpsFramework/          # Configuration and credential helpers
 ├── scripts/                    # PowerShell automation scripts
 └── appsettings.json           # Configuration
 ```

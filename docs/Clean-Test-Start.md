@@ -1,5 +1,10 @@
 # Clean Test Start
 
+For the complete infrastructure-to-certificate-to-provisioning-to-reset demo
+cycle, use the [Repeatable X.509 Provisioning Demo runbook](./Demo-Runbook.md).
+The VS Code Command Palette resets and standalone scripts there target only a
+dedicated local demo configuration.
+
 Use the exact-device reset before a demo when you want the configured device to
 provision again from DPS. Stop the sorter first. The reset keeps the resource
 group, IoT Hub, DPS, ADR namespace, enrollment group, CA certificates, and local

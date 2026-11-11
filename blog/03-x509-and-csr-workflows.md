@@ -4,7 +4,7 @@
 
 The certificate roles below stay the same, but the device now uses Microsoft's
 unified `Microsoft.Azure.Iot.Device` **2.0.0-preview4** for provisioning and
-connection, not custom C# DPS security providers or transports. Our thin adapter
+connection, not custom C# DPS security providers or transports. Our helpers
 retains durable CSR/key and issued-chain files. Both symmetric-key and X.509 CSR
 onboarding remain; standard non-CSR profiles set `RequestOperationalCertificate:
 false`. The existing Hub and .NET 10 are unchanged; the SDK discovers the assigned

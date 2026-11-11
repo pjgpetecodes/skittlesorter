@@ -9,7 +9,7 @@ Welcome back to this series of posts exploring the latest features of Azure IoT 
 
 In the previous post we dove deeper into DPS and what's new.
 
-### What's new in this edition?
+### What's new in this version?
 
 I've refreshed the setup steps and script. They now use system-assigned
 identities, link DPS before the Hub, and connect the enrollment to the ADR
@@ -18,7 +18,7 @@ group; it doesn't provision a device. See the [Introduction](https://www.petecod
 for the series-wide changes.
 
 The application now uses Microsoft's unified `Microsoft.Azure.Iot.Device`
-**2.0.0-preview4**. The generated config is compatible with that adapter and
+**2.0.0-preview4**. The generated config is compatible with the SDK integration and
 defaults to X.509 onboarding with CSR issuance enabled.
 Set `RequestOperationalCertificate: false` explicitly for standard non-CSR profiles. The SDK
 migration doesn't change the resources below or require an MQTT5 Hub. Once

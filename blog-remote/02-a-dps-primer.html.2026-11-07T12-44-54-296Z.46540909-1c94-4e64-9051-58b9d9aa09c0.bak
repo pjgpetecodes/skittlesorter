@@ -1,0 +1,720 @@
+<!-- wp:heading {"level":2} -->
+<h2 class="wp-block-heading"><strong>A DPS Primer</strong></h2>
+<!-- /wp:heading -->
+
+<!-- wp:quote -->
+<blockquote class="wp-block-quote"><!-- wp:paragraph -->
+<p><strong>CLI baseline:</strong> The examples use Azure IoT CLI preview extension
+<code>azure-iot</code> <strong>1.0.0b2</strong>, released <strong>6 October 2026</strong>. Last
+reviewed against current Microsoft Learn guidance <strong>5 November 2026</strong>.
+<a href="https://github.com/Azure/azure-iot-cli-extension/releases/tag/v1.0.0b2">Release notes</a>.</p>
+<!-- /wp:paragraph --></blockquote>
+<!-- /wp:quote -->
+
+<!-- wp:paragraph -->
+<p>Welcome back to this series of posts exploring the latest features of Azure IoT Hub, Device Provisioning Service (DPS), and Azure Device Registry (ADR).</p>
+<!-- /wp:paragraph -->
+
+<!-- wp:paragraph -->
+<p>The previous post introduced the new features and gave an overview of what we can expect in this post series.</p>
+<!-- /wp:paragraph -->
+
+<!-- wp:paragraph -->
+<p>In this post, we'll dive deeper in the Azure Device Provisioning Service and how we can use the new features.</p>
+<!-- /wp:paragraph -->
+
+<!-- wp:heading {"level":3} -->
+<h3 class="wp-block-heading">What's new in this edition?</h3>
+<!-- /wp:heading -->
+
+<!-- wp:paragraph -->
+<p>One thing that's easy to mix up: the device first proves its identity to DPS;
+if you enable certificate management, ADR can then issue a separate
+certificate for use with IoT Hub. You don't need certificate management for
+the IoT Hub preview, but you do need DPS. I've updated the primer to make that
+distinction clearer. See the <a href="https://www.petecodes.co.uk/iot-hub-with-adr-and-certificate-management-part-1">Introduction</a>
+for the series-wide changes.</p>
+<!-- /wp:paragraph -->
+
+<!-- wp:paragraph -->
+<p>The device code now uses <code>Microsoft.Azure.Iot.Device</code> <strong>2.0.0-preview4</strong>:
+one unified <code>ConnectionClient</code> for DPS and the Hub, and <code>TelemetryClient</code> for
+our messages. I've removed the custom C# provisioning protocol, not the
+configuration and durable CSR/key/chain handling. Standard symmetric-key/X.509
+and both CSR flows remain on the existing Hub, with its endpoint/profile discovered
+through DPS. This is still a preview;
+the <a href="https://github.com/Azure/azure-iot-sdk/blob/main/dotnet/README.md">SDK matrix</a>
+also makes clear that DPS software updates are a separate, unsupported SDK
+workflow. Our separate updater isn't replaced by this change.</p>
+<!-- /wp:paragraph -->
+
+<!-- wp:separator -->
+<hr class="wp-block-separator has-alpha-channel-opacity"/>
+<!-- /wp:separator -->
+
+<!-- wp:quote -->
+<blockquote class="wp-block-quote"><!-- wp:paragraph -->
+<p><strong>Note:</strong> This guide uses <strong>PowerShell</strong> for all commands and scripts. While Azure CLI commands work identically in bash/zsh, PowerShell is recommended for Windows environments and provides consistent cross-platform support. If you're using Linux/macOS, you can install <a href="https://learn.microsoft.com/powershell/scripting/install/installing-powershell">PowerShell Core</a> or adapt the commands to bash syntax.</p>
+<!-- /wp:paragraph --></blockquote>
+<!-- /wp:quote -->
+
+<!-- wp:separator -->
+<hr class="wp-block-separator has-alpha-channel-opacity"/>
+<!-- /wp:separator -->
+
+<!-- wp:heading {"level":3} -->
+<h3 class="wp-block-heading">Contents</h3>
+<!-- /wp:heading -->
+
+<!-- wp:list {"ordered":true} -->
+<ol class="wp-block-list"><!-- wp:list-item -->
+<li><a href="https://www.petecodes.co.uk/iot-hub-with-adr-and-certificate-management-part-1">Introduction</a></li>
+<!-- /wp:list-item -->
+<!-- wp:list-item -->
+<li><a href="https://www.petecodes.co.uk/iot-hub-with-adr-and-certificate-management-part-2">A DPS Primer (this post)</a></li>
+<!-- /wp:list-item -->
+<!-- wp:list-item -->
+<li><a href="https://www.petecodes.co.uk/iot-hub-with-adr-and-certificate-management-part-3">Creating DPS, IoT Hub and ADR Instances</a></li>
+<!-- /wp:list-item -->
+<!-- wp:list-item -->
+<li><a href="https://www.petecodes.co.uk/iot-hub-with-adr-and-certificate-management-part-4">Understanding X.509 and CSR Workflows</a></li>
+<!-- /wp:list-item -->
+<!-- wp:list-item -->
+<li><a href="https://www.petecodes.co.uk/iot-hub-with-adr-and-certificate-management-part-5">The Device Application</a></li>
+<!-- /wp:list-item -->
+</ol>
+<!-- /wp:list -->
+
+<!-- wp:heading {"level":3} -->
+<h3 class="wp-block-heading">What is Device Provisioning Service?</h3>
+<!-- /wp:heading -->
+
+<!-- wp:paragraph -->
+<p>Let's start with the basics. Before we write code or create Azure resources, you need to understand what DPS does and why it matters for your IoT deployment.</p>
+<!-- /wp:paragraph -->
+
+<!-- wp:paragraph -->
+<p>Azure IoT Hub Device Provisioning Service (DPS) is a helper service for IoT Hub that enables zero-touch, just-in-time provisioning to the right IoT hub without requiring human intervention.</p>
+<!-- /wp:paragraph -->
+
+<!-- wp:heading {"level":3} -->
+<h3 class="wp-block-heading">Why Use DPS?</h3>
+<!-- /wp:heading -->
+
+<!-- wp:paragraph -->
+<p>You might be wondering: &quot;Can't I just register devices manually in IoT Hub?&quot; You can, but let's see why that doesn't scale:</p>
+<!-- /wp:paragraph -->
+
+<!-- wp:heading {"level":4} -->
+<h4 class="wp-block-heading">Traditional Approach (Manual Registration)</h4>
+<!-- /wp:heading -->
+
+<!-- wp:list -->
+<ul class="wp-block-list"><!-- wp:list-item -->
+<li>Register each device manually in IoT Hub</li>
+<!-- /wp:list-item -->
+<!-- wp:list-item -->
+<li>Hardcode connection strings in device firmware</li>
+<!-- /wp:list-item -->
+<!-- wp:list-item -->
+<li>Difficult to reassign devices to different hubs</li>
+<!-- /wp:list-item -->
+<!-- wp:list-item -->
+<li>Doesn't scale beyond a few devices</li>
+<!-- /wp:list-item -->
+<!-- wp:list-item -->
+<li>Manual certificate management and rotation</li>
+<!-- /wp:list-item -->
+</ul>
+<!-- /wp:list -->
+
+<!-- wp:heading {"level":4} -->
+<h4 class="wp-block-heading">DPS Approach (Zero-Touch Provisioning)</h4>
+<!-- /wp:heading -->
+
+<!-- wp:list -->
+<ul class="wp-block-list"><!-- wp:list-item -->
+<li>Devices automatically register themselves</li>
+<!-- /wp:list-item -->
+<!-- wp:list-item -->
+<li>No connection strings hardcoded</li>
+<!-- /wp:list-item -->
+<!-- wp:list-item -->
+<li>Devices can be reassigned dynamically</li>
+<!-- /wp:list-item -->
+<!-- wp:list-item -->
+<li>Scales to millions of devices</li>
+<!-- /wp:list-item -->
+<!-- wp:list-item -->
+<li>Automated certificate issuance and lifecycle management</li>
+<!-- /wp:list-item -->
+</ul>
+<!-- /wp:list -->
+
+<!-- wp:heading {"level":3} -->
+<h3 class="wp-block-heading">Key Benefits</h3>
+<!-- /wp:heading -->
+
+<!-- wp:paragraph -->
+<p>Now that you understand the difference, here are the concrete advantages of using DPS:</p>
+<!-- /wp:paragraph -->
+
+<!-- wp:list -->
+<ul class="wp-block-list"><!-- wp:list-item -->
+<li><strong>Scale:</strong> Provision thousands or millions of devices without manual intervention. Devices can self-register when they first come online.</li>
+<!-- /wp:list-item -->
+<!-- wp:list-item -->
+<li><strong>Security:</strong> No connection strings hardcoded in device firmware. Devices use cryptographic attestation (symmetric keys, TPM, or X.509 certificates) to prove identity.</li>
+<!-- /wp:list-item -->
+<!-- wp:list-item -->
+<li><strong>Flexibility:</strong> Devices can be reassigned to different IoT Hubs based on business logic, geolocation, or load balancing.</li>
+<!-- /wp:list-item -->
+<!-- wp:list-item -->
+<li><strong>Multi-tenancy:</strong> Different devices can automatically be directed to different IoT Hubs based on enrollment configuration.</li>
+<!-- /wp:list-item -->
+<!-- wp:list-item -->
+<li><strong>Separation:</strong> Separation between bootstrap and operational credentials for devices.</li>
+<!-- /wp:list-item -->
+</ul>
+<!-- /wp:list -->
+
+<!-- wp:heading {"level":4} -->
+<h4 class="wp-block-heading">Optional ADR Certificate Management (Preview)</h4>
+<!-- /wp:heading -->
+
+<!-- wp:paragraph -->
+<p>When certificate management is enabled, DPS can coordinate ADR issuance of operational X.509 certificates during provisioning using a Certificate Signing Request (CSR). This optional capability doesn't replace the device's onboarding credential. You can use a Microsoft-managed root CA or bring your own CA; DPS remains required for every IoT Hub preview scenario, whether certificate management is enabled or not. See the <a href="https://learn.microsoft.com/en-gb/azure/iot/iot-certificate-management-overview">certificate management overview</a>.</p>
+<!-- /wp:paragraph -->
+
+<!-- wp:heading {"level":3} -->
+<h3 class="wp-block-heading">What's New: Microsoft Certificate Management</h3>
+<!-- /wp:heading -->
+
+<!-- wp:paragraph -->
+<p>The unified SDK now handles this repository's CSR provisioning flow. The
+earlier custom transport used the <code>2025-07-01-preview</code> API
+for its CSR provisioning example. The current service workflow is that DPS
+validates the device's onboarding credential and coordinates issuance of an
+<strong>operational certificate</strong> from the ADR namespace's issuing CA:</p>
+<!-- /wp:paragraph -->
+
+<!-- wp:heading {"level":4} -->
+<h4 class="wp-block-heading">Traditional X.509 Workflow</h4>
+<!-- /wp:heading -->
+
+<!-- wp:canaryblue/mermaid-diagram {"diagram":"graph TD\n    CA[\u0022Your CA (PKI)\u0022] \u002d\u002d\u003e|creates| Chain[\u0022Root and intermediate certificates\u0022]\n    CA \u002d\u002d\u003e|issues ahead of time| DeviceCert[\u0022Per-device X.509 certificate\u0022]\n    Chain \u002d\u002d\u003e|trusted by| DPS[\u0022DPS enrollment\u0022]\n    DeviceCert \u002d\u002d\u003e|installed on| Device[\u0022Device\u0022]\n    Device \u002d\u002d\u003e|onboards with X.509| DPS\n    DPS \u002d\u002d\u003e|assigns| Hub[\u0022IoT Hub\u0022]\n    Device \u002d\u002d\u003e|connects with X.509| Hub"} -->
+<div class="wp-block-canaryblue-mermaid-diagram is-theme-default" data-mermaid-label="Mermaid diagram" data-mermaid-theme="default"><pre class="wp-block-canaryblue-mermaid-diagram__source" data-mermaid-source="true">graph TD
+    CA[&quot;Your CA (PKI)&quot;] --&gt;|creates| Chain[&quot;Root and intermediate certificates&quot;]
+    CA --&gt;|issues ahead of time| DeviceCert[&quot;Per-device X.509 certificate&quot;]
+    Chain --&gt;|trusted by| DPS[&quot;DPS enrollment&quot;]
+    DeviceCert --&gt;|installed on| Device[&quot;Device&quot;]
+    Device --&gt;|onboards with X.509| DPS
+    DPS --&gt;|assigns| Hub[&quot;IoT Hub&quot;]
+    Device --&gt;|connects with X.509| Hub</pre><div class="wp-block-canaryblue-mermaid-diagram__output"></div></div>
+<!-- /wp:canaryblue/mermaid-diagram -->
+
+<!-- wp:heading {"level":4} -->
+<h4 class="wp-block-heading">🆕 New CSR-Based Workflow</h4>
+<!-- /wp:heading -->
+
+<!-- wp:canaryblue/mermaid-diagram {"diagram":"flowchart TB\n    subgraph enrollment[\u0022Enrollment setup\u0022]\n        direction LR\n        DPSProfile[\u0022DPS enrollment\u0022] \u002d\u002d\u003e|references policy| Policy[\u0022ADR certificate policy\u0022]\n    end\n\n    subgraph request[\u0022Device onboarding\u0022]\n        direction LR\n        DeviceRequest[\u0022Device: generate keypair and CSR\u0022] \u002d\u002d\u003e|CSR and onboarding attestation| DPSValidate[\u0022DPS: validate credential\u0022]\n    end\n\n    subgraph issuance[\u0022Operational certificate issuance\u0022]\n        direction LR\n        ADR[\u0022ADR: select policy's issuing ICA\u0022] \u002d\u002d\u003e|use policy| CA[\u0022Microsoft-managed CA: issue chain\u0022]\n        CA \u002d\u002d\u003e|issued chain| ADRReturn[\u0022ADR: return chain to DPS\u0022]\n    end\n\n    subgraph return[\u0022Return to device\u0022]\n        direction LR\n        DPSReturn[\u0022DPS: return chain and Hub assignment\u0022] \u002d\u002d\u003e DeviceInstall[\u0022Device: install chain\u0022]\n    end\n\n    Hub[\u0022IoT Hub\u0022]\n    DPSProfile \u002d\u002d\u003e DPSValidate\n    Policy \u002d\u002d\u003e ADR\n    DPSValidate \u002d\u002d\u003e|request issuance| ADR\n    ADRReturn \u002d\u002d\u003e|return chain| DPSReturn\n    DeviceInstall \u002d\u002d\u003e|connect with operational X.509| Hub\n    ADR \u002d\u002d\u003e|synchronize CA certificates| Hub"} -->
+<div class="wp-block-canaryblue-mermaid-diagram is-theme-default" data-mermaid-label="Mermaid diagram" data-mermaid-theme="default"><pre class="wp-block-canaryblue-mermaid-diagram__source" data-mermaid-source="true">flowchart TB
+    subgraph enrollment[&quot;Enrollment setup&quot;]
+        direction LR
+        DPSProfile[&quot;DPS enrollment&quot;] --&gt;|references policy| Policy[&quot;ADR certificate policy&quot;]
+    end
+
+    subgraph request[&quot;Device onboarding&quot;]
+        direction LR
+        DeviceRequest[&quot;Device: generate keypair and CSR&quot;] --&gt;|CSR and onboarding attestation| DPSValidate[&quot;DPS: validate credential&quot;]
+    end
+
+    subgraph issuance[&quot;Operational certificate issuance&quot;]
+        direction LR
+        ADR[&quot;ADR: select policy's issuing ICA&quot;] --&gt;|use policy| CA[&quot;Microsoft-managed CA: issue chain&quot;]
+        CA --&gt;|issued chain| ADRReturn[&quot;ADR: return chain to DPS&quot;]
+    end
+
+    subgraph return[&quot;Return to device&quot;]
+        direction LR
+        DPSReturn[&quot;DPS: return chain and Hub assignment&quot;] --&gt; DeviceInstall[&quot;Device: install chain&quot;]
+    end
+
+    Hub[&quot;IoT Hub&quot;]
+    DPSProfile --&gt; DPSValidate
+    Policy --&gt; ADR
+    DPSValidate --&gt;|request issuance| ADR
+    ADRReturn --&gt;|return chain| DPSReturn
+    DeviceInstall --&gt;|connect with operational X.509| Hub
+    ADR --&gt;|synchronize CA certificates| Hub</pre><div class="wp-block-canaryblue-mermaid-diagram__output"></div></div>
+<!-- /wp:canaryblue/mermaid-diagram -->
+
+<!-- wp:paragraph -->
+<p>The device generates the CSR and keeps its private key; it never leaves the
+device. Its onboarding credential authenticates to DPS, while the enrollment
+references the separate ADR certificate policy for operational issuance. The
+policy belongs to an ADR intermediate CA and controls device-certificate
+validity. Current IoT Hub workflows support operational-certificate renewal
+without reprovisioning; follow the current service documentation for the device
+flow.</p>
+<!-- /wp:paragraph -->
+
+<!-- wp:paragraph -->
+<p><strong>Key advantages:</strong></p>
+<!-- /wp:paragraph -->
+
+<!-- wp:list -->
+<ul class="wp-block-list"><!-- wp:list-item -->
+<li>No need to manage your own CA infrastructure</li>
+<!-- /wp:list-item -->
+<!-- wp:list-item -->
+<li>Private keys never leave the device</li>
+<!-- /wp:list-item -->
+<!-- wp:list-item -->
+<li>Certificates issued just-in-time</li>
+<!-- /wp:list-item -->
+<!-- wp:list-item -->
+<li>Automated lifecycle management</li>
+<!-- /wp:list-item -->
+<!-- wp:list-item -->
+<li>Reduced operational complexity</li>
+<!-- /wp:list-item -->
+</ul>
+<!-- /wp:list -->
+
+<!-- wp:heading {"level":3} -->
+<h3 class="wp-block-heading">Azure Device Registry (ADR) Integration</h3>
+<!-- /wp:heading -->
+
+<!-- wp:paragraph -->
+<p>Azure Device Registry (ADR) is Microsoft's <strong>centralized device registry and
+management plane</strong>. It represents IoT Hub devices as Azure Resource Manager
+resources, enabling governance through RBAC, tags, resource groups, and
+cross-hub queries with Azure Resource Graph.</p>
+<!-- /wp:paragraph -->
+
+<!-- wp:paragraph -->
+<p>ADR is generally available for Azure IoT Operations. Its integration with
+Azure IoT Hub is a separate <strong>public preview</strong>. Each IoT Hub links to one ADR
+namespace, while multiple hubs can share a namespace. You can create a new Hub
+or connect an eligible existing Hub. Connecting an existing Hub to a namespace
+is permanent and can't be reversed. This series' setup script creates a
+dedicated new Hub; see the <a href="https://learn.microsoft.com/en-gb/azure/iot/device-registry/get-started-azure-device-registry">current getting-started
+guide</a>
+for the existing-resource path.</p>
+<!-- /wp:paragraph -->
+
+<!-- wp:heading {"level":4} -->
+<h4 class="wp-block-heading">What is ADR?</h4>
+<!-- /wp:heading -->
+
+<!-- wp:paragraph -->
+<p>ADR is a <strong>device identity and management layer</strong> that:</p>
+<!-- /wp:paragraph -->
+
+<!-- wp:list -->
+<ul class="wp-block-list"><!-- wp:list-item -->
+<li>Stores device metadata, attributes, and tags</li>
+<!-- /wp:list-item -->
+<!-- wp:list-item -->
+<li>Manages credential policies for certificate issuance</li>
+<!-- /wp:list-item -->
+<!-- wp:list-item -->
+<li>Decouples device identity from IoT Hub</li>
+<!-- /wp:list-item -->
+<!-- wp:list-item -->
+<li>Enables multi-hub scenarios</li>
+<!-- /wp:list-item -->
+<!-- wp:list-item -->
+<li>Provides query and update APIs</li>
+<!-- /wp:list-item -->
+</ul>
+<!-- /wp:list -->
+
+<!-- wp:heading {"level":3} -->
+<h3 class="wp-block-heading">What is an ADR Namespace?</h3>
+<!-- /wp:heading -->
+
+<!-- wp:paragraph -->
+<p>An ADR namespace establishes a management and security boundary for devices represented in ADR.</p>
+<!-- /wp:paragraph -->
+
+<!-- wp:paragraph -->
+<p>A namespace can include devices connecting to different IoT Hub instances, and is where you can enable new features like Microsoft-backed X.509 certificate management (preview).</p>
+<!-- /wp:paragraph -->
+
+<!-- wp:heading {"level":4} -->
+<h4 class="wp-block-heading">Why ADR Matters</h4>
+<!-- /wp:heading -->
+
+<!-- wp:paragraph -->
+<p>In traditional IoT Hub deployments:</p>
+<!-- /wp:paragraph -->
+
+<!-- wp:list -->
+<ul class="wp-block-list"><!-- wp:list-item -->
+<li>Device identity is tightly coupled to a specific IoT Hub</li>
+<!-- /wp:list-item -->
+<!-- wp:list-item -->
+<li>Moving devices between hubs is complex</li>
+<!-- /wp:list-item -->
+<!-- wp:list-item -->
+<li>Credential management is manual</li>
+<!-- /wp:list-item -->
+<!-- wp:list-item -->
+<li>Metadata is limited</li>
+<!-- /wp:list-item -->
+</ul>
+<!-- /wp:list -->
+
+<!-- wp:paragraph -->
+<p>With ADR:</p>
+<!-- /wp:paragraph -->
+
+<!-- wp:list -->
+<ul class="wp-block-list"><!-- wp:list-item -->
+<li>✅ Devices are represented and governed as Azure resources</li>
+<!-- /wp:list-item -->
+<!-- wp:list-item -->
+<li>✅ Namespaces provide a shared registry and security boundary</li>
+<!-- /wp:list-item -->
+<!-- wp:list-item -->
+<li>✅ Credential policies support certificate issuance</li>
+<!-- /wp:list-item -->
+<!-- wp:list-item -->
+<li>✅ Query and manage devices across hubs sharing a namespace</li>
+<!-- /wp:list-item -->
+</ul>
+<!-- /wp:list -->
+
+<!-- wp:heading {"level":3} -->
+<h3 class="wp-block-heading">Certificate Management: Onboarding and Operational Credentials</h3>
+<!-- /wp:heading -->
+
+<!-- wp:paragraph -->
+<p>Certificate management handles <strong>operational X.509 certificates</strong> used by a
+device to authenticate to IoT Hub after provisioning. It does not issue or
+manage the device's onboarding credential. A device first authenticates to DPS
+with an onboarding method such as a symmetric key, TPM, or an existing X.509
+certificate, then submits a CSR as part of the provisioning transaction.
+DPS validates the onboarding credential and uses the ADR CA and certificate
+policy referenced by the enrollment; the policy's intermediate CA signs the
+operational certificate. The device private key remains on the device. Each
+ADR intermediate CA can have one certificate policy.</p>
+<!-- /wp:paragraph -->
+
+<!-- wp:paragraph -->
+<p>Certificate management is optional, but <strong>DPS is required for all IoT Hub
+preview scenarios</strong>, even when certificate management isn't enabled.
+Operational certificates can be renewed and revoked, and ADR manages CA
+lifecycle and rotation operations. IoT Hub integration remains in public
+preview and isn't recommended for production workloads.</p>
+<!-- /wp:paragraph -->
+
+<!-- wp:heading {"level":3} -->
+<h3 class="wp-block-heading">Attestation Methods</h3>
+<!-- /wp:heading -->
+
+<!-- wp:paragraph -->
+<p>Attestation is how devices prove their identity to DPS. Think of it like showing ID before boarding a flight. DPS supports three different &quot;ID types&quot;:</p>
+<!-- /wp:paragraph -->
+
+<!-- wp:heading {"level":4} -->
+<h4 class="wp-block-heading">1. Symmetric Key</h4>
+<!-- /wp:heading -->
+
+<!-- wp:list -->
+<ul class="wp-block-list"><!-- wp:list-item -->
+<li><strong>Simplest method</strong></li>
+<!-- /wp:list-item -->
+<!-- wp:list-item -->
+<li>Uses shared secret (enrollment group key)</li>
+<!-- /wp:list-item -->
+<!-- wp:list-item -->
+<li>Device derives individual key: <code>HMACSHA256(groupKey, registrationId)</code></li>
+<!-- /wp:list-item -->
+<!-- wp:list-item -->
+<li>Good for development and testing</li>
+<!-- /wp:list-item -->
+<!-- wp:list-item -->
+<li>Less secure than certificate-based methods</li>
+<!-- /wp:list-item -->
+<!-- wp:list-item -->
+<li>🆕 <strong>Can be combined with CSR</strong> - authenticate with symmetric key, receive X.509 certificate</li>
+<!-- /wp:list-item -->
+</ul>
+<!-- /wp:list -->
+
+<!-- wp:heading {"level":4} -->
+<h4 class="wp-block-heading">2. TPM (Trusted Platform Module)</h4>
+<!-- /wp:heading -->
+
+<!-- wp:list -->
+<ul class="wp-block-list"><!-- wp:list-item -->
+<li>Uses hardware security module</li>
+<!-- /wp:list-item -->
+<!-- wp:list-item -->
+<li>Very secure</li>
+<!-- /wp:list-item -->
+<!-- wp:list-item -->
+<li>Requires TPM chip on device</li>
+<!-- /wp:list-item -->
+<!-- wp:list-item -->
+<li>Unique per device</li>
+<!-- /wp:list-item -->
+<!-- wp:list-item -->
+<li>Not covered in this series</li>
+<!-- /wp:list-item -->
+</ul>
+<!-- /wp:list -->
+
+<!-- wp:heading {"level":4} -->
+<h4 class="wp-block-heading">3. X.509 Certificate</h4>
+<!-- /wp:heading -->
+
+<!-- wp:list -->
+<ul class="wp-block-list"><!-- wp:list-item -->
+<li><strong>Industry standard for security</strong></li>
+<!-- /wp:list-item -->
+<!-- wp:list-item -->
+<li>Uses public key infrastructure (PKI)</li>
+<!-- /wp:list-item -->
+<!-- wp:list-item -->
+<li>Supports certificate rotation</li>
+<!-- /wp:list-item -->
+<!-- wp:list-item -->
+<li>Scalable with enrollment groups</li>
+<!-- /wp:list-item -->
+<!-- wp:list-item -->
+<li><strong>Two approaches:</strong><!-- wp:list -->
+<ul class="wp-block-list"><!-- wp:list-item -->
+<li><strong>Traditional:</strong> Pre-provisioned certificates</li>
+<!-- /wp:list-item -->
+<!-- wp:list-item -->
+<li><strong>🆕 CSR-based:</strong> Certificates issued during provisioning</li>
+<!-- /wp:list-item -->
+</ul>
+<!-- /wp:list -->
+</li>
+<!-- /wp:list-item -->
+<!-- wp:list-item -->
+<li><strong>This is what we'll focus on</strong></li>
+<!-- /wp:list-item -->
+</ul>
+<!-- /wp:list -->
+
+<!-- wp:heading {"level":3} -->
+<h3 class="wp-block-heading">High-Level Provisioning Flow with ADR</h3>
+<!-- /wp:heading -->
+
+<!-- wp:paragraph -->
+<p>Here's how the complete flow works with the new features:</p>
+<!-- /wp:paragraph -->
+
+<!-- wp:paragraph -->
+<p>The flow is shown in two stages to keep each diagram readable at article width.</p>
+<!-- /wp:paragraph -->
+
+<!-- wp:paragraph -->
+<p><strong>Certificate issuance</strong></p>
+<!-- /wp:paragraph -->
+
+<!-- wp:canaryblue/mermaid-diagram {"diagram":"sequenceDiagram\n    participant Device\n    participant DPS\n    participant ADR\n    participant CA as Issuing CA\n    Device->>Device: Create keypair and CSR\n    Device->>DPS: Attest and submit CSR\n    DPS->>DPS: Validate enrollment\n    DPS->>ADR: Request issuance by policy\n    ADR->>CA: Select policy's issuing ICA\n    CA\u002d\u002d\u003e>ADR: Issue certificate chain\n    ADR\u002d\u002d\u003e>DPS: Return certificate chain\n    DPS\u002d\u002d\u003e>Device: Return chain and Hub assignment"} -->
+<div class="wp-block-canaryblue-mermaid-diagram is-theme-default" data-mermaid-label="Mermaid diagram" data-mermaid-theme="default"><pre class="wp-block-canaryblue-mermaid-diagram__source" data-mermaid-source="true">sequenceDiagram
+    participant Device
+    participant DPS
+    participant ADR
+    participant CA as Issuing CA
+    Device-&gt;&gt;Device: Create keypair and CSR
+    Device-&gt;&gt;DPS: Attest and submit CSR
+    DPS-&gt;&gt;DPS: Validate enrollment
+    DPS-&gt;&gt;ADR: Request issuance by policy
+    ADR-&gt;&gt;CA: Select policy's issuing ICA
+    CA--&gt;&gt;ADR: Issue certificate chain
+    ADR--&gt;&gt;DPS: Return certificate chain
+    DPS--&gt;&gt;Device: Return chain and Hub assignment</pre><div class="wp-block-canaryblue-mermaid-diagram__output"></div></div>
+<!-- /wp:canaryblue/mermaid-diagram -->
+
+<!-- wp:paragraph -->
+<p><strong>IoT Hub connection</strong></p>
+<!-- /wp:paragraph -->
+
+<!-- wp:canaryblue/mermaid-diagram {"diagram":"sequenceDiagram\n    participant Device\n    participant ADR\n    participant Hub as IoT Hub\n    Device->>Device: Install chain and retain private key\n    ADR->>Hub: Synchronize CA certificates\n    Device->>Hub: Connect with operational X.509\n    Hub\u002d\u002d\u003e>Device: Authenticate device"} -->
+<div class="wp-block-canaryblue-mermaid-diagram is-theme-default" data-mermaid-label="Mermaid diagram" data-mermaid-theme="default"><pre class="wp-block-canaryblue-mermaid-diagram__source" data-mermaid-source="true">sequenceDiagram
+    participant Device
+    participant ADR
+    participant Hub as IoT Hub
+    Device-&gt;&gt;Device: Install chain and retain private key
+    ADR-&gt;&gt;Hub: Synchronize CA certificates
+    Device-&gt;&gt;Hub: Connect with operational X.509
+    Hub--&gt;&gt;Device: Authenticate device</pre><div class="wp-block-canaryblue-mermaid-diagram__output"></div></div>
+<!-- /wp:canaryblue/mermaid-diagram -->
+
+<!-- wp:heading {"level":3} -->
+<h3 class="wp-block-heading">Alternative: Symmetric Key + X.509</h3>
+<!-- /wp:heading -->
+
+<!-- wp:paragraph -->
+<p>This series defaults to X.509 bootstrap attestation followed by CSR-based X.509
+operational certificate issuance. Symmetric-key onboarding is a supported
+alternative, not the default for this walkthrough.</p>
+<!-- /wp:paragraph -->
+
+<!-- wp:paragraph -->
+<p>One powerful pattern enabled by the new API:</p>
+<!-- /wp:paragraph -->
+
+<!-- wp:list {"ordered":true} -->
+<ol class="wp-block-list"><!-- wp:list-item -->
+<li><strong>Phase 1 - Provisioning:</strong> Device authenticates to DPS using <strong>symmetric key</strong> (simple, pre-shared)</li>
+<!-- /wp:list-item -->
+<!-- wp:list-item -->
+<li><strong>Phase 2 - Operation:</strong> Device connects to IoT Hub using <strong>X.509 certificate</strong> (secure, Microsoft-issued)</li>
+<!-- /wp:list-item -->
+</ol>
+<!-- /wp:list -->
+
+<!-- wp:paragraph -->
+<p><strong>Benefits:</strong></p>
+<!-- /wp:paragraph -->
+
+<!-- wp:list -->
+<ul class="wp-block-list"><!-- wp:list-item -->
+<li>Easy initial provisioning (no pre-generated certificates)</li>
+<!-- /wp:list-item -->
+<!-- wp:list-item -->
+<li>Secure operational communication (X.509)</li>
+<!-- /wp:list-item -->
+<!-- wp:list-item -->
+<li>No need to distribute device certificates ahead of time</li>
+<!-- /wp:list-item -->
+<!-- wp:list-item -->
+<li>Best of both worlds</li>
+<!-- /wp:list-item -->
+</ul>
+<!-- /wp:list -->
+
+<!-- wp:heading {"level":3} -->
+<h3 class="wp-block-heading">When to Use DPS</h3>
+<!-- /wp:heading -->
+
+<!-- wp:paragraph -->
+<p>✅ <strong>Use DPS when:</strong></p>
+<!-- /wp:paragraph -->
+
+<!-- wp:list -->
+<ul class="wp-block-list"><!-- wp:list-item -->
+<li>Deploying many devices (10+)</li>
+<!-- /wp:list-item -->
+<!-- wp:list-item -->
+<li>Devices need to be reassigned between hubs</li>
+<!-- /wp:list-item -->
+<!-- wp:list-item -->
+<li>You want zero-touch provisioning</li>
+<!-- /wp:list-item -->
+<!-- wp:list-item -->
+<li>Security is important (no hardcoded secrets)</li>
+<!-- /wp:list-item -->
+<!-- wp:list-item -->
+<li>You need multi-tenancy support</li>
+<!-- /wp:list-item -->
+<!-- wp:list-item -->
+<li>You want automated certificate management</li>
+<!-- /wp:list-item -->
+<!-- wp:list-item -->
+<li>🆕 You want Microsoft-managed certificate issuance</li>
+<!-- /wp:list-item -->
+</ul>
+<!-- /wp:list -->
+
+<!-- wp:paragraph -->
+<p>🤔 <strong>Consider if DPS is right for you if:</strong></p>
+<!-- /wp:paragraph -->
+
+<!-- wp:list -->
+<ul class="wp-block-list"><!-- wp:list-item -->
+<li>Only a few devices (&lt; 10)</li>
+<!-- /wp:list-item -->
+<!-- wp:list-item -->
+<li>Devices never move between hubs</li>
+<!-- /wp:list-item -->
+<!-- wp:list-item -->
+<li>Prototyping with connection strings is acceptable</li>
+<!-- /wp:list-item -->
+</ul>
+<!-- /wp:list -->
+
+<!-- wp:heading {"level":3} -->
+<h3 class="wp-block-heading">Preview API Status</h3>
+<!-- /wp:heading -->
+
+<!-- wp:paragraph -->
+<p>The sample application in this series uses the <strong><code>2025-07-01-preview</code> API</strong>:</p>
+<!-- /wp:paragraph -->
+
+<!-- wp:list -->
+<ul class="wp-block-list"><!-- wp:list-item -->
+<li>✅ CSR-based certificate issuance</li>
+<!-- /wp:list-item -->
+<!-- wp:list-item -->
+<li>✅ ADR credential policies</li>
+<!-- /wp:list-item -->
+<!-- wp:list-item -->
+<li>✅ DPS MQTT protocol support</li>
+<!-- /wp:list-item -->
+<!-- wp:list-item -->
+<li>✅ Microsoft-managed CA</li>
+<!-- /wp:list-item -->
+</ul>
+<!-- /wp:list -->
+
+<!-- wp:paragraph -->
+<p>IoT Hub integration with ADR and certificate management is still in <strong>public
+preview</strong> and isn't recommended for production workloads. The sorter now uses
+the official unified SDK directly, with helpers for durable credentials. Don't treat old
+wire-level examples as instructions to rebuild the removed transport.</p>
+<!-- /wp:paragraph -->
+
+<!-- wp:quote -->
+<blockquote class="wp-block-quote"><!-- wp:paragraph -->
+<p><strong>Note:</strong> Check <a href="https://learn.microsoft.com/en-us/azure/iot-hub/iot-hub-what-is-new">Microsoft's current IoT Hub preview guidance</a> before deployment.</p>
+<!-- /wp:paragraph --></blockquote>
+<!-- /wp:quote -->
+
+<!-- wp:paragraph -->
+<p>For the current setup, see Microsoft's <a href="https://learn.microsoft.com/en-gb/azure/iot/device-registry/get-started-azure-device-registry">ADR connected-services guide</a>, <a href="https://learn.microsoft.com/en-gb/azure/iot/concept-managed-ca-hierarchy">CA hierarchy overview</a>, <a href="https://learn.microsoft.com/en-gb/azure/iot/how-to-create-policy?tabs=cli">managed CA setup</a>, and <a href="https://learn.microsoft.com/en-us/azure/iot/how-to-create-edit-certificate-policy?tabs=cli">certificate-policy and DPS-enrollment guide</a>.</p>
+<!-- /wp:paragraph -->
+
+<!-- wp:heading {"level":3} -->
+<h3 class="wp-block-heading">Next Steps</h3>
+<!-- /wp:heading -->
+
+<!-- wp:paragraph -->
+<p>In the following sections, we'll:</p>
+<!-- /wp:paragraph -->
+
+<!-- wp:list {"ordered":true} -->
+<ol class="wp-block-list"><!-- wp:list-item -->
+<li>Create DPS, IoT Hub, and ADR instances</li>
+<!-- /wp:list-item -->
+<!-- wp:list-item -->
+<li>Configure credential policies for certificate issuance</li>
+<!-- /wp:list-item -->
+<!-- wp:list-item -->
+<li>Set up enrollment groups (symmetric key and X.509)</li>
+<!-- /wp:list-item -->
+<!-- wp:list-item -->
+<li>Build a .NET device application with the unified SDK and durable credentials</li>
+<!-- /wp:list-item -->
+<!-- wp:list-item -->
+<li>Implement CSR generation and certificate management</li>
+<!-- /wp:list-item -->
+<!-- wp:list-item -->
+<li>Integrate with ADR for device management</li>
+<!-- /wp:list-item -->
+</ol>
+<!-- /wp:list -->
+
+<!-- wp:paragraph -->
+<p><a href="https://www.petecodes.co.uk/iot-hub-with-adr-and-certificate-management-part-3/">Next: Creating DPS, IoT Hub and ADR Instances &gt;</a></p>
+<!-- /wp:paragraph -->

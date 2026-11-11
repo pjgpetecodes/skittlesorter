@@ -14,7 +14,7 @@ A service that delivers application files can update a C# program without offeri
 
 **What's changed since the provisioning articles?** The sorter now uses
 `Microsoft.Azure.Iot.Device` **2.0.0-preview4** for DPS provisioning and telemetry,
-with a thin `AzureDpsFramework` adapter. That removes the custom **provisioning**
+directly, using `AzureDpsFramework` credential helpers. That removes the custom **provisioning**
 protocol, not this separate DPS **software-update** client. The sorter uses
 MQTTnet 5; `AzureSoftwareUpdatesFramework` retains MQTTnet 4. .NET 10 and each
 demonstration's existing cloud resources are unchanged. The SDK discovers the

@@ -7,8 +7,9 @@ Provision devices via DPS using symmetric key or X.509.
 The sorter uses Microsoft's unified [`Microsoft.Azure.Iot.Device`
 2.0.0-preview4](https://www.nuget.org/packages/Microsoft.Azure.Iot.Device/2.0.0-preview4).
 `ConnectionClient` owns registration, authentication, connection retry and
-reprovisioning. `AzureDpsFramework` retains configuration, certificate persistence,
-ADR ARM helpers and a thin session adapter, not its former C# provisioning protocol.
+reprovisioning. The sorter calls it directly; `AzureDpsFramework` provides
+configuration, durable credentials and optional ADR ARM helpers. Its existing
+session API remains for package compatibility, not as the sorter's entry point.
 
 ## Profiles
 
@@ -26,7 +27,7 @@ to the operational certificate. Keep `CsrFilePath`, `CsrKeyFilePath`, and
 Paths retain the existing resolution rules; see the [configuration reference](Configuration.md).
 
 Keep the `.connection.json` assignment sidecar alongside the issued PEM so the
-adapter can restore the operational certificate and assigned Hub on restart.
+application can restore the operational certificate and assigned Hub on restart.
 CSR profiles reject a missing issued chain before Hub authentication. The
 shared updater lock is held only during DPS sessions, including SDK
 reprovisioning, not throughout the Hub telemetry connection.
@@ -65,3 +66,4 @@ offline alternative remains `--self-test --config PATH`.
 - [Azure Setup](./Azure-Setup.md)
 - [Configuration](./Configuration.md)
 - [ADR Integration](./ADR-Integration.md)
+- [Repeatable X.509 Provisioning Demo](./Demo-Runbook.md)

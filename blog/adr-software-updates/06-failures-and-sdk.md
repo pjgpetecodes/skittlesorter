@@ -29,8 +29,8 @@ Keep the application payload and trusted local installation boundary. Replace pr
 **What's changed in provisioning?** The sorter now pins
 `Microsoft.Azure.Iot.Device` **2.0.0-preview4** and uses its unified
 `ConnectionClient`/`TelemetryClient`. `AzureDpsFramework` retains configuration,
-durable certificate/CSR persistence, ADR ARM helpers and a thin session adapter;
-its custom provisioning protocol is removed. The SDK still doesn't implement DPS
+durable certificate/CSR persistence and ADR ARM helpers. The sorter calls the SDK
+directly; its custom provisioning protocol is removed. The SDK still doesn't implement DPS
 software updates, so `AzureSoftwareUpdatesFramework` keeps its own update protocol
 and MQTTnet 4 while the sorter uses MQTTnet 5. Optional SDK renewal APIs do not
 mean automatic certificate renewal has been implemented in the app.

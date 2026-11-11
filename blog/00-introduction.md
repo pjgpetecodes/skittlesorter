@@ -6,7 +6,8 @@
 
 Welcome to this comprehensive blog series on building a real-world IoT device using Azure's latest IoT Hub, Azure Device Provisioning Service (DPS) features, along with Microsoft-managed certificate infrastructure.
 
-## What's changed?
+<details>
+<summary>Click here to see what's changed since the last preview</summary>
 
 I've moved the sorter to Microsoft's unified
 [`Microsoft.Azure.Iot.Device` **2.0.0-preview4**](https://www.nuget.org/packages/Microsoft.Azure.Iot.Device/2.0.0-preview4).
@@ -14,8 +15,9 @@ One `ConnectionClient` handles DPS provisioning and the Hub connection;
 `TelemetryClient` sends the colour readings. That lets me remove the custom C#
 DPS protocol rather than maintain it alongside the SDK.
 
-`AzureDpsFramework` stays as a thin configuration, durable CSR/key/certificate
-persistence, ADR ARM and session adapter. The series defaults to X.509
+The sorter calls the SDK directly. `AzureDpsFramework` supplies configuration,
+durable CSR/key/certificate persistence and optional ADR ARM helpers; its old
+session API remains for package compatibility. The series defaults to X.509
 bootstrap attestation and a CSR-issued X.509 operational certificate.
 Standard symmetric-key/X.509 profiles
 and both CSR onboarding flows remain, as do .NET 10 and our existing Hub.
@@ -29,6 +31,8 @@ and [unified samples](https://github.com/Azure/azure-iot-sdk/tree/releases/publi
 The separate ADR software-updates client keeps its own DPS update protocol and
 MQTTnet 4; the sorter moves to MQTTnet 5. The SDK doesn't implement that update
 workflow, and this migration doesn't change our cloud resource topology.
+
+</details>
 
 ## What You'll Build
 
@@ -158,7 +162,7 @@ Follow along post-by-post to understand **why** and **how** everything works. Yo
 
 Most IoT tutorials use **symmetric keys** or **manual X.509 certificate generation**. This series shows you:
 - How to use Microsoft's **new certificate management** features
-- How to use the **unified .NET device SDK** with a thin application adapter
+- How to use the **unified .NET device SDK** with durable application credentials
 - How to integrate **ADR** for advanced device management
 - How to apply **production-minded** IoT patterns that carry over to trusted, CA-issued certificates
 

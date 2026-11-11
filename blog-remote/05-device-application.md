@@ -32,21 +32,21 @@ and [certificate-policy enrollment
 guide](https://learn.microsoft.com/en-us/azure/iot/how-to-create-edit-certificate-policy?tabs=cli)
 before creating or changing Azure resources.
 
-### What's changed in this edition?
+### What's changed in this version?
 
 I've replaced the custom C# DPS provisioning protocol and the legacy
 `Microsoft.Azure.Devices.Client` with Microsoft's unified
 [`Microsoft.Azure.Iot.Device` **2.0.0-preview4**](https://www.nuget.org/packages/Microsoft.Azure.Iot.Device/2.0.0-preview4).
 One `ConnectionClient` handles provisioning and the Hub connection;
-`TelemetryClient` shares it for our Skittle readings. `AzureDpsFramework` stays
-as a thin configuration, certificate-persistence, ADR ARM and session adapter.
+`TelemetryClient` shares it for our Skittle readings. The sorter calls these SDK
+clients directly; `AzureDpsFramework` supplies configuration, durable
+credentials and optional ADR ARM helpers. Its existing session API remains for
+package compatibility.
 
 Both standard symmetric-key/X.509 profiles and both CSR onboarding flows remain.
 .NET 10, our existing Hub and Azure resources are unchanged. The SDK discovers
 the assigned endpoint/profile through DPS, not a hostname constructed from the
-Hub name. The sorter
-now uses MQTTnet 5; the separate software-updates client stays on MQTTnet 4 and
-its own DPS **update** protocol. That workflow isn't implemented by this SDK.
+Hub name.
 
 The new bounded `--cloud-self-test --config PATH` provisions, connects, sends
 representative telemetry and disconnects without physical hardware. SDK retry
@@ -65,12 +65,13 @@ for the series-wide changes.
 4. [Understanding X.509 and CSR Workflows](https://www.petecodes.co.uk/iot-hub-with-adr-and-certificate-management-part-4)
 5. [The Device Application (this post)](https://www.petecodes.co.uk/iot-hub-with-adr-and-certificate-management-part-5)
 
-### Why Keep a DPS Adapter?
+### Why Keep Credential Helpers?
 
 > I no longer need to maintain security providers, SAS tokens, registration
 > polling or a DPS MQTT transport in C#. The official unified SDK handles those.
-> Our adapter still keeps configuration, CSR/key and issued-chain files durable,
-> and ADR ARM metadata operations out of the sorting loop.
+> Our helpers keep configuration, CSR/key and issued-chain files durable,
+> and ADR ARM metadata operations out of the sorting loop. The sorter creates
+> and uses the SDK clients directly.
 >
 > **Note:** The cleanup commands in older versions of this post use a previous
 > resource setup. For the refreshed deployment, follow the resource review and
@@ -94,8 +95,8 @@ for the series-wide changes.
                   │             │
                   ▼             ▼
           ┌─────────────────────────┐
-          │  Azure DPS Framework    │
-          │  (Thin SDK adapter)     │
+          │ Unified SDK clients     │
+          │ + credential helpers    │
           └──────────┬──────────────┘
                      │
                      ▼
@@ -105,7 +106,7 @@ for the series-wide changes.
 
 ```
 
-The adapter opens the SDK `ConnectionClient`; telemetry uses `TelemetryClient`
+The application opens the SDK `ConnectionClient`; telemetry uses `TelemetryClient`
 on the same connection. No second custom provisioning transport sits underneath.
 
 ### Getting Started
@@ -442,7 +443,7 @@ skittlesorter/
 │       ├── SkittleSorterService.cs     # Main business logic
 │       ├── TCS3472x.cs                 # Color sensor driver
 │       └── ServoController.cs          # Servo control
-├── AzureDpsFramework/                  # Thin SDK/session adapter
+├── AzureDpsFramework/                  # Configuration and credential helpers
 │   ├── DpsConfiguration.cs             # Existing profile configuration
 │   ├── CertificateManager.cs           # CSR, private key and chain persistence
 │   └── Adr/                           # ADR ARM metadata operations
@@ -458,52 +459,68 @@ hardware. Shutdown disconnects the SDK session gracefully.
 
 #### DPS Initialization Service (src/comms/DpsInitializationService.cs)
 
-This service selects the configured attestation/issuance profile and delegates
-session creation to `AzureDpsFramework`. `ConnectionClient` handles the actual
-DPS registration, credentials and Hub connection.
+This service creates the SDK's `ConnectionClient` and `TelemetryClient` directly.
+`ConnectionClient` handles DPS registration and the Hub connection.
 
-For CSR profiles, the adapter loads or creates the durable CSR/key pair,
+For CSR profiles, the identity helper loads or creates the durable CSR/key pair,
 supplies it to the SDK, then persists the returned operational chain with the
 matching key. The `.connection.json` assignment sidecar alongside the issued PEM
 lets restarts restore the operational certificate and assigned Hub. A required-
 certificate wrapper rejects a missing issued chain before Hub authentication.
-For standard profiles, the adapter doesn't request a new certificate.
+For standard profiles, it doesn't request a new certificate.
 The onboarding certificate and operational certificate remain different
 credentials; moving to an SDK hasn't merged their roles.
 
-#### Thin AzureDpsFramework Adapter (AzureDpsFramework/)
+#### Application-specific helpers (AzureDpsFramework/)
 
 I've kept the pieces specific to this application: configuration, device-key
-derivation where needed, certificate files, optional ADR ARM metadata helpers
-and the unified-session adapter. The old security-provider, transport,
+derivation where needed, certificate files and optional ADR ARM metadata helpers.
+The old session API remains for existing package consumers but isn't used by the
+sorter. The old security-provider, transport,
 registration and SAS-token protocol classes are removed, not wrapped.
-
-The `UnifiedDeviceSession` adapter delegates MQTT to the SDK. Its coordinator
-holds the updater's shared lock only during DPS sessions, including reprovisioning,
-not for the lifetime of the Hub telemetry connection.
 
 For the SDK API itself, follow the [official unified samples](https://github.com/Azure/azure-iot-sdk/tree/releases/public-preview/dotnet/samples/Unified).
 For our file/configuration boundary, read the
-[adapter README](https://github.com/pjgpetecodes/skittlesorter/blob/main/AzureDpsFramework/README.md).
+[helper README](https://github.com/pjgpetecodes/skittlesorter/blob/main/AzureDpsFramework/README.md).
 
-The smaller boundary looks like this (with a loaded `DpsConfiguration` and
-cancellation token):
+For the default X.509 + CSR profile, our helper prepares the SDK inputs using
+the same callback-based pattern as Microsoft's authentication sample:
 
 ```csharp
-using var session = UnifiedDeviceSession.Create(dpsConfiguration);
-try
+var authentication = new X509AuthenticationProvider(
+    bootstrapCertificate, null, prepareCertificate, certificateChain: bootstrapChain);
+var provisioning = new ProvisioningSettings(idScope)
 {
-    await session.ConnectAsync(cancellationToken);
-    // TelemetryService receives session.Telemetry, the SDK TelemetryClient.
-}
-finally
-{
-    await session.DisconnectAsync();
-}
+    RegistrationId = registrationId,
+    CertificateSigningRequest = new ProvisioningCertificateSigningRequest(operationalKey, csr)
+};
 ```
 
-`session.Connection` is the SDK `ConnectionClient`; `session.Telemetry` shares
-that connection. There's no legacy `DeviceClient` or custom register/poll loop.
+Here `csr` is the base64-encoded DER signing request, and `operationalKey` is
+the persisted key that signed it. `prepareCertificate` validates the returned
+chain against that key and saves it; the private key stays on the device. The
+application wraps the provider with a guard so a CSR profile cannot fall back
+to the bootstrap credential if DPS returns no certificate.
+
+The essential SDK calls look like this (with loaded configuration, coordinated
+MQTT options and a cancellation token):
+
+```csharp
+using var identity = DeviceProvisioningIdentity.Create(dpsConfiguration);
+using var connection = new ConnectionClient(connectionOptions, identity.LoadContext());
+using var telemetry = new TelemetryClient(connection);
+var context = await connection.ProvisionAndConnectAsync(
+    identity.Provisioning, identity.Authentication, cancellationToken: cancellationToken);
+identity.SaveContext(context);
+// Send telemetry using telemetry, then disconnect.
+await connection.DisconnectAsync(cancellationToken: cancellationToken);
+```
+
+The actual initialization service also cancels the SDK's retry when the
+required-certificate guard reports an issuance failure. The identity helper
+uses the SDK certificate callback to validate and save the issued chain before
+Hub authentication. The SDK samples keep the key in memory; our files preserve
+the identity across restarts. There's no custom register/poll loop.
 
 #### Telemetry Service (src/comms/TelemetryService.cs)
 

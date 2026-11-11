@@ -1,4 +1,4 @@
-# Keeping a Thin DPS Adapter with the Unified SDK
+# Using the Unified SDK with Durable Device Credentials
 
 > **SDK baseline:** `Microsoft.Azure.Iot.Device` **2.0.0-preview4**, on
 > **.NET 10**. The Azure IoT CLI examples still use `azure-iot` **1.0.0b2**.
@@ -30,13 +30,13 @@ There's still some useful glue here! The sorter has existing configuration
 profiles, certificate paths and optional ADR metadata updates. None of those
 need to become part of the sorting loop.
 
-`AzureDpsFramework` is now a thin adapter responsible for:
+`AzureDpsFramework` provides helpers responsible for:
 
 - Reading and validating our configuration.
 - Loading a device key or bootstrap certificate and its chain.
 - Generating/loading the CSR and preserving its matching private key.
 - Saving the issued certificate chain durably.
-- Opening a unified SDK session with those inputs.
+- Preparing the SDK authentication and provisioning inputs.
 - Keeping ADR ARM queries and metadata updates separate from the device protocol.
 
 The SDK's `ConnectionClient` owns DPS registration, authentication, connection
@@ -50,7 +50,7 @@ or generate SAS tokens in our own C# transport.
 Configuration + durable CSR/key/certificate files
                        |
                        v
-             AzureDpsFramework adapter ----> ADR ARM metadata helpers
+             Credential helpers ----> optional ADR ARM metadata
                        |
                        v
           Unified SDK ConnectionClient
@@ -98,7 +98,8 @@ Those paths can use `{RegistrationId}` and retain the existing
 Retrying after a network interruption must not silently replace the key under a
 certificate we've already saved.
 
-`UnifiedDeviceSession` delegates all MQTT to the SDK; its coordinator holds the
+The sorter creates the SDK clients directly; the existing `UnifiedDeviceSession`
+API remains for package compatibility. The MQTT coordinator holds the
 updater lock only during DPS sessions, including reprovisioning, not for the
 Hub connection lifetime. CSR profiles reject a missing issued chain before
 Hub authentication rather than falling back to the onboarding credential.
@@ -148,14 +149,14 @@ the named device/registration, never the enrollment, CA or resource group.
 ## What We Accomplished
 
 - ✅ Removed the custom provisioning protocol instead of maintaining two versions
-- ✅ Kept configuration and durable certificate handling behind a thin adapter
+- ✅ Kept configuration and durable certificate handling in focused helpers
 - ✅ Preserved standard DPS and both CSR onboarding flows
 - ✅ Kept ADR metadata operations and software updates at their own boundaries
 - ✅ Added a bounded way to check the cloud connection without the sorter hardware
 
 ## Next Steps
 
-Now we'll put that smaller adapter into the **device application**: load the
+Now we'll put those helpers into the **device application**: load the
 configuration, open the unified connection and send the Skittle telemetry.
 
 ---

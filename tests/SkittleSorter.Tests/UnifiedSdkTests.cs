@@ -7,6 +7,7 @@ using AzureDpsFramework.Adr;
 using Microsoft.Azure.Iot.Device.Authentication;
 using Microsoft.Azure.Iot.Device.Models;
 using Microsoft.Azure.Iot.Device.Mqtt;
+using Microsoft.Azure.Iot.Device.Unified.Connection;
 using Xunit;
 
 namespace SkittleSorter.Tests;
@@ -43,13 +44,14 @@ public sealed class UnifiedSdkTests : IDisposable
             CertificateManager.SaveText(config.AttestationKeyPath, bootstrap.privateKeyPem);
         }
         string originalKey;
-        using (var session = UnifiedDeviceSession.Create(config))
+        using (var session = DeviceProvisioningIdentity.Create(config))
         {
             var csr = Assert.IsType<Microsoft.Azure.Iot.Device.Provisioning.Models.ProvisioningCertificateSigningRequest>(
                 session.Provisioning.CertificateSigningRequest);
             Assert.IsType<RequiredCertificateAuthenticationProvider>(session.Authentication);
             await Assert.ThrowsAsync<InvalidOperationException>(async () =>
                 await session.Authentication.GetPrimaryOperationalAuthenticationCredentialsAsync("hub", "sorter", null));
+            Assert.True(session.CredentialFailure.IsCompletedSuccessfully);
             await Assert.ThrowsAsync<InvalidOperationException>(async () =>
                 await session.Authentication.GetSecondaryOperationalAuthenticationCredentialsAsync("hub", "sorter", []));
             var request = new CertificateRequest("CN=sorter", (RSA)csr.PrivateKey,
@@ -69,14 +71,15 @@ public sealed class UnifiedSdkTests : IDisposable
             config.IdScope, config.RegistrationId, DeviceId = "sorter", Hub = "hub.azure-devices.net",
             Profile = IotHubConnectionType.Mqttv3
         }));
-        using var restarted = UnifiedDeviceSession.Create(config);
+        using var restarted = DeviceProvisioningIdentity.Create(config);
         Assert.Equal(originalKey, File.ReadAllText(config.CsrKeyFilePath));
         Assert.NotNull(restarted.Provisioning.CertificateSigningRequest);
-        var restored = Assert.IsType<ConnectionContext>(restarted.Connection.GetCurrentConnectionContext());
+        using var connection = new ConnectionClient(connectionContext: restarted.LoadContext());
+        var restored = Assert.IsType<ConnectionContext>(connection.GetCurrentConnectionContext());
         Assert.Equal("hub.azure-devices.net", restored.IotHubHostName);
         Assert.Single(restored.IssuedClientCertificates!);
         config.IdScope = "another-scope";
-        Assert.Throws<InvalidDataException>(() => UnifiedDeviceSession.Create(config));
+        Assert.Throws<InvalidDataException>(() => restarted.LoadContext());
     }
 
     [Fact]
@@ -85,12 +88,12 @@ public sealed class UnifiedSdkTests : IDisposable
         var config = Configuration();
         var generated = CertificateManager.GenerateCsr("sorter");
         CertificateManager.SaveText(config.CsrKeyFilePath, generated.keyPem);
-        Assert.Throws<InvalidOperationException>(() => UnifiedDeviceSession.Create(config));
+        Assert.Throws<InvalidOperationException>(() => DeviceProvisioningIdentity.Create(config));
         Assert.Equal(generated.keyPem, File.ReadAllText(config.CsrKeyFilePath));
         CertificateManager.SaveText(config.CsrFilePath, CertificateManager.GenerateCsr("sorter").csrPem);
-        Assert.Throws<InvalidOperationException>(() => UnifiedDeviceSession.Create(config));
+        Assert.Throws<InvalidOperationException>(() => DeviceProvisioningIdentity.Create(config));
         CertificateManager.SaveText(config.CsrFilePath, CertificateManager.GenerateCsr("another-device").csrPem);
-        Assert.Throws<InvalidOperationException>(() => UnifiedDeviceSession.Create(config));
+        Assert.Throws<InvalidOperationException>(() => DeviceProvisioningIdentity.Create(config));
         Assert.Equal(generated.keyPem, File.ReadAllText(config.CsrKeyFilePath));
     }
 
@@ -102,7 +105,7 @@ public sealed class UnifiedSdkTests : IDisposable
         var generated = CertificateManager.GenerateCsr("sorter", "ECDSA");
         CertificateManager.SaveText(config.CsrFilePath, generated.csrPem);
         CertificateManager.SaveText(config.CsrKeyFilePath, generated.keyPem);
-        using var session = UnifiedDeviceSession.Create(config);
+        using var session = DeviceProvisioningIdentity.Create(config);
         Assert.NotNull(session.Provisioning.CertificateSigningRequest);
         Assert.IsAssignableFrom<ECDsa>(session.Provisioning.CertificateSigningRequest.PrivateKey);
         Assert.Equal(generated.keyPem, File.ReadAllText(config.CsrKeyFilePath));
@@ -125,13 +128,38 @@ public sealed class UnifiedSdkTests : IDisposable
     public async Task IssuedCertificateMustMatchPersistedKeyBeforeReplacingIdentity()
     {
         var config = Configuration();
-        using var session = UnifiedDeviceSession.Create(config);
+        using var session = DeviceProvisioningIdentity.Create(config);
         var unrelated = CertificateManager.GenerateSelfSignedCertificate("sorter");
         using var certificate = X509Certificate2.CreateFromPem(unrelated.certificatePem);
         await Assert.ThrowsAsync<CryptographicException>(async () =>
             await session.Authentication.GetPrimaryOperationalAuthenticationCredentialsAsync("hub", "sorter",
                 [Convert.ToBase64String(certificate.RawData)]));
         Assert.False(File.Exists(config.IssuedCertFilePath));
+    }
+
+    [Fact]
+    public async Task SdkContextSaveAndRestorePreservesTheExistingAssignmentFormat()
+    {
+        var config = Configuration();
+        using var identity = DeviceProvisioningIdentity.Create(config);
+        var csr = identity.Provisioning.CertificateSigningRequest!;
+        var request = new CertificateRequest("CN=sorter", (RSA)csr.PrivateKey,
+            HashAlgorithmName.SHA256, RSASignaturePadding.Pkcs1);
+        using var certificate = request.CreateSelfSigned(DateTimeOffset.UtcNow.AddMinutes(-1), DateTimeOffset.UtcNow.AddHours(1));
+        await identity.Authentication.GetPrimaryOperationalAuthenticationCredentialsAsync(
+            "hub", "sorter", [Convert.ToBase64String(certificate.RawData)]);
+        identity.SaveContext(new ConnectionContext
+        {
+            AuthenticationProvider = identity.Authentication, DeviceId = "sorter",
+            IotHubHostName = "hub.azure-devices.net", ConnectionProfile = IotHubConnectionType.Mqttv3
+        });
+        using var restarted = DeviceProvisioningIdentity.Create(config);
+        var restored = Assert.IsType<ConnectionContext>(restarted.LoadContext());
+        Assert.Equal("sorter", restored.DeviceId);
+        Assert.Equal("hub.azure-devices.net", restored.IotHubHostName);
+        Assert.Single(restored.IssuedClientCertificates!);
+        using var legacy = UnifiedDeviceSession.Create(config);
+        Assert.Equal(restored.IotHubHostName, legacy.Connection.GetCurrentConnectionContext()?.IotHubHostName);
     }
 
     [Fact]

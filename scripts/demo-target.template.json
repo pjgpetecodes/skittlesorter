@@ -1,0 +1,15 @@
+{
+  "SubscriptionId": "<subscription-id>",
+  "ResourceGroupName": "<dedicated-demo-resource-group>",
+  "DpsName": "<demo-dps-name>",
+  "HubName": "<demo-hub-name>",
+  "NamespaceName": "<demo-adr-namespace>",
+  "EnrollmentId": "<demo-enrollment-group>",
+  "DeviceId": "<lowercase-demo-registration-id>",
+  "DpsIdScope": "<dps-id-scope>",
+  "AppConfigPath": "appsettings.x509-demo.json",
+  "BootstrapDirectory": "certs/x509-demo",
+  "CertificateAuthorityName": "intermediate-ca",
+  "CertificatePolicyName": "default",
+  "IssuerDpsCertificateName": "<demo-enrollment-group>-bootstrap-ca"
+}

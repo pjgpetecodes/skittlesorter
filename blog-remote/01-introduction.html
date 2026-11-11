@@ -15,9 +15,10 @@ reviewed against current Microsoft Learn guidance <strong>5 November 2026</stron
 <p>Welcome to this comprehensive blog series on building a real-world IoT device using Azure's latest IoT Hub, Azure Device Provisioning Service (DPS) features, along with Microsoft-managed certificate infrastructure.</p>
 <!-- /wp:paragraph -->
 
-<!-- wp:heading {"level":3} -->
-<h3 class="wp-block-heading">What's changed since the previous preview?</h3>
-<!-- /wp:heading -->
+<!-- wp:coblocks/accordion -->
+<div class="wp-block-coblocks-accordion"><!-- wp:coblocks/accordion-item {"title":"Click here to see what's changed since the last preview","customBackgroundColor":"#e2ddc6","borderColor":"#e2ddc6"} -->
+<div class="wp-block-coblocks-accordion-item"><details><summary class="wp-block-coblocks-accordion-item__title has-background" style="background-color:#e2ddc6">Click here to see what's changed since the last preview</summary><div class="wp-block-coblocks-accordion-item__content" style="border-color:#e2ddc6">
+
 
 <!-- wp:paragraph -->
 <p>I've refreshed the series to match the current preview. DPS is required, while
@@ -30,9 +31,10 @@ DPS is separate from the operational certificate ADR can issue for IoT Hub.</p>
 <a href="https://www.nuget.org/packages/Microsoft.Azure.Iot.Device/2.0.0-preview4"><code>Microsoft.Azure.Iot.Device</code> <strong>2.0.0-preview4</strong></a>.
 <code>ConnectionClient</code> handles DPS and the Hub connection; <code>TelemetryClient</code> sends
 our Skittle readings. The custom C# provisioning protocol and legacy
-<code>Microsoft.Azure.Devices.Client</code> are gone. <code>AzureDpsFramework</code> stays as a thin
-configuration, durable CSR/key/issued-chain persistence, ADR ARM and session
-adapter. Microsoft's <a href="https://github.com/Azure/azure-iot-sdk/blob/main/dotnet/README.md">SDK design and feature matrix</a>
+<code>Microsoft.Azure.Devices.Client</code> are gone. The sorter calls the SDK directly;
+<code>AzureDpsFramework</code> supplies configuration, durable CSR/key/issued-chain
+persistence and optional ADR ARM helpers. Its session API remains for package
+compatibility. Microsoft's <a href="https://github.com/Azure/azure-iot-sdk/blob/main/dotnet/README.md">SDK design and feature matrix</a>
 and <a href="https://github.com/Azure/azure-iot-sdk/tree/releases/public-preview/dotnet/samples/Unified">unified examples</a>
 are the starting points for the new API. The package is still a preview.</p>
 <!-- /wp:paragraph -->
@@ -46,9 +48,8 @@ endpoint/profile through DPS. There's a bounded
 <code>--cloud-self-test --config PATH</code> for provision/connect/telemetry/disconnect
 without physical hardware. SDK retry/reprovision and optional IoT Hub renewal
 APIs are available, but automatic certificate renewal isn't implemented here.
-The sorter uses MQTTnet 5; the separate ADR software-updates client keeps
-MQTTnet 4 and its own DPS <strong>update</strong> protocol. The SDK doesn't implement that
-workflow. None of this requires an MQTT5 Hub or a cloud topology change.</p>
+The sorter uses MQTTnet 5; this client-side transport choice does not require
+an MQTT 5-capable IoT Hub or any cloud topology change.</p>
 <!-- /wp:paragraph -->
 
 <!-- wp:paragraph -->
@@ -66,6 +67,10 @@ Microsoft-managed lifecycle includes renewal and revocation, with limitations
 for intermediate CAs signed by an external CA. I've kept the distinction between
 service capabilities, SDK APIs and the lifecycle code actually in this sample.</p>
 <!-- /wp:paragraph -->
+
+</div></details></div>
+<!-- /wp:coblocks/accordion-item --></div>
+<!-- /wp:coblocks/accordion -->
 
 <!-- wp:heading {"level":3} -->
 <h3 class="wp-block-heading">Contents</h3>
@@ -242,7 +247,7 @@ standard rates.</p>
 
 <!-- wp:paragraph -->
 <p>The sample later in this series now uses the official unified .NET SDK, not a
-custom provisioning transport. Our adapter retains the application-specific
+custom provisioning transport. Our helpers retain the application-specific
 configuration and durable certificate files. Check current service and SDK
 documentation before changing pinned preview versions.</p>
 <!-- /wp:paragraph -->
@@ -366,7 +371,7 @@ device application instructions in <a href="https://www.petecodes.co.uk/iot-hub-
 <li>How to use Microsoft's <strong>new certificate management</strong> features</li>
 <!-- /wp:list-item -->
 <!-- wp:list-item -->
-<li>How to use the <strong>unified .NET device SDK</strong> with a thin application adapter</li>
+<li>How to use the <strong>unified .NET device SDK</strong> with durable application credentials</li>
 <!-- /wp:list-item -->
 <!-- wp:list-item -->
 <li>How to integrate <strong>ADR</strong> for advanced device management</li>

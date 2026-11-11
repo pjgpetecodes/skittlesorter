@@ -78,80 +78,56 @@ In the current preview workflow, DPS validates the device's onboarding
 credential and coordinates operational-certificate issuance through ADR:
 
 ### Traditional X.509 Workflow
-```
-┌─────────────────────────────┐
-│       Your CA (PKI)         │
-└──────────────┬──────────────┘
-               │ create
-               ▼
-┌─────────────────────────────┐
-│ Root & Intermediate Certs   │
-└──────────────┬──────────────┘
-               │ trust
-               ▼
-┌─────────────────────────────┐
-│            DPS              │
-└──────────────┬──────────────┘
-               │ pre-provision
-               ▼
-┌─────────────────────────────┐
-│  Device Certificates (per   │
-│  device, generated upfront) │
-└──────────────┬──────────────┘
-               │ install
-               ▼
-┌─────────────────────────────┐
-│           Devices           │
-└──────────────┬──────────────┘
-               │ connect using X.509
-               ▼
-┌─────────────────────────────┐
-│           IoT Hub           │
-└─────────────────────────────┘
-
-Notes:
-- Certs are created ahead of time and installed on devices.
-- Rotation is manual: generate, distribute, and update per device.
+```mermaid
+graph TD
+    CA["Your CA (PKI)"] -->|creates| Chain["Root and intermediate certificates"]
+    CA -->|issues ahead of time| DeviceCert["Per-device X.509 certificate"]
+    Chain -->|trusted by| DPS["DPS enrollment"]
+    DeviceCert -->|installed on| Device["Device"]
+    Device -->|onboards with X.509| DPS
+    DPS -->|assigns| Hub["IoT Hub"]
+    Device -->|connects with X.509| Hub
 ```
 
 ### 🆕 New CSR-Based Workflow
-```
-┌─────────────────────────────┐          ┌─────────────────────────────┐
-│     Azure Device Registry   │          │            DPS              │
-│ (Credential Policy: x509CA) │◄─────────┤   Enrollment Group exists   │
-└──────────────┬──────────────┘  query   └──────────────┬──────────────┘
-               │                                        ▲ validate
-               │                                        │
-               │                    CSR + attestation   │
-┌──────────────▼──────────────┐    (symmetric/X.509)    │
-│           Device            │ ────────────────────────┘
-│ 1) Generate keypair + CSR   │
-└──────────────┬──────────────┘
-               │ submit CSR
-               ▼                 use
-┌─────────────────────────────┐ policy   ┌─────────────────────────────┐
-│            ADR              │─────────►│  Microsoft-managed CA       │
-│ 2) Sign CSR per policy      │          │  3) Issue certificate chain │
-└──────────────┬──────────────┘          └──────────────┬──────────────┘
-               │ return cert chain                      │
-               └────────────────────────────────────────┘
-               │            to DPS → to Device
-               │
-┌──────────────▼──────────────┐
-│           Device            │
-│ 4) Install cert chain       │
-│ 5) Connect to IoT Hub       │
-└──────────────┬──────────────┘
-               │
-               ▼
-┌─────────────────────────────┐
-│           IoT Hub           │
-└─────────────────────────────┘
+```mermaid
+flowchart TB
+    subgraph enrollment["Enrollment setup"]
+        direction LR
+        DPSProfile["DPS enrollment group"] -->|references policy| Policy["ADR certificate policy"]
+    end
 
-Notes:
-- Private key never leaves the device.
-- Operational certificates can be renewed according to the assigned ADR policy.
+    subgraph request["Device onboarding"]
+        direction LR
+        DeviceRequest["Device: generate keypair and CSR"] -->|CSR and onboarding attestation| DPSValidate["DPS: validate credential"]
+    end
+
+    subgraph issuance["Operational certificate issuance"]
+        direction LR
+        ADR["ADR: select policy's issuing ICA"] -->|use policy| CA["Microsoft-managed CA: issue chain"]
+        CA -->|issued chain| ADRReturn["ADR: return chain to DPS"]
+    end
+
+    subgraph return["Return to device"]
+        direction LR
+        DPSReturn["DPS: return chain and Hub assignment"] --> DeviceInstall["Device: install chain"]
+    end
+
+    Hub["IoT Hub"]
+    DPSProfile --> DPSValidate
+    Policy --> ADR
+    DPSValidate -->|request issuance| ADR
+    ADRReturn -->|return chain| DPSReturn
+    DeviceInstall -->|connect with operational X.509| Hub
+    ADR -->|synchronize CA certificates| Hub
 ```
+
+The device generates the CSR and keeps its private key; it never leaves the
+device. Its onboarding credential authenticates to DPS, while the enrollment
+references the separate ADR certificate policy for operational issuance. The
+policy belongs to an ADR intermediate CA and controls device-certificate
+validity. Operational certificates can be renewed according to the assigned ADR
+policy; follow current service documentation for the device flow.
 
 **Key advantages:**
 - No need to manage your own CA infrastructure
@@ -254,47 +230,37 @@ Attestation is how devices prove their identity to DPS. Think of it like showing
 
 Here's how the complete flow works with the new features:
 
+The flow is shown in two stages to keep each diagram readable at article width.
+
+**Certificate issuance**
+
+```mermaid
+sequenceDiagram
+    participant Device
+    participant DPS
+    participant ADR
+    participant CA as Issuing CA
+    Device->>Device: Create keypair and CSR
+    Device->>DPS: Attest and submit CSR
+    DPS->>DPS: Validate enrollment
+    DPS->>ADR: Request issuance by policy
+    ADR->>CA: Select policy's issuing ICA
+    CA-->>ADR: Issue certificate chain
+    ADR-->>DPS: Return certificate chain
+    DPS-->>Device: Return chain and Hub assignment
 ```
-┌──────────┐
-│  Device  │  1. Generate CSR + private key
-└────┬─────┘
-     │
-     │ 2. Connect to DPS with attestation
-     │    (symmetric key OR X.509 bootstrap cert)
-     │
-     ▼
-┌─────────────────┐
-│       DPS       │  3. Validate attestation
-│                 │  4. Check enrollment group
-└────┬────────────┘  5. Query ADR for credential policy
-     │
-     │ 6. Submit CSR to ADR for signing
-     │
-     ▼
-┌─────────────────┐
-│       ADR       │  7. Sign CSR using credential policy
-│                 │  8. Return certificate chain
-└────┬────────────┘
-     │
-     │ 9. Return to DPS
-     │
-     ▼
-┌─────────────────┐
-│       DPS       │  10. Determine target IoT Hub
-│                 │  11. Return assignment + certificate
-└────┬────────────┘
-     │
-     │ 12. Return to device
-     │
-     ▼
-┌──────────┐
-│  Device  │  13. Install certificate
-└────┬─────┘  14. Connect to assigned IoT Hub with X.509
-     │
-     ▼
-┌─────────────┐
-│  IoT Hub    │  15. Device registered and authenticated
-└─────────────┘  16. Device can send telemetry
+
+**IoT Hub connection**
+
+```mermaid
+sequenceDiagram
+    participant Device
+    participant ADR
+    participant Hub as IoT Hub
+    Device->>Device: Install chain and retain private key
+    ADR->>Hub: Synchronize CA certificates
+    Device->>Hub: Connect with operational X.509
+    Hub-->>Device: Authenticate device
 ```
 
 ## Alternative: Symmetric Key + X.509
@@ -356,7 +322,7 @@ In the following sections, we'll:
 1. Create DPS, IoT Hub, and ADR instances
 2. Configure credential policies for certificate issuance
 3. Set up enrollment groups (symmetric key and X.509)
-4. Build a .NET device application with the unified SDK and a thin adapter
+4. Build a .NET device application with the unified SDK and durable credentials
 5. Implement CSR generation and certificate management
 6. Integrate with ADR for device management
 

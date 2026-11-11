@@ -11,24 +11,30 @@ The previous post introduced the new features and gave an overview of what we ca
 
 In this post, we'll dive deeper in the Azure Device Provisioning Service and how we can use the new features.
 
-### What's new in this edition?
+### How it works
 
-One thing that's easy to mix up: the device first proves its identity to DPS;
-if you enable certificate management, ADR can then issue a separate
-certificate for use with IoT Hub. You don't need certificate management for
-the IoT Hub preview, but you do need DPS. I've updated the primer to make that
-distinction clearer. See the [Introduction](https://www.petecodes.co.uk/iot-hub-with-adr-and-certificate-management-part-1)
+For this X.509 onboarding flow, the device authenticates to the Device
+Provisioning Service (DPS) using a bootstrap certificate and submits a
+certificate signing request (CSR) during provisioning; its private key stays
+on the device. DPS validates the onboarding credential and, when Azure Device
+Registry (ADR) certificate management is enabled, requests a separate
+operational certificate from the certificate authority (CA) selected by the ADR
+certificate policy linked to the DPS enrollment. DPS returns the issued
+certificate chain and Hub assignment; the device then uses the operational
+certificate to authenticate to the Azure Internet of Things (IoT) Hub. The
+device does not connect to ADR directly. DPS is required for the IoT Hub
+preview; ADR certificate management is optional. See
+the [Introduction](https://www.petecodes.co.uk/iot-hub-with-adr-and-certificate-management-part-1)
 for the series-wide changes.
+
+### What's new in this version?
 
 The device code now uses `Microsoft.Azure.Iot.Device` **2.0.0-preview4**:
 one unified `ConnectionClient` for DPS and the Hub, and `TelemetryClient` for
 our messages. I've removed the custom C# provisioning protocol, not the
 configuration and durable CSR/key/chain handling. Standard symmetric-key/X.509
 and both CSR flows remain on the existing Hub, with its endpoint/profile discovered
-through DPS. This is still a preview;
-the [SDK matrix](https://github.com/Azure/azure-iot-sdk/blob/main/dotnet/README.md)
-also makes clear that DPS software updates are a separate, unsupported SDK
-workflow. Our separate updater isn't replaced by this change.
+through DPS. This is still a preview.
 
 ---
 
@@ -87,91 +93,64 @@ When certificate management is enabled, DPS can coordinate ADR issuance of opera
 ### What's New: Microsoft Certificate Management
 
 The unified SDK now handles this repository's CSR provisioning flow. The
-earlier custom transport used the `2025-07-01-preview` API
-for its CSR provisioning example. The current service workflow is that DPS
-validates the device's onboarding credential and coordinates issuance of an
-**operational certificate** from the ADR namespace's issuing CA:
+earlier custom transport has been removed. The current service workflow is
+that DPS validates the device's onboarding credential and coordinates issuance
+of an **operational certificate** from the ADR namespace's issuing CA:
 
 #### Traditional X.509 Workflow
 
-```plaintext
-┌─────────────────────────────┐
-│       Your CA (PKI)         │
-└──────────────┬──────────────┘
-               │ create
-               ▼
-┌─────────────────────────────┐
-│ Root & Intermediate Certs   │
-└──────────────┬──────────────┘
-               │ trust
-               ▼
-┌─────────────────────────────┐
-│            DPS              │
-└──────────────┬──────────────┘
-               │ pre-provision
-               ▼
-┌─────────────────────────────┐
-│  Device Certificates (per   │
-│  device, generated upfront) │
-└──────────────┬──────────────┘
-               │ install
-               ▼
-┌─────────────────────────────┐
-│           Devices           │
-└──────────────┬──────────────┘
-               │ connect using X.509
-               ▼
-┌─────────────────────────────┐
-│           IoT Hub           │
-└─────────────────────────────┘
-
-Notes:
-- Certs are created ahead of time and installed on devices.
-- Rotation is manual: generate, distribute, and update per device.
+```mermaid
+graph TD
+    CA["Your CA (PKI)"] -->|creates| Chain["Root and intermediate certificates"]
+    CA -->|issues ahead of time| DeviceCert["Per-device X.509 certificate"]
+    Chain -->|trusted by| DPS["DPS enrollment"]
+    DeviceCert -->|installed on| Device["Device"]
+    Device -->|onboards with X.509| DPS
+    DPS -->|assigns| Hub["IoT Hub"]
+    Device -->|connects with X.509| Hub
 ```
 
 #### 🆕 New CSR-Based Workflow
 
-```plaintext
-┌─────────────────────────────┐          ┌─────────────────────────────┐
-│     Azure Device Registry   │          │            DPS              │
-│ (ICA certificate policy)    │◄─────────┤   DPS enrollment references │
-└──────────────┬──────────────┘  query   └──────────────┬──────────────┘
-               │                                        ▲ validate
-               │                                        │
-               │                    CSR + attestation   │
-┌──────────────▼──────────────┐    (symmetric/X.509)    │
-│           Device            │ ────────────────────────┘
-│ 1) Generate keypair + CSR   │
-└──────────────┬──────────────┘
-               │ submit CSR
-               ▼                 use
-┌─────────────────────────────┐ policy   ┌─────────────────────────────┐
-│            ADR              │─────────►│  Microsoft-managed CA       │
-│ 2) Select policy's ICA      │          │  3) Issue certificate chain │
-└──────────────┬──────────────┘          └──────────────┬──────────────┘
-               │ return cert chain                      │
-               └────────────────────────────────────────┘
-               │            to DPS → to Device
-               │
-┌──────────────▼──────────────┐
-│           Device            │
-│ 4) Install cert chain       │
-│ 5) Connect to IoT Hub       │
-└──────────────┬──────────────┘
-               │
-               ▼
-┌─────────────────────────────┐
-│           IoT Hub           │
-└─────────────────────────────┘
+```mermaid
+flowchart TB
+    subgraph enrollment["Enrollment setup"]
+        direction LR
+        DPSProfile["DPS enrollment"] -->|references policy| Policy["ADR certificate policy"]
+    end
 
-Notes:
-- Private key never leaves the device.
-- The device's onboarding credential authenticates to DPS; the enrollment references the separate ADR certificate policy for operational issuance.
-- The policy belongs to an ADR intermediate CA and controls device-certificate validity. ADR synchronizes CA certificates with linked IoT Hubs.
-- Current IoT Hub workflows support operational-certificate renewal without
-  reprovisioning; follow the current service documentation for the device flow.
+    subgraph request["Device onboarding"]
+        direction LR
+        DeviceRequest["Device: generate keypair and CSR"] -->|CSR and onboarding attestation| DPSValidate["DPS: validate credential"]
+    end
+
+    subgraph issuance["Operational certificate issuance"]
+        direction LR
+        ADR["ADR: select policy's issuing ICA"] -->|use policy| CA["Microsoft-managed CA: issue chain"]
+        CA -->|issued chain| ADRReturn["ADR: return chain to DPS"]
+    end
+
+    subgraph return["Return to device"]
+        direction LR
+        DPSReturn["DPS: return chain and Hub assignment"] --> DeviceInstall["Device: install chain"]
+    end
+
+    Hub["IoT Hub"]
+    DPSProfile --> DPSValidate
+    Policy --> ADR
+    DPSValidate -->|request issuance| ADR
+    ADRReturn -->|return chain| DPSReturn
+    DeviceInstall -->|connect with operational X.509| Hub
+    ADR -->|synchronize CA certificates| Hub
 ```
+
+The device generates the CSR and keeps its private key; it never leaves the
+device. Its onboarding credential authenticates to DPS, while the enrollment
+references the separate ADR certificate policy for operational issuance. The
+policy belongs to an ADR intermediate CA and controls device-certificate
+validity. Current IoT Hub workflows support operational-certificate renewal
+without reprovisioning; follow the current service documentation for the device
+flow.
 
 **Key advantages:**
 
@@ -187,6 +166,8 @@ Azure Device Registry (ADR) is Microsoft's **centralized device registry and
 management plane**. It represents IoT Hub devices as Azure Resource Manager
 resources, enabling governance through RBAC, tags, resource groups, and
 cross-hub queries with Azure Resource Graph.
+
+![Azure portal Resources list showing an ADR namespace, certificate authorities, IoT Hub, DPS, and a registry device.](https://www.petecodes.co.uk/wp-content/uploads/2026/11/azure-portal-adr-resources-scaled.png)
 
 ADR is generally available for Azure IoT Operations. Its integration with
 Azure IoT Hub is a separate **public preview**. Each IoT Hub links to one ADR
@@ -283,48 +264,37 @@ Attestation is how devices prove their identity to DPS. Think of it like showing
 
 Here's how the complete flow works with the new features:
 
-```plaintext
-┌──────────┐
-│  Device  │  1. Generate CSR + private key
-└────┬─────┘
-     │
-     │ 2. Connect to DPS with attestation
-     │    (symmetric key OR X.509 bootstrap cert)
-     │
-     ▼
-┌─────────────────┐
-│       DPS       │  3. Validate attestation
-│                 │  4. Check enrollment group
-└────┬────────────┘  5. Query ADR for credential policy
-     │
-     │ 6. Submit CSR to ADR for signing
-     │
-     ▼
-┌─────────────────┐
-│       ADR       │  7. Sign CSR using credential policy
-│                 │  8. Return certificate chain
-└────┬────────────┘
-     │
-     │ 9. Return to DPS
-     │
-     ▼
-┌─────────────────┐
-│       DPS       │  10. Determine target IoT Hub
-│                 │  11. Return assignment + certificate
-└────┬────────────┘
-     │
-     │ 12. Return to device
-     │
-     ▼
-┌──────────┐
-│  Device  │  13. Install certificate
-└────┬─────┘  14. Connect to assigned IoT Hub with X.509
-     │
-     ▼
-┌─────────────┐
-│  IoT Hub    │  15. Device registered and authenticated
-└─────────────┘  16. Device can send telemetry
+The flow is shown in two stages to keep each diagram readable at article width.
 
+**Certificate issuance**
+
+```mermaid
+sequenceDiagram
+    participant Device
+    participant DPS
+    participant ADR
+    participant CA as Issuing CA
+    Device->>Device: Create keypair and CSR
+    Device->>DPS: Attest and submit CSR
+    DPS->>DPS: Validate enrollment
+    DPS->>ADR: Request issuance by policy
+    ADR->>CA: Select policy's issuing ICA
+    CA-->>ADR: Issue certificate chain
+    ADR-->>DPS: Return certificate chain
+    DPS-->>Device: Return chain and Hub assignment
+```
+
+**IoT Hub connection**
+
+```mermaid
+sequenceDiagram
+    participant Device
+    participant ADR
+    participant Hub as IoT Hub
+    Device->>Device: Install chain and retain private key
+    ADR->>Hub: Synchronize CA certificates
+    Device->>Hub: Connect with operational X.509
+    Hub-->>Device: Authenticate device
 ```
 
 ### Alternative: Symmetric Key + X.509
@@ -363,19 +333,22 @@ One powerful pattern enabled by the new API:
 -   Devices never move between hubs
 -   Prototyping with connection strings is acceptable
 
-### Preview API Status
+### Preview Feature Status
 
-The sample application in this series uses the **`2025-07-01-preview` API**:
+The IoT Hub integration with ADR and certificate management covered here
+remains in **public preview**. The current sample delegates DPS provisioning
+to the unified IoT SDK, so application code does not pin a DPS API version.
+For separate ADR registry-device ARM calls, the sample's helper uses
+`2026-11-02-preview` ([Registry Devices REST API](https://learn.microsoft.com/en-us/rest/api/deviceregistry/registry-devices?view=rest-deviceregistry-2026-11-02-preview)).
 
 -   ✅ CSR-based certificate issuance
 -   ✅ ADR credential policies
 -   ✅ DPS MQTT protocol support
 -   ✅ Microsoft-managed CA
 
-IoT Hub integration with ADR and certificate management is still in **public
-preview** and isn't recommended for production workloads. The sorter now uses
-the official unified SDK with a thin application adapter. Don't treat old
-wire-level examples as instructions to rebuild the removed transport.
+The sorter uses the official unified SDK directly, with helpers for durable
+credentials. Don't treat old wire-level examples as instructions to rebuild
+the removed transport.
 
 > **Note:** Check [Microsoft's current IoT Hub preview guidance](https://learn.microsoft.com/en-us/azure/iot-hub/iot-hub-what-is-new) before deployment.
 
@@ -388,7 +361,7 @@ In the following sections, we'll:
 1.  Create DPS, IoT Hub, and ADR instances
 2.  Configure credential policies for certificate issuance
 3.  Set up enrollment groups (symmetric key and X.509)
-4.  Build a .NET device application with the unified SDK and a thin adapter
+4.  Build a .NET device application with the unified SDK and durable credentials
 5.  Implement CSR generation and certificate management
 6.  Integrate with ADR for device management
 

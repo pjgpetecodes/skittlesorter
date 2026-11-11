@@ -4,7 +4,7 @@
   "state": ".wp-md/05-device-application.sync.json",
   "remoteState": "05-device-application.html.remote.json",
   "wordpress": {
-    "site": "https://www.petecodes.co.uk",
+    "site": "https://petecodes.co.uk",
     "postId": 5030
   }
 }

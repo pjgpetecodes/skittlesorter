@@ -4,7 +4,7 @@
   "state": ".wp-md/01-introduction.sync.json",
   "remoteState": "01-introduction.html.remote.json",
   "wordpress": {
-    "site": "https://www.petecodes.co.uk",
+    "site": "https://petecodes.co.uk",
     "postId": 4984
   }
 }

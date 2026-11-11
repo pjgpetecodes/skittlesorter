@@ -1,0 +1,255 @@
+<!-- wp:heading {"level":2} -->
+<h2 class="wp-block-heading"><strong>Creating DPS, IoT Hub and ADR Instances</strong></h2>
+<!-- /wp:heading -->
+
+<!-- wp:quote -->
+<blockquote class="wp-block-quote"><!-- wp:paragraph -->
+<p><strong>CLI baseline:</strong> The examples use Azure IoT CLI preview extension
+<code>azure-iot</code> <strong>1.0.0b2</strong>, released <strong>6 October 2026</strong>. Last
+reviewed against current Microsoft Learn guidance <strong>5 November 2026</strong>.
+<a href="https://github.com/Azure/azure-iot-cli-extension/releases/tag/v1.0.0b2">Release notes</a>.</p>
+<!-- /wp:paragraph --></blockquote>
+<!-- /wp:quote -->
+
+<!-- wp:paragraph -->
+<p>Welcome back to this series of posts exploring the latest features of Azure IoT Hub, Device Provisioning Service (DPS), and Azure Device Registry (ADR).</p>
+<!-- /wp:paragraph -->
+
+<!-- wp:paragraph -->
+<p>In the previous post we dove deeper into DPS and what's new.</p>
+<!-- /wp:paragraph -->
+
+<!-- wp:heading {"level":3} -->
+<h3 class="wp-block-heading">What's new in this edition?</h3>
+<!-- /wp:heading -->
+
+<!-- wp:paragraph -->
+<p>I've refreshed the setup steps and script. They now use system-assigned
+identities, link DPS before the Hub, and connect the enrollment to the ADR
+certificate policy. The script creates dedicated resources and an enrollment
+group; it doesn't provision a device. See the <a href="https://www.petecodes.co.uk/iot-hub-with-adr-and-certificate-management-part-1">Introduction</a>
+for the series-wide changes.</p>
+<!-- /wp:paragraph -->
+
+<!-- wp:paragraph -->
+<p>The application now uses Microsoft's unified <code>Microsoft.Azure.Iot.Device</code>
+<strong>2.0.0-preview4</strong>. The generated config is compatible with the SDK integration and
+defaults to X.509 onboarding with CSR issuance enabled.
+Set <code>RequestOperationalCertificate: false</code> explicitly for standard non-CSR profiles. The SDK
+migration doesn't change the resources below or require an MQTT5 Hub. Once
+configured, <code>--cloud-self-test --config PATH</code> gives us a bounded
+provision/connect/telemetry/disconnect check without physical hardware.</p>
+<!-- /wp:paragraph -->
+
+<!-- wp:heading {"level":3} -->
+<h3 class="wp-block-heading">Contents</h3>
+<!-- /wp:heading -->
+
+<!-- wp:list {"ordered":true} -->
+<ol class="wp-block-list"><!-- wp:list-item -->
+<li><a href="https://www.petecodes.co.uk/iot-hub-with-adr-and-certificate-management-part-1">Introduction</a></li>
+<!-- /wp:list-item -->
+<!-- wp:list-item -->
+<li><a href="https://www.petecodes.co.uk/iot-hub-with-adr-and-certificate-management-part-2">A DPS Primer</a></li>
+<!-- /wp:list-item -->
+<!-- wp:list-item -->
+<li><a href="https://www.petecodes.co.uk/iot-hub-with-adr-and-certificate-management-part-3">Creating DPS, IoT Hub and ADR Instances (this post)</a></li>
+<!-- /wp:list-item -->
+<!-- wp:list-item -->
+<li><a href="https://www.petecodes.co.uk/iot-hub-with-adr-and-certificate-management-part-4">Understanding X.509 and CSR Workflows</a></li>
+<!-- /wp:list-item -->
+<!-- wp:list-item -->
+<li><a href="https://www.petecodes.co.uk/iot-hub-with-adr-and-certificate-management-part-5">The Device Application</a></li>
+<!-- /wp:list-item -->
+</ol>
+<!-- /wp:list -->
+
+<!-- wp:heading {"level":3} -->
+<h3 class="wp-block-heading">Time to Build!</h3>
+<!-- /wp:heading -->
+
+<!-- wp:paragraph -->
+<p>The refreshed public preview brings Device Registry, IoT Hub, DPS, and
+certificate management together in a new setup flow. This article updates the
+previous resource-creation steps to use the current Azure CLI commands and
+system-assigned identities.</p>
+<!-- /wp:paragraph -->
+
+<!-- wp:quote -->
+<blockquote class="wp-block-quote"><!-- wp:paragraph -->
+<p><strong>Preview and cost warning:</strong> IoT Hub integration with ADR and certificate
+management is still in public preview and isn't recommended for production.
+Standard S1 IoT Hub and DPS resources incur normal Azure charges. Review
+pricing and clean up dedicated test resources when you're finished.</p>
+<!-- /wp:paragraph --></blockquote>
+<!-- /wp:quote -->
+
+<!-- wp:heading {"level":3} -->
+<h3 class="wp-block-heading">Prerequisites</h3>
+<!-- /wp:heading -->
+
+<!-- wp:list -->
+<ul class="wp-block-list"><!-- wp:list-item -->
+<li>An Azure subscription and permission to create resources and role
+assignments at the required scopes.</li>
+<!-- /wp:list-item -->
+<!-- wp:list-item -->
+<li>Azure CLI 2.73.0 or later, Python 3.10 or later, and PowerShell 7 or later.</li>
+<!-- /wp:list-item -->
+<!-- wp:list-item -->
+<li>The preview-enabled <code>azure-iot</code> extension, version 1.0.0b2 or later.</li>
+<!-- /wp:list-item -->
+<!-- wp:list-item -->
+<li>One of the preview-supported regions: <code>australiaeast</code>, <code>japaneast</code>,
+<code>centralus</code>, or <code>uksouth</code>.</li>
+<!-- /wp:list-item -->
+</ul>
+<!-- /wp:list -->
+
+<!-- wp:paragraph -->
+<p>This series' script creates a dedicated standard S1 IoT Hub rather than
+connecting an existing one. Microsoft's current guide also supports connecting
+eligible existing Hubs; that connection is permanent and can't be reversed.
+DPS is required for the IoT Hub preview scenarios covered by the current
+guide. Certificate management is optional in the broader preview, but is
+included in this certificate-focused example.</p>
+<!-- /wp:paragraph -->
+
+<!-- wp:heading {"level":3} -->
+<h3 class="wp-block-heading">Run the end-to-end setup script</h3>
+<!-- /wp:heading -->
+
+<!-- wp:paragraph -->
+<p>The repository includes a resumable PowerShell script that creates the
+resource group, ADR namespace, Microsoft-managed root and intermediate CAs,
+certificate policy, DPS, S1 IoT Hub, namespace links, and a policy-bound DPS
+enrollment group. It leaves device records untouched: creating an enrollment
+group does not enroll or provision a device.</p>
+<!-- /wp:paragraph -->
+
+<!-- wp:paragraph -->
+<p>From the repository root, sign in, select your subscription, and preview the
+parameters with <code>-WhatIf</code>:</p>
+<!-- /wp:paragraph -->
+
+<!-- wp:code {"className":"language-powershell"} -->
+<pre class="wp-block-code language-powershell"><code>az login
+az account set --subscription &quot;&lt;subscription-id&gt;&quot;
+
+.\scripts\iot-hub-device-registry\setup.ps1 `
+  -SubscriptionId &quot;&lt;subscription-id&gt;&quot; `
+  -ResourceGroupName &quot;my-iot-preview-rg&quot; `
+  -Location &quot;uksouth&quot; `
+  -NamespaceName &quot;my-iot-adr-namespace-002&quot; `
+  -HubName &quot;my-iot-hub-002&quot; `
+  -DpsName &quot;my-iot-dps-002&quot; `
+  -EnrollmentId &quot;my-enrollment-group-002&quot; `
+  -WhatIf
+</code></pre>
+<!-- /wp:code -->
+
+<!-- wp:paragraph -->
+<p>After checking the names, subscription, and region, run the same command
+without <code>-WhatIf</code>. The script installs/upgrades the preview-enabled Azure IoT
+CLI extension, registers the required resource providers, creates missing
+resources, links DPS first and then IoT Hub to the namespace, and waits for
+both links. It can resume after a partial run by keeping existing named
+resources. It enables Hub shared access policies even when reusing a Hub;
+other existing settings aren't reconciled, so inspect them before proceeding.
+Existing non-X.509 configs or enrollments are not overwritten: choose a new
+config path and enrollment ID for this X.509 + CSR flow.</p>
+<!-- /wp:paragraph -->
+
+<!-- wp:paragraph -->
+<p>We're enabling shared access policies for this demo so tools such as Azure IoT
+Explorer can use a Hub connection string. This is separate from how the device
+authenticates: with the X.509 profile, it uses a certificate for DPS attestation
+and its Hub connection, not a Hub shared access policy key. That certificate
+focus is one of the distinctions between this series and the usual shared-key
+IoT Hub examples. The setup creates a self-signed bootstrap CA for the demo;
+ADR's separate managed CA issues the operational certificate from the CSR.
+Protect the bootstrap private keys and never use this demo CA in production.</p>
+<!-- /wp:paragraph -->
+
+<!-- wp:paragraph -->
+<p>Protect Hub policy keys even when using certificates on the device. Microsoft's
+current guidance warns that disabling Hub shared access policies breaks DPS
+provisioning, so don't disable them for this lab. In other scenarios you can
+disable them and use Microsoft Entra ID for service access, but IoT Explorer's
+connection-string device list can then fail with
+<code>DisableLocalAuth</code>/<code>IotHubUnauthorizedAccess</code>.</p>
+<!-- /wp:paragraph -->
+
+<!-- wp:paragraph -->
+<p>The complete parameter reference, costs, and verification instructions are in
+the <a href="https://github.com/pjgpetecodes/skittlesorter/blob/main/scripts/iot-hub-device-registry/README.md">setup README</a>.
+For manual commands and the latest API and CLI requirements, use Microsoft's
+<a href="https://learn.microsoft.com/en-gb/azure/iot/device-registry/get-started-azure-device-registry">ADR connected-services guide</a>
+and <a href="https://learn.microsoft.com/en-us/azure/iot-hub/iot-hub-device-registry-setup?pivots=azure-cli">Azure CLI deployment guide</a>.
+The managed root and intermediate CA workflow is in Microsoft's
+<a href="https://learn.microsoft.com/en-gb/azure/iot/how-to-create-policy?tabs=cli">CA setup guide</a>;
+create the issuing CA's policy and select it in a DPS enrollment using the
+<a href="https://learn.microsoft.com/en-us/azure/iot/how-to-create-edit-certificate-policy?tabs=cli">certificate-policy guide</a>.</p>
+<!-- /wp:paragraph -->
+
+<!-- wp:heading {"level":3} -->
+<h3 class="wp-block-heading">What the workflow creates</h3>
+<!-- /wp:heading -->
+
+<!-- wp:list {"ordered":true} -->
+<ol class="wp-block-list"><!-- wp:list-item -->
+<li>A resource group and ADR namespace with a system-assigned identity.</li>
+<!-- /wp:list-item -->
+<!-- wp:list-item -->
+<li>A Microsoft-managed root CA, intermediate CA, and certificate policy.</li>
+<!-- /wp:list-item -->
+<!-- wp:list-item -->
+<li>Standard S1 DPS and a new standard S1 IoT Hub, both with system-assigned
+identities.</li>
+<!-- /wp:list-item -->
+<!-- wp:list-item -->
+<li>A namespace link to DPS, followed by a namespace link to IoT Hub.</li>
+<!-- /wp:list-item -->
+<!-- wp:list-item -->
+<li>A DPS enrollment group attached to the ADR certificate policy.</li>
+<!-- /wp:list-item -->
+</ol>
+<!-- /wp:list -->
+
+<!-- wp:paragraph -->
+<p>The setup script creates a local bootstrap certificate but does not create a
+cloud device record or provision a device. The enrollment group is only a
+template for future provisioning. The operational certificate policy is
+separate from the onboarding credential a device will use with DPS.</p>
+<!-- /wp:paragraph -->
+
+<!-- wp:heading {"level":3} -->
+<h3 class="wp-block-heading">Verify the setup</h3>
+<!-- /wp:heading -->
+
+<!-- wp:paragraph -->
+<p>The script waits for both namespace links and prints the configured links and
+certificate authorities. In the Azure portal, confirm that the resource group
+contains the new resources, the namespace shows both connected services, DPS
+shows the enrollment group, and IoT Hub lists the linked CA certificate.</p>
+<!-- /wp:paragraph -->
+
+<!-- wp:paragraph -->
+<p>To confirm that no ADR devices were created, list the devices in the namespace;
+a fresh environment should return an empty list. Keep the resource group only
+if you intend to retain the billable S1 services. Before deleting it, verify
+that it contains only resources you intend to remove.</p>
+<!-- /wp:paragraph -->
+
+<!-- wp:paragraph -->
+<p>Next up we explain onboarding credentials, operational certificates, and the
+CSR workflow in <a href="https://www.petecodes.co.uk/iot-hub-with-adr-and-certificate-management-part-4/">Part 4</a>.</p>
+<!-- /wp:paragraph -->
+
+<!-- wp:separator -->
+<hr class="wp-block-separator has-alpha-channel-opacity"/>
+<!-- /wp:separator -->
+
+<!-- wp:paragraph -->
+<p><a href="https://www.petecodes.co.uk/iot-hub-with-adr-and-certificate-management-part-4/">Next: Understanding X.509 and CSR Workflows &gt;</a></p>
+<!-- /wp:paragraph -->

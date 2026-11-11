@@ -46,3 +46,9 @@ paired HTML separately before publishing. Code Block Pro content imported as
 ordinary Markdown code may lose plugin-specific formatting. The Part 5 import
 also contains unusable VS Code resource links and HTML entities that should be
 corrected before publishing affected sections.
+
+The introduction's standard Markdown `<details>` section is an exception to
+automatic export: the converter escapes raw HTML. Its paired HTML uses a
+CoBlocks accordion matching the site's existing posts. After exporting that
+article, restore the accordion around the generated section before previewing
+the WordPress push; otherwise the expander will be lost.

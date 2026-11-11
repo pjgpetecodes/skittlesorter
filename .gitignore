@@ -499,3 +499,5 @@ $RECYCLE.BIN/
 *.swp
 
 appsettings.json
+details.txt
+scripts/demo-target.local.json

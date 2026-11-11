@@ -5,8 +5,8 @@
 Our sorter already reads a colour sensor, moves two servos and sends IoT Hub telemetry. The update demonstration keeps that application in C#. We are updating its published binaries, not replacing Raspberry Pi OS, installing firmware or converting the application into an IoT Edge module.
 
 **What's changed in the sorter?** Provisioning and telemetry now use Microsoft's
-unified `Microsoft.Azure.Iot.Device` **2.0.0-preview4**, with a thin
-`AzureDpsFramework` configuration/persistence/session adapter. .NET 10 and the
+unified `Microsoft.Azure.Iot.Device` **2.0.0-preview4** directly, with
+`AzureDpsFramework` configuration and credential helpers. .NET 10 and the
 existing Hub stay unchanged, with the assigned endpoint/profile discovered
 through DPS. Standard symmetric-key provisioning still
 sets `RequestOperationalCertificate: false`; the GA update agent and its module

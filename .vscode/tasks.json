@@ -12,6 +12,130 @@
                 "Debug"
             ],
             "problemMatcher": "$msCompile"
+        },
+        {
+            "label": "Demo: Set up X.509 bootstrap (after full reset)",
+            "type": "process",
+            "command": "pwsh",
+            "args": [
+                "-NoProfile",
+                "-File",
+                "${workspaceFolder}\\scripts\\demo-setup.ps1",
+                "-TargetPath",
+                "${workspaceFolder}\\scripts\\demo-target.local.json",
+                "-Confirm"
+            ],
+            "problemMatcher": []
+        },
+        {
+            "label": "Demo: Preview X.509 bootstrap setup",
+            "type": "process",
+            "command": "pwsh",
+            "args": [
+                "-NoProfile",
+                "-File",
+                "${workspaceFolder}\\scripts\\demo-setup.ps1",
+                "-TargetPath",
+                "${workspaceFolder}\\scripts\\demo-target.local.json",
+                "-WhatIf"
+            ],
+            "problemMatcher": []
+        },
+        {
+            "label": "Demo: Reset cloud device state",
+            "type": "process",
+            "command": "pwsh",
+            "args": [
+                "-NoProfile",
+                "-File",
+                "${workspaceFolder}\\scripts\\demo-reset.ps1",
+                "-Scenario",
+                "CloudOnly",
+                "-TargetPath",
+                "${workspaceFolder}\\scripts\\demo-target.local.json",
+                "-Confirm"
+            ],
+            "problemMatcher": []
+        },
+        {
+            "label": "Demo: Preview cloud device reset",
+            "type": "process",
+            "command": "pwsh",
+            "args": [
+                "-NoProfile",
+                "-File",
+                "${workspaceFolder}\\scripts\\demo-reset.ps1",
+                "-Scenario",
+                "CloudOnly",
+                "-TargetPath",
+                "${workspaceFolder}\\scripts\\demo-target.local.json",
+                "-WhatIf"
+            ],
+            "problemMatcher": []
+        },
+        {
+            "label": "Demo: Reset operational identity",
+            "type": "process",
+            "command": "pwsh",
+            "args": [
+                "-NoProfile",
+                "-File",
+                "${workspaceFolder}\\scripts\\demo-reset.ps1",
+                "-Scenario",
+                "OperationalIdentity",
+                "-TargetPath",
+                "${workspaceFolder}\\scripts\\demo-target.local.json",
+                "-Confirm"
+            ],
+            "problemMatcher": []
+        },
+        {
+            "label": "Demo: Preview operational identity reset",
+            "type": "process",
+            "command": "pwsh",
+            "args": [
+                "-NoProfile",
+                "-File",
+                "${workspaceFolder}\\scripts\\demo-reset.ps1",
+                "-Scenario",
+                "OperationalIdentity",
+                "-TargetPath",
+                "${workspaceFolder}\\scripts\\demo-target.local.json",
+                "-WhatIf"
+            ],
+            "problemMatcher": []
+        },
+        {
+            "label": "Demo: Full bootstrap reset",
+            "type": "process",
+            "command": "pwsh",
+            "args": [
+                "-NoProfile",
+                "-File",
+                "${workspaceFolder}\\scripts\\demo-reset.ps1",
+                "-Scenario",
+                "FullBootstrap",
+                "-TargetPath",
+                "${workspaceFolder}\\scripts\\demo-target.local.json",
+                "-Confirm"
+            ],
+            "problemMatcher": []
+        },
+        {
+            "label": "Demo: Preview full bootstrap reset",
+            "type": "process",
+            "command": "pwsh",
+            "args": [
+                "-NoProfile",
+                "-File",
+                "${workspaceFolder}\\scripts\\demo-reset.ps1",
+                "-Scenario",
+                "FullBootstrap",
+                "-TargetPath",
+                "${workspaceFolder}\\scripts\\demo-target.local.json",
+                "-WhatIf"
+            ],
+            "problemMatcher": []
         }
     ]
 }

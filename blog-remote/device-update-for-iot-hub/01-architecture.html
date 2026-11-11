@@ -14,8 +14,8 @@
 
 <!-- wp:paragraph -->
 <p><strong>What's changed in the sorter?</strong> Provisioning and telemetry now use Microsoft's
-unified <code>Microsoft.Azure.Iot.Device</code> <strong>2.0.0-preview4</strong>, with a thin
-<code>AzureDpsFramework</code> configuration/persistence/session adapter. .NET 10 and the
+unified <code>Microsoft.Azure.Iot.Device</code> <strong>2.0.0-preview4</strong> directly, with
+<code>AzureDpsFramework</code> configuration and credential helpers. .NET 10 and the
 existing Hub stay unchanged, with the assigned endpoint/profile discovered
 through DPS. Standard symmetric-key provisioning still
 sets <code>RequestOperationalCertificate: false</code>; the GA update agent and its module

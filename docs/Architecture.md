@@ -32,7 +32,7 @@ force a protocol. MQTTnet 5 is a dependency upgrade, not a Hub migration. See th
 - [TelemetryService.cs](../src/comms/TelemetryService.cs) - Azure IoT Hub telemetry
 
 **Azure Integration:**
-- [AzureDpsFramework/](../AzureDpsFramework/) - Thin configuration, certificate/CSR persistence, ADR ARM, and unified-session adapter; no custom DPS security providers, transports, registration, or SAS-token protocol
+- [AzureDpsFramework/](../AzureDpsFramework/) - Configuration, durable CSR/key/chain and assignment helpers, and optional ADR ARM operations; its existing session API remains for package compatibility
 
 ## Flow
 - Initialize
@@ -51,7 +51,7 @@ APIs are available, but automatic certificate renewal is not implemented.
 two-minute-bounded provisioning, connection, one acknowledged representative
 telemetry message and graceful disconnect cycle.
 
-`UnifiedDeviceSession` delegates MQTT to the SDK. Its coordinator holds the
+The sorter calls the SDK's `ConnectionClient` directly. Its MQTT coordinator holds the
 updater lock only while DPS sessions are active, including reprovisioning, not
 throughout the Hub connection lifetime. Issued PEM/chain, CSR/key and the
 `.connection.json` assignment sidecar remain durable so the operational

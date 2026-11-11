@@ -12,8 +12,9 @@
 
 The sorter now pins `Microsoft.Azure.Iot.Device` **2.0.0-preview4** and uses
 unified `ConnectionClient`/`TelemetryClient` for DPS provisioning and Hub telemetry.
-`AzureDpsFramework` remains a thin configuration, persistence, ADR ARM and session
-adapter. Standard symmetric-key/X.509 profiles and both CSR onboarding flows remain.
+The sorter calls the SDK directly, using `AzureDpsFramework` configuration,
+persistence and ADR ARM helpers. Standard symmetric-key/X.509 profiles and both
+CSR onboarding flows remain.
 .NET 10 and existing cloud resources are unchanged; the SDK discovers the assigned
 Hub endpoint and connection profile through DPS.
 

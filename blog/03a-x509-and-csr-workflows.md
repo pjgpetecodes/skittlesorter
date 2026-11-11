@@ -5,7 +5,8 @@
 The sorter now pins `Microsoft.Azure.Iot.Device` **2.0.0-preview4** and uses
 its unified connection/telemetry APIs. The custom C# provisioning protocol is
 removed; `AzureDpsFramework` retains configuration, durable CSR/key/chain
-persistence, ADR ARM and a thin session adapter. Standard symmetric-key/X.509
+persistence and ADR ARM helpers. The existing session API remains for package
+compatibility; the sorter calls the SDK directly. Standard symmetric-key/X.509
 and both CSR onboarding flows remain on .NET 10 and the existing Hub. The SDK
 discovers its assigned endpoint/profile through DPS.
 See the [SDK design and matrix](https://github.com/Azure/azure-iot-sdk/blob/main/dotnet/README.md).

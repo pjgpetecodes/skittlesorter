@@ -7,6 +7,8 @@ using System.Threading;
 using AzureDpsFramework;
 using Iot.Device.ServoMotor;
 using System.Runtime.InteropServices;
+using Microsoft.Azure.Iot.Device.Unified.Connection;
+using Microsoft.Azure.Iot.Device.Unified.Telemetry;
 
 namespace skittle_sorter
 {
@@ -56,10 +58,14 @@ namespace skittle_sorter
                     using var timeout = CancellationTokenSource.CreateLinkedTokenSource(shutdown.Token);
                     timeout.CancelAfter(TimeSpan.FromMinutes(2));
                     var cloudConfig = ConfigurationLoader.LoadIoTHubConfiguration(options.ConfigurationPath);
-                    using var session = await DpsInitializationService.InitializeAsync(cloudConfig, options.ConfigurationPath, timeout.Token);
+                    var session = await DpsInitializationService.InitializeAsync(cloudConfig, options.ConfigurationPath, timeout.Token);
+                    using var identity = session.Identity;
+                    using var mqtt = session.Mqtt;
+                    using var connection = session.Connection;
+                    using var telemetry = session.Telemetry;
                     await new TelemetryService(session.Telemetry, cloudConfig.DeviceId, cloudConfig)
                         .SendRequiredAsync("red", cancellationToken: timeout.Token);
-                    await session.DisconnectAsync(timeout.Token);
+                    await connection.DisconnectAsync(cancellationToken: timeout.Token);
                     Console.WriteLine("Cloud self-test passed: provisioned/connected, telemetry acknowledged, disconnected (no hardware accessed).");
                 }
                 finally { Console.CancelKeyPress -= onCancel; }
@@ -88,7 +94,7 @@ namespace skittle_sorter
             servo.Home();
 
             PrintSection("IoT Hub / DPS Initialization");
-            UnifiedDeviceSession? deviceSession = null;
+            (ConnectionClient Connection, TelemetryClient Telemetry, CoordinatedMqttClient Mqtt, DeviceProvisioningIdentity Identity)? deviceSession = null;
             TelemetryService? telemetryService = null;
 
             try
@@ -96,7 +102,7 @@ namespace skittle_sorter
                 if (iotConfig.SendTelemetry && !shutdown.IsCancellationRequested)
                 {
                     deviceSession = await DpsInitializationService.InitializeAsync(iotConfig, options.ConfigurationPath, shutdown.Token);
-                    telemetryService = new TelemetryService(deviceSession.Telemetry, iotConfig.DeviceId, iotConfig);
+                    telemetryService = new TelemetryService(deviceSession.Value.Telemetry, iotConfig.DeviceId, iotConfig);
                 }
 
                 if (options.ReadyFile != null && !shutdown.IsCancellationRequested)
@@ -190,9 +196,15 @@ namespace skittle_sorter
                         try
                         {
                             using var timeout = new CancellationTokenSource(TimeSpan.FromSeconds(10));
-                            await deviceSession.DisconnectAsync(timeout.Token);
+                            await deviceSession.Value.Connection.DisconnectAsync(cancellationToken: timeout.Token);
                         }
-                        finally { deviceSession.Dispose(); }
+                        finally
+                        {
+                            deviceSession.Value.Telemetry.Dispose();
+                            deviceSession.Value.Connection.Dispose();
+                            deviceSession.Value.Mqtt.Dispose();
+                            deviceSession.Value.Identity.Dispose();
+                        }
                     }
                 }
                 finally

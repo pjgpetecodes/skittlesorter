@@ -1,27 +1,67 @@
 using AzureDpsFramework;
 using AzureDpsFramework.Adr;
+using Microsoft.Azure.Iot.Device.MqttNetAdapter;
+using Microsoft.Azure.Iot.Device.MQTTnetAdapter;
+using Microsoft.Azure.Iot.Device.Unified.Connection;
+using Microsoft.Azure.Iot.Device.Unified.Models;
+using Microsoft.Azure.Iot.Device.Unified.Telemetry;
 
 namespace skittle_sorter;
 
 public static class DpsInitializationService
 {
-    public static async Task<UnifiedDeviceSession> InitializeAsync(IoTHubConfig iotConfig,
+    public static async Task<(ConnectionClient Connection, TelemetryClient Telemetry, CoordinatedMqttClient Mqtt, DeviceProvisioningIdentity Identity)> InitializeAsync(IoTHubConfig iotConfig,
         string configurationPath = "appsettings.json", CancellationToken cancellationToken = default)
     {
         var configuration = DpsConfiguration.Load(configurationPath);
-        var session = UnifiedDeviceSession.Create(configuration);
+        var identity = DeviceProvisioningIdentity.Create(configuration);
+        CoordinatedMqttClient? mqtt = null;
+        ConnectionClient? connection = null;
+        TelemetryClient? telemetry = null;
         try
         {
+            mqtt = new CoordinatedMqttClient(new MqttNetClient(new MqttNetClientOptions
+            {
+                EnableMqttLogs = configuration.EnableDebugLogging
+            }), configuration.ProvisioningHost, configuration.ProvisioningLockPath);
+            connection = new ConnectionClient(new ConnectionClientOptions
+            {
+                MqttClient = mqtt,
+                EnableMqttLogging = configuration.EnableDebugLogging,
+                EnableTwin = false,
+                EnableDirectMethods = false,
+                EnableCloudToDeviceMessages = false
+            }, identity.LoadContext());
+            telemetry = new TelemetryClient(connection);
             Console.WriteLine($"[IoT] Unified SDK provisioning/connection: {configuration.RegistrationId}, {configuration.AttestationMethod}, operational certificate={configuration.RequestOperationalCertificate}");
-            await session.ConnectAsync(cancellationToken);
-            iotConfig.DeviceId = session.Context!.DeviceId;
-            Console.WriteLine($"[IoT] Connected: Hub={session.Context.IotHubHostName}, DeviceId={iotConfig.DeviceId}");
+            using var connectCancellation = CancellationTokenSource.CreateLinkedTokenSource(cancellationToken);
+            var connecting = connection.ProvisionAndConnectAsync(identity.Provisioning, identity.Authentication, cancellationToken: connectCancellation.Token);
+            if (await Task.WhenAny(connecting, identity.CredentialFailure) == identity.CredentialFailure)
+                connectCancellation.Cancel();
+            Microsoft.Azure.Iot.Device.Models.ConnectionContext context;
+            try { context = await connecting; }
+            catch (Exception ex) when (identity.CredentialFailure.IsCompletedSuccessfully)
+            {
+                throw new InvalidOperationException(identity.CredentialFailure.Result.Message, identity.CredentialFailure.Result.InnerException ?? ex);
+            }
+            catch (Exception)
+            {
+                var current = connection.GetCurrentConnectionContext();
+                Console.Error.WriteLine($"[IoT] Connection failed. Assigned Hub={current?.IotHubHostName ?? "(none)"}, profile={current?.ConnectionProfile}, issued certificate count={current?.IssuedClientCertificates?.Count ?? 0}.");
+                throw;
+            }
+            identity.SaveContext(context);
+            iotConfig.DeviceId = context.DeviceId;
+            Console.WriteLine($"[IoT] Connected: Hub={context.IotHubHostName}, DeviceId={iotConfig.DeviceId}");
             await TryListAdrDevicesAsync(iotConfig.DeviceId, configurationPath, cancellationToken);
-            return session;
+            return (connection, telemetry, mqtt, identity);
         }
         catch
         {
-            session.Dispose();
+            telemetry?.Dispose();
+            connection?.Dispose();
+            mqtt?.Dispose();
+            identity.Dispose();
             throw;
         }
     }

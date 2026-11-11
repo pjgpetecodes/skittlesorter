@@ -31,7 +31,7 @@
 <!-- wp:paragraph -->
 <p><strong>What's changed since the provisioning articles?</strong> The sorter now uses
 <code>Microsoft.Azure.Iot.Device</code> <strong>2.0.0-preview4</strong> for DPS provisioning and telemetry,
-with a thin <code>AzureDpsFramework</code> adapter. That removes the custom <strong>provisioning</strong>
+directly, using <code>AzureDpsFramework</code> credential helpers. That removes the custom <strong>provisioning</strong>
 protocol, not this separate DPS <strong>software-update</strong> client. The sorter uses
 MQTTnet 5; <code>AzureSoftwareUpdatesFramework</code> retains MQTTnet 4. .NET 10 and each
 demonstration's existing cloud resources are unchanged. The SDK discovers the

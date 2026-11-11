@@ -133,11 +133,11 @@ The device will:
 
 ## Next Steps
 
-Now that enrollment groups are configured, we'll use the **unified SDK and thin adapter** for the sample CSR flow:
+Now that enrollment groups are configured, we'll use the **unified SDK and durable credential helpers** for the sample CSR flow:
 - MQTT protocol communication with DPS
 - CSR generation and submission
 - Certificate issuance workflow
-- Support for preview API features (`2025-07-01-preview`)
+- Support for preview certificate-management features through the unified SDK (API versioning is SDK-owned)
 
 ---
 

@@ -6,8 +6,9 @@ Provision Azure resources for IoT and device registration.
 
 The sorter now pins `Microsoft.Azure.Iot.Device` **2.0.0-preview4** on .NET 10.
 Its unified SDK handles provisioning and telemetry; `AzureDpsFramework` retains
-configuration, durable CSR/key/issued-chain/assignment files, ADR ARM helpers and
-a thin session adapter. There is no manual Hub or resource-topology migration;
+configuration, durable CSR/key/issued-chain/assignment files and ADR ARM helpers.
+The sorter calls the SDK directly; the existing session API remains for package
+compatibility. There is no manual Hub or resource-topology migration;
 the SDK discovers the assigned endpoint/profile through DPS.
 
 For a new preview deployment use the current

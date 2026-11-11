@@ -7,7 +7,8 @@
 
 Welcome to this comprehensive blog series on building a real-world IoT device using Azure's latest IoT Hub, Azure Device Provisioning Service (DPS) features, along with Microsoft-managed certificate infrastructure.
 
-### What's changed since the previous preview?
+<details>
+<summary>Click here to see what's changed since the last preview</summary>
 
 I've refreshed the series to match the current preview. DPS is required, while
 certificate management is optional. The credential a device uses to get onto
@@ -17,9 +18,10 @@ I've also moved the sorter to Microsoft's unified
 [`Microsoft.Azure.Iot.Device` **2.0.0-preview4**](https://www.nuget.org/packages/Microsoft.Azure.Iot.Device/2.0.0-preview4).
 `ConnectionClient` handles DPS and the Hub connection; `TelemetryClient` sends
 our Skittle readings. The custom C# provisioning protocol and legacy
-`Microsoft.Azure.Devices.Client` are gone. `AzureDpsFramework` stays as a thin
-configuration, durable CSR/key/issued-chain persistence, ADR ARM and session
-adapter. Microsoft's [SDK design and feature matrix](https://github.com/Azure/azure-iot-sdk/blob/main/dotnet/README.md)
+`Microsoft.Azure.Devices.Client` are gone. The sorter calls the SDK directly;
+`AzureDpsFramework` supplies configuration, durable CSR/key/issued-chain
+persistence and optional ADR ARM helpers. Its session API remains for package
+compatibility. Microsoft's [SDK design and feature matrix](https://github.com/Azure/azure-iot-sdk/blob/main/dotnet/README.md)
 and [unified examples](https://github.com/Azure/azure-iot-sdk/tree/releases/public-preview/dotnet/samples/Unified)
 are the starting points for the new API. The package is still a preview.
 
@@ -31,9 +33,8 @@ endpoint/profile through DPS. There's a bounded
 `--cloud-self-test --config PATH` for provision/connect/telemetry/disconnect
 without physical hardware. SDK retry/reprovision and optional IoT Hub renewal
 APIs are available, but automatic certificate renewal isn't implemented here.
-The sorter uses MQTTnet 5; the separate ADR software-updates client keeps
-MQTTnet 4 and its own DPS **update** protocol. The SDK doesn't implement that
-workflow. None of this requires an MQTT5 Hub or a cloud topology change.
+The sorter uses MQTTnet 5; this client-side transport choice does not require
+an MQTT 5-capable IoT Hub or any cloud topology change.
 
 The resource walkthrough now uses the current CLI flow and system-assigned
 identities, links DPS before IoT Hub, and creates an enrollment group linked to
@@ -46,6 +47,8 @@ operational certificate validity; this example uses a 30-day policy. The
 Microsoft-managed lifecycle includes renewal and revocation, with limitations
 for intermediate CAs signed by an external CA. I've kept the distinction between
 service capabilities, SDK APIs and the lifecycle code actually in this sample.
+
+</details>
 
 ### Contents
 
@@ -127,7 +130,7 @@ standard rates.
 -   Current deployment steps: [https://learn.microsoft.com/en-us/azure/iot-hub/iot-hub-device-registry-setup](https://learn.microsoft.com/en-us/azure/iot-hub/iot-hub-device-registry-setup)
 
 The sample later in this series now uses the official unified .NET SDK, not a
-custom provisioning transport. Our adapter retains the application-specific
+custom provisioning transport. Our helpers retain the application-specific
 configuration and durable certificate files. Check current service and SDK
 documentation before changing pinned preview versions.
 
@@ -183,7 +186,7 @@ Follow along post-by-post to understand **why** and **how** everything works
 Most IoT tutorials use **symmetric keys** or **manual X.509 certificate generation**. This series shows you:
 
 -   How to use Microsoft's **new certificate management** features
--   How to use the **unified .NET device SDK** with a thin application adapter
+-   How to use the **unified .NET device SDK** with durable application credentials
 -   How to integrate **ADR** for advanced device management
 -   How to apply security-minded IoT patterns while accounting for preview limitations
 

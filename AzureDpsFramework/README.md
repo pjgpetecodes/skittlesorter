@@ -1,8 +1,8 @@
-# Azure DPS Framework: unified SDK adapter
+# Azure DPS Framework: configuration and credential helpers
 
 ## What's changed?
 
-`AzureDpsFramework` now wraps Microsoft's unified
+The sorter uses Microsoft's unified
 [`Microsoft.Azure.Iot.Device` **2.0.0-preview4**](https://www.nuget.org/packages/Microsoft.Azure.Iot.Device/2.0.0-preview4)
 on .NET 10. The official SDK supports the CSR certificate-issuance flow that
 originally motivated this project's custom provisioning implementation.
@@ -15,7 +15,7 @@ and transport APIs must migrate rather than merely changing package versions.
 
 Read Microsoft's [SDK design and feature matrix](https://github.com/Azure/azure-iot-sdk/blob/main/dotnet/README.md)
 and [unified samples](https://github.com/Azure/azure-iot-sdk/tree/releases/public-preview/dotnet/samples/Unified)
-alongside the adapter source. The SDK and ADR certificate-management integration
+alongside the helper source. The SDK and ADR certificate-management integration
 are preview features, not a production-readiness guarantee.
 
 ## Why keep this library?
@@ -26,7 +26,8 @@ It remains the boundary between the sorter and application-specific Azure setup:
 - Accept a device-specific symmetric key, with group-key derivation retained for
   compatibility; do not distribute group master keys unnecessarily.
 - Generate/load CSRs and private keys and persist the issued certificate chain.
-- Adapt those inputs through `UnifiedDeviceSession` into a unified SDK session.
+- Prepare SDK authentication and provisioning settings, restore the assignment,
+  and signal a missing or invalid issued certificate.
 - Keep optional Azure Device Registry ARM metadata queries and updates separate
   from device-protocol operations.
 
@@ -109,6 +110,10 @@ The unified SDK also exposes optional IoT Hub certificate-renewal APIs.
 or the sorter.** Renewal scheduling, durable replacement and recovery require
 their own validated lifecycle design. Deleting a certificate is not an
 implementation of the Hub renewal API.
+
+The sorter constructs `ConnectionClient` and `TelemetryClient` and calls the SDK
+directly. `UnifiedDeviceSession` remains available for existing package consumers,
+but is no longer the sorter's entry point.
 
 This migration keeps the existing IoT Hub and cloud topology. The SDK discovers
 the assigned endpoint and connection profile from DPS; don't infer a hostname

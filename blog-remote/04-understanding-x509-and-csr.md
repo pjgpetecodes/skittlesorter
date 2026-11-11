@@ -13,7 +13,7 @@ This series uses Microsoft's **new** certificate management (preview) that ena
 > public preview and isn't recommended for production workloads. For details,
 > see the [Certificate Management Overview](https://learn.microsoft.com/en-us/azure/iot/iot-certificate-management-overview).
 
-### What's new in this edition?
+### What's new in this version?
 
 The two certificate jobs were easy to confuse, so I've made the distinction
 clearer: the CA chain created in this walkthrough is for DPS onboarding;
@@ -23,7 +23,7 @@ the enrollment example to show where that policy fits. See the
 for the series-wide changes.
 
 The device also now uses the official unified `Microsoft.Azure.Iot.Device`
-**2.0.0-preview4** rather than a custom C# DPS transport. Our adapter keeps the
+**2.0.0-preview4** rather than a custom C# DPS transport. Our helpers keep the
 CSR/key and issued chain durable; both CSR onboarding flows and standard
 non-CSR profiles remain. That doesn't add automatic renewal or change our Hub.
 
@@ -64,7 +64,7 @@ The new certificate management service makes use of a **two-phase approach**:
 
 The certificate story is the same, but I've moved provisioning to the official
 unified `Microsoft.Azure.Iot.Device` **2.0.0-preview4** package. The custom C#
-DPS protocol is gone. Our adapter keeps configuration, durable CSR/key/issued
+DPS protocol is gone. Our helpers keep configuration, durable CSR/key/issued
 chain files and ADR ARM helpers; `ConnectionClient` owns provisioning and the
 Hub connection and `TelemetryClient` shares it. Both CSR onboarding flows and
 standard non-CSR symmetric-key/X.509 profiles remain on .NET 10 and our existing
@@ -74,8 +74,7 @@ operational certificate requested by CSR; the two CA roles remain separate.
 
 See the [SDK feature matrix and design](https://github.com/Azure/azure-iot-sdk/blob/main/dotnet/README.md).
 Optional IoT Hub renewal APIs are available, but automatic certificate renewal
-isn't implemented in this application. The separate DPS software-updates client
-isn't replaced by this provisioning change.
+isn't implemented in this application.
 
 The following diagram shows the complete provisioning flow:
 
@@ -300,7 +299,7 @@ openssl x509 -req `
   -extensions v3_intermediate
 ```
 
-3**) Extract certificate thumbprints:**
+**3) Extract certificate thumbprints:**
 
 **Extract root CA thumbprint:**
 
@@ -388,7 +387,7 @@ az iot dps certificate verify --dps-name $dpsName --resource-group $resourceGrou
 Write-Host "✓ Intermediate CA verified in DPS" -ForegroundColor Green
 ```
 
-6**) Create device bootstrap certificate:**
+**6) Create device bootstrap certificate:**
 
 **Create device private key and CSR:**
 
@@ -495,9 +494,9 @@ a rotation to avoid losing connectivity.
 
 ## Preview Limitations
 
-⚠️ **Production Use:** IoT Hub integration and certificate management remain in public preview and aren't recommended for production workloads.
-⚠️ **Existing resources:** Eligible existing services can be connected to an ADR namespace, but the connection is permanent and can't be reversed. This series' setup script creates a dedicated new Hub.
-⚠️ **DPS:** Required for all IoT Hub preview scenarios, even if certificate management is disabled.
+-   ⚠️ **Production Use:** IoT Hub integration and certificate management remain in public preview and aren't recommended for production workloads.
+-   ⚠️ **Existing resources:** Eligible existing services can be connected to an ADR namespace, but the connection is permanent and can't be reversed. This series' setup script creates a dedicated new Hub.
+-   ⚠️ **DPS:** Required for all IoT Hub preview scenarios, even if certificate management is disabled.
 
 ## Learn More
 

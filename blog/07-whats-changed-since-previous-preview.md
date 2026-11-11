@@ -17,8 +17,9 @@ package. `ConnectionClient` owns DPS provisioning and the Hub connection;
 `TelemetryClient` shares it. The custom C# security providers, transports,
 registration/SAS-token protocol and `Microsoft.Azure.Devices.Client` are removed.
 
-`AzureDpsFramework` remains a thin configuration, certificate/CSR persistence,
-ADR ARM and `UnifiedDeviceSession` adapter library. Standard symmetric-key/X.509
+The sorter calls the SDK directly; `AzureDpsFramework` provides configuration,
+certificate/CSR persistence and ADR ARM helpers. Its `UnifiedDeviceSession` API
+remains for package compatibility. Standard symmetric-key/X.509
 profiles and both CSR onboarding flows remain. CSR/key, issued PEM/chain and the
 `.connection.json` assignment sidecar survive restarts. A required-certificate
 wrapper rejects missing issuance before Hub authentication; the coordinator
@@ -120,7 +121,7 @@ now:
 - Reflect the documented renewal and revocation lifecycle, while noting the
   documented limitation for externally signed intermediate CAs.
 - Replace the custom C# DPS provisioning protocol with the official unified SDK,
-  retaining configuration, persistence and ADR ARM operations as a thin adapter.
+  retaining configuration, persistence and ADR ARM helpers.
 
 These edits do not establish that every documented capability was newly
 introduced in this preview, or that the downstream certificate-issuance

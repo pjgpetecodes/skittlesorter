@@ -22,7 +22,7 @@ public sealed class UpdateReadinessTests
             CsrKeyFilePath = "",
             IssuedCertFilePath = ""
         };
-        using var session = UnifiedDeviceSession.Create(config);
+        using var session = DeviceProvisioningIdentity.Create(config);
         Assert.IsType<SymmetricKeyAuthenticationProvider>(session.Authentication);
         Assert.Null(session.Provisioning.CertificateSigningRequest);
     }
@@ -32,7 +32,7 @@ public sealed class UpdateReadinessTests
     {
         var config = new DpsConfiguration();
         Assert.True(config.RequestOperationalCertificate);
-        Assert.Throws<InvalidOperationException>(() => UnifiedDeviceSession.Create(config));
+        Assert.Throws<InvalidOperationException>(() => DeviceProvisioningIdentity.Create(config));
     }
 
     [Fact]
@@ -49,7 +49,7 @@ public sealed class UpdateReadinessTests
             var keyPath = Path.Combine(directory, "bootstrap.key");
             File.WriteAllText(certPath, certificate.ExportCertificatePem());
             File.WriteAllText(keyPath, key.ExportPkcs8PrivateKeyPem());
-            using var session = UnifiedDeviceSession.Create(new DpsConfiguration
+            using var session = DeviceProvisioningIdentity.Create(new DpsConfiguration
             {
                 IdScope = "test-scope", RegistrationId = "sorter", AttestationMethod = "X509",
                 RequestOperationalCertificate = false, AttestationCertPath = certPath, AttestationKeyPath = keyPath,

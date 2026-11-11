@@ -6,7 +6,7 @@ A minimal path to build and run the sorter.
 
 .NET 10 is unchanged. The sorter pins Microsoft's unified
 `Microsoft.Azure.Iot.Device` **2.0.0-preview4** for DPS and telemetry, with a thin
-`AzureDpsFramework` adapter. Use the existing Hub and current configuration;
+`AzureDpsFramework` helpers. Use the existing Hub and current configuration;
 the SDK discovers the assigned endpoint/profile through DPS. No manual Hub or
 cloud-resource migration is required. See [provisioning profiles](DPS-Provisioning.md).
 

@@ -6,6 +6,9 @@ workflow. It creates a self-signed demo bootstrap CA, an X.509 enrollment and
 a local device certificate, and writes a CSR-enabled sorter configuration. It does not create device records or
 provision a device until the sorter itself is run.
 
+For a complete repeatable demonstration, including clean reset choices, see
+the [X.509 provisioning demo runbook](../../docs/Demo-Runbook.md).
+
 ## What's changed?
 
 The generated configuration works with the sorter's unified
