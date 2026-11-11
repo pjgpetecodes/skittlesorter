@@ -50,6 +50,21 @@ namespace skittle_sorter
                 })
                 : null;
 
+            if (options.Calibrate)
+            {
+                try
+                {
+                    options.ValidateConfiguration();
+                    await ColorCalibrationWizard.RunAsync(options.ConfigurationPath, shutdown.Token);
+                }
+                catch (OperationCanceledException) when (shutdown.IsCancellationRequested)
+                {
+                    Console.WriteLine("Calibration cancelled; files unchanged.");
+                }
+                finally { Console.CancelKeyPress -= onCancel; }
+                return;
+            }
+
             if (options.CloudSelfTest)
             {
                 try
@@ -80,6 +95,7 @@ namespace skittle_sorter
             var chutePositions = ConfigurationLoader.LoadChutePositions(options.ConfigurationPath);
             var servoPositions = ConfigurationLoader.LoadServoPositions(options.ConfigurationPath);
             var servoHardwareConfig = ConfigurationLoader.LoadServoSystemHardwareConfiguration(options.ConfigurationPath);
+            var colorCalibration = ColorCalibration.Load(options.ConfigurationPath);
 
             Console.WriteLine($"Mock Mode - Color Sensor: {mockConfig.EnableMockColorSensor}, Servos: {mockConfig.EnableMockServos}");
             Console.WriteLine($"IoT Hub Telemetry Enabled: {iotConfig.SendTelemetry}\n");
@@ -88,6 +104,7 @@ namespace skittle_sorter
             using var colorSensor = mockConfig.EnableMockColorSensor
                 ? new TCS3472x(true, mockConfig.MockColorSequence)
                 : new TCS3472x();
+            colorSensor.Calibration = colorCalibration;
             Console.WriteLine("Color sensor initialised.");
 
             using var servo = new ServoController(mockConfig.EnableMockServos, chutePositions, servoHardwareConfig);

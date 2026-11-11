@@ -2,7 +2,7 @@ using System.Text.Json;
 
 namespace skittle_sorter;
 
-public sealed record RuntimeOptions(string ConfigurationPath, string? ReadyFile, bool SelfTest, bool ShowVersion, bool CloudSelfTest = false)
+public sealed record RuntimeOptions(string ConfigurationPath, string? ReadyFile, bool SelfTest, bool ShowVersion, bool CloudSelfTest = false, bool Calibrate = false)
 {
     public static RuntimeOptions Parse(string[] args)
     {
@@ -11,6 +11,7 @@ public sealed record RuntimeOptions(string ConfigurationPath, string? ReadyFile,
         var selfTest = false;
         var showVersion = false;
         var cloudSelfTest = false;
+        var calibrate = false;
         for (var i = 0; i < args.Length; i++)
         {
             switch (args[i])
@@ -32,14 +33,19 @@ public sealed record RuntimeOptions(string ConfigurationPath, string? ReadyFile,
                 case "--cloud-self-test":
                     cloudSelfTest = true;
                     break;
+                case "--calibrate":
+                    calibrate = true;
+                    break;
                 default:
                     throw new ArgumentException($"Unknown argument: {args[i]}");
             }
         }
         if (cloudSelfTest && (selfTest || showVersion || readyFile != null))
             throw new ArgumentException("--cloud-self-test cannot be combined with --self-test, --version or --ready-file.");
+        if (calibrate && (cloudSelfTest || selfTest || showVersion || readyFile != null))
+            throw new ArgumentException("--calibrate cannot be combined with other operating modes or --ready-file.");
         return new RuntimeOptions(Path.GetFullPath(config),
-            readyFile is null ? null : Path.GetFullPath(readyFile), selfTest, showVersion, cloudSelfTest);
+            readyFile is null ? null : Path.GetFullPath(readyFile), selfTest, showVersion, cloudSelfTest, calibrate);
     }
 
     public void ValidateConfiguration()
@@ -50,5 +56,7 @@ public sealed record RuntimeOptions(string ConfigurationPath, string? ReadyFile,
         if (!configuration.RootElement.TryGetProperty("Hardware", out var hardware) ||
             hardware.ValueKind != JsonValueKind.Object)
             throw new InvalidDataException("An explicit Hardware configuration is required for a service deployment.");
+        if (!Calibrate)
+            ColorCalibration.Load(ConfigurationPath);
     }
 }

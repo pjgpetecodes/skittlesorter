@@ -15,6 +15,7 @@ namespace skittle_sorter
         private readonly bool _isMockMode;
         private readonly List<string> _mockColorSequence;
         private int _mockColorIndex = 0;
+        public ColorCalibration? Calibration { get; set; }
 
         public TCS3472x(int busId = 1)
         {
@@ -110,6 +111,9 @@ namespace skittle_sorter
         /// </summary>
         public string ClassifySkittleColor(ushort red, ushort green, ushort blue, ushort clear)
         {
+            if (Calibration != null)
+                return Calibration.Classify(new ColorReading(clear, red, green, blue));
+
             double gr = (double)green / red;
             double br = (double)blue / red;
 
