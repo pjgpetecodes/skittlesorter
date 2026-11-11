@@ -20,7 +20,8 @@ Wiring, components, and calibration for the skittle sorter.
 Stop the sorter service first so it cannot move the arm or access the sensor.
 Have one each of red, green, yellow, purple and orange Skittles ready.
 Use the device's actual configuration, with
-`Hardware.MockMode.EnableMockColorSensor` set to `false`.
+`Hardware.MockMode.EnableMockColorSensor` and
+`Hardware.MockMode.EnableMockServos` set to `false`.
 
 Calibration is a mode of the .NET sorter itself, not a separate script.
 On the Pi, deploy a sorter build containing `--calibrate` support first, then run:
@@ -41,12 +42,21 @@ with the .NET 10 SDK:
 dotnet run --project .\skittlesorter.csproj -- --calibrate --config .\appsettings.json
 ```
 
-The routine does not move servos or connect to Azure. Manually put the carrier
-in its normal detection position. Follow the prompts: first leave it empty
-(`None`), then place each requested colour under the sensor, keeping the normal
-lighting, distance and orientation. It averages ten readings per sample.
-If a colour saturates, adjust the lighting or sensor placement and retry.
-Indistinguishable samples are rejected rather than saved.
+The routine moves the arm using the configured `PickAngle` (load),
+`DetectAngle` (sensor) and `DropAngle` (exit). It does not move the chute to
+sort colours or connect to Azure. Clear the hopper so only the requested
+sample enters, and keep hands clear during movement.
+
+The arm first goes to load and waits. Leave it empty for `None`, then insert
+each requested colour at load and press Enter. The arm moves under the sensor,
+settles, and averages ten readings. It then moves to exit to release the sample
+and returns to load before asking for the next one. Collect the samples at the
+current chute outlet; no colour sorting is performed.
+
+Keep the normal lighting and sensor distance. Invalid, saturated or
+indistinguishable colour samples prompt a retry of the same colour at load,
+without losing earlier captures. Type `q` at a prompt to cancel. Ctrl+C during
+capture finishes the exit-and-return movement before stopping.
 
 Type `yes` at the final prompt to update only `Hardware.ColorCalibration`
 in the selected existing configuration. All other settings are preserved.

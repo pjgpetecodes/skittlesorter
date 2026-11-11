@@ -40,13 +40,16 @@ public sealed class ColorCalibration
         {
             var sample = Samples[label] ??
                 throw new InvalidDataException($"Missing calibration reading for {label}.");
-            sample.Validate(allowSaturation: label == "None");
+            ValidateSample(label, sample);
         }
+    }
 
-        for (var i = 0; i < Labels.Count; i++)
-            for (var j = i + 1; j < Labels.Count; j++)
-                if (Samples[Labels[i]].DistanceTo(Samples[Labels[j]]) < 0.0001)
-                    throw new InvalidDataException($"Calibration readings for {Labels[i]} and {Labels[j]} are too similar. Reposition the samples and recalibrate.");
+    public void ValidateSample(string label, ColorReading sample)
+    {
+        sample.Validate(allowSaturation: label == "None");
+        foreach (var (otherLabel, otherSample) in Samples)
+            if (otherLabel != label && otherSample != null && sample.DistanceTo(otherSample) < 0.0001)
+                throw new InvalidDataException($"Calibration readings for {otherLabel} and {label} are too similar. Check the sample and lighting, then retry {label}.");
     }
 
     public string Classify(ColorReading reading)

@@ -125,7 +125,8 @@ public sealed class ColorCalibrationTests
         var index = 0;
         var result = await ColorCalibrationWizard.CaptureAsync(
             new StringReader(new string('\n', 6) + "yes\n"), new StringWriter(),
-            () => readings[index++], _ => Task.CompletedTask, CancellationToken.None);
+            () => readings[index++], _ => Task.CompletedTask,
+            (_, _) => Task.CompletedTask, CancellationToken.None);
         Assert.NotNull(result);
         Assert.Equal(60, index);
         Assert.Equal(expected.Samples, result.Samples);
@@ -143,7 +144,7 @@ public sealed class ColorCalibrationTests
         var index = 0;
         Assert.Null(await ColorCalibrationWizard.CaptureAsync(
             new StringReader(input), new StringWriter(), () => readings[index++],
-            _ => Task.CompletedTask, CancellationToken.None));
+            _ => Task.CompletedTask, (_, _) => Task.CompletedTask, CancellationToken.None));
     }
 
     [Fact]
@@ -156,10 +157,127 @@ public sealed class ColorCalibrationTests
         var output = new StringWriter();
         var result = await ColorCalibrationWizard.CaptureAsync(
             new StringReader(new string('\n', 7) + "yes\n"), output,
-            () => readings[index++], _ => Task.CompletedTask, CancellationToken.None);
+            () => readings[index++], _ => Task.CompletedTask,
+            (_, _) => Task.CompletedTask, CancellationToken.None);
         Assert.NotNull(result);
         Assert.Contains("Invalid or saturated", output.ToString());
         Assert.Equal(61, index);
+    }
+
+    [Fact]
+    public async Task WizardWaitsAtLoadAndExitsBeforeRequestingEveryNextSample()
+    {
+        var expected = CreateCalibration();
+        var events = new List<string>();
+        var current = CalibrationArmPosition.Load;
+        var index = 0;
+        var result = await ColorCalibrationWizard.CaptureAsync(
+            new RecordingInput(new string('\n', 6) + "yes\n", () => events.Add("prompt")),
+            new StringWriter(), () =>
+            {
+                Assert.Equal(CalibrationArmPosition.Detect, current);
+                events.Add("read");
+                return expected.Samples[ColorCalibration.Labels[index++ / 10]];
+            }, _ => Task.CompletedTask, (position, _) =>
+            {
+                current = position;
+                events.Add(position.ToString());
+                return Task.CompletedTask;
+            }, CancellationToken.None);
+
+        Assert.NotNull(result);
+        var expectedEvents = new List<string> { "Load" };
+        foreach (var _ in ColorCalibration.Labels)
+        {
+            expectedEvents.AddRange(["prompt", "Detect"]);
+            expectedEvents.AddRange(Enumerable.Repeat("read", 10));
+            expectedEvents.AddRange(["Exit", "Load"]);
+        }
+        expectedEvents.Add("prompt");
+        Assert.Equal(expectedEvents, events);
+    }
+
+    [Fact]
+    public async Task WizardRetriesReportedEmptyPurpleCollisionWithoutLosingEarlierCaptures()
+    {
+        var expected = CreateCalibration();
+        expected.Samples["None"] = new ColorReading(52793, 20647, 16546, 11149);
+        var closePurple = new ColorReading(52224, 20445, 16198, 11064);
+        var samples = new[]
+        {
+            expected.Samples["None"], expected.Samples["Red"], expected.Samples["Green"],
+            expected.Samples["Yellow"], closePurple, expected.Samples["Purple"], expected.Samples["Orange"]
+        };
+        var readings = samples.SelectMany(sample => Enumerable.Repeat(sample, 10)).ToArray();
+        var index = 0;
+        var output = new StringWriter();
+        var moves = new List<CalibrationArmPosition>();
+        var result = await ColorCalibrationWizard.CaptureAsync(
+            new StringReader(new string('\n', 7) + "yes\n"), output,
+            () => readings[index++], _ => Task.CompletedTask, (position, _) =>
+            {
+                moves.Add(position);
+                return Task.CompletedTask;
+            }, CancellationToken.None);
+
+        Assert.NotNull(result);
+        Assert.Equal(expected.Samples, result.Samples);
+        Assert.Contains("None and Purple are too similar", output.ToString());
+        Assert.Equal(70, index);
+        Assert.Equal(7, moves.Count(position => position == CalibrationArmPosition.Exit));
+        Assert.Equal(CalibrationArmPosition.Load, moves[^1]);
+    }
+
+    [Fact]
+    public async Task CancellationDuringCaptureStillExitsAndReturnsToLoad()
+    {
+        using var cancellation = new CancellationTokenSource();
+        var moves = new List<CalibrationArmPosition>();
+        await Assert.ThrowsAnyAsync<OperationCanceledException>(() =>
+            ColorCalibrationWizard.CaptureAsync(new StringReader("\n"), new StringWriter(),
+                () => throw new InvalidOperationException("Cancelled capture must not read."),
+                token =>
+                {
+                    cancellation.Cancel();
+                    token.ThrowIfCancellationRequested();
+                    return Task.CompletedTask;
+                }, (position, token) =>
+                {
+                    if (position == CalibrationArmPosition.Exit || moves.Contains(CalibrationArmPosition.Exit))
+                        Assert.False(token.CanBeCanceled);
+                    moves.Add(position);
+                    return Task.CompletedTask;
+                }, cancellation.Token));
+        Assert.Equal(new[]
+        {
+            CalibrationArmPosition.Load, CalibrationArmPosition.Detect,
+            CalibrationArmPosition.Exit, CalibrationArmPosition.Load
+        }, moves);
+    }
+
+    [Fact]
+    public async Task QuittingAtLoadDoesNotMoveToDetectOrExit()
+    {
+        var moves = new List<CalibrationArmPosition>();
+        var result = await ColorCalibrationWizard.CaptureAsync(
+            new StringReader("q\n"), new StringWriter(),
+            () => throw new InvalidOperationException("Quitting must not read."),
+            _ => Task.CompletedTask, (position, _) =>
+            {
+                moves.Add(position);
+                return Task.CompletedTask;
+            }, CancellationToken.None);
+        Assert.Null(result);
+        Assert.Equal(new[] { CalibrationArmPosition.Load }, moves);
+    }
+
+    private sealed class RecordingInput(string text, Action onRead) : StringReader(text)
+    {
+        public override ValueTask<string?> ReadLineAsync(CancellationToken cancellationToken)
+        {
+            onRead();
+            return base.ReadLineAsync(cancellationToken);
+        }
     }
 
     [Fact]
