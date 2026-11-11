@@ -51,6 +51,32 @@ The older cleanup script used to delete an enrollment group and the entire local
 `certs` directory. Those broad deletions are intentionally no longer performed.
 Never delete the resource group as part of this device reset.
 
+## Single-command reset from Bash
+
+The Pi does not need PowerShell. From the repository root, with Python 3.8+
+and an authorized Azure CLI login:
+
+```bash
+python3 -m scripts.clean_test_start --dps-name "<dps-name>" --hub-name "<hub-name>" --enrollment-id "<enrollment-id>" --hub-auth-type key
+```
+
+The script uses `appsettings.json` by default; override it with `--config PATH`.
+It derives the subscription, resource group, namespace, DPS scope,
+registration ID, and cache path from that profile, verifies the same cloud
+relationships as the PowerShell reset, then prompts for confirmation. Check
+the displayed registration ID before answering `y`. `--what-if` performs a
+local preview without Azure requests; `--yes` skips only the confirmation.
+The default Hub authentication is `login`; key mode is explicitly selected
+above and has the same permissions/local-authentication requirements described
+below.
+
+The Python reset removes only the verified device's ADR record, remaining Hub
+identity, DPS registration, and assignment sidecar. Certificate/key files,
+enrollment, and infrastructure are retained. It reports operation durations
+and stops with an error on CLI failures or a 180-second per-command timeout.
+If cleanup is interrupted, inspect the cloud state before retrying.
+See the [two-device cheat sheet](Demo-Cheat-Sheet.md) for the demo command.
+
 ## Progress and deletion latency
 
 After confirmation, the script performs several sequential Azure CLI preflight

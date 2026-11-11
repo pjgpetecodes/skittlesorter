@@ -1,7 +1,8 @@
 # Demo cheat sheet
 
-Run commands from the repository root. The reset command requires PowerShell 7;
-`dotnet` and `az` commands also work in Bash on the Pi.
+Run commands from the repository root. Use PowerShell on the PC and Bash on the
+Pi. The PC reset script requires PowerShell 7; the Pi reset uses Python 3.8+
+and Azure CLI, without PowerShell.
 
 ## Sign in
 
@@ -21,8 +22,8 @@ for Azure CLI installation on a 64-bit Pi.
 Stop the sorter with **Ctrl+C** first. Each command resets one identity,
 retaining enrollment, certificates, and infrastructure. Run the reset on the
 device whose local `appsettings.json` matches that identity, so its cached
-assignment is also cleared. Both reset examples require PowerShell 7 and Azure
-CLI, including on the Pi; run `pwsh` first if your terminal is Bash.
+assignment is also cleared. Both procedures require an authorized Azure CLI
+login. Do not reset either device while its sorter is running.
 
 ### PC: skittlesorter
 
@@ -60,27 +61,28 @@ disappearing from ADR alone does not mean Hub/DPS cleanup has finished.
 
 ### Pi: skittlesorter2
 
-Run in PowerShell on the Pi, from its repository root:
+Run this **single command in Bash on the Pi**, from its repository root:
 
-```powershell
-$subscription = (Get-Content .\appsettings.json -Raw | ConvertFrom-Json).Adr.SubscriptionId
-
-.\scripts\clean-test-start.ps1 `
-  -AppConfigPath .\appsettings.json `
-  -SubscriptionId $subscription `
-  -ResourceGroup pjgiothubdemo002 `
-  -DpsName pjgiothubdemodps002 `
-  -IotHubName pjgiothubdemo002 `
-  -EnrollmentGroupName skittlesorter-x509-rebuild-002 `
-  -DeviceId skittlesorter2 `
-  -AdrNamespace pjg-adr-namespace-002 `
-  -HubAuthType key
+```bash
+python3 -m scripts.clean_test_start --dps-name pjgiothubdemodps002 --hub-name pjgiothubdemo002 --enrollment-id skittlesorter-x509-rebuild-002 --hub-auth-type key
 ```
 
-The selected configuration's `RegistrationId` must match the device being
-reset. The same authentication requirements and `-WhatIf` option apply to
-both commands. An Azure CLI login alone does not grant Hub registry permissions
-or permission to retrieve Hub policy keys.
+It reads the subscription, resource group, namespace, DPS scope, registration
+ID, and assignment-cache path from the Pi's `appsettings.json`. Confirm that
+the displayed target is **skittlesorter2** before answering `y`. Use
+`--config PATH` for a different profile.
+
+The script verifies the exact target before prompting, prints timestamped
+progress, handles ADR's cascaded Hub deletion, and clears only that profile's
+cached assignment after successful cloud cleanup. It retains enrollment,
+infrastructure, bootstrap certificates/keys, and the operational CSR/key and
+issued certificate. Each Azure CLI invocation has a 180-second timeout; ADR
+deletion uses an explicit 120-second wait within that bound.
+
+Add `--what-if` to preview without Azure requests or deletion. `--yes` skips
+only confirmation, not the safety checks. Like the PC reset, key-based Hub
+access requires local authentication and permission to retrieve policy keys;
+omit `--hub-auth-type key` to use Entra Hub registry permissions instead.
 
 ## 2. Run
 
@@ -133,9 +135,9 @@ Use a **second terminal** on any signed-in machine while the sorter runs.
 az iot hub monitor-events --hub-name pjgiothubdemo002 --device-id skittlesorter
 ```
 
-**Pi telemetry:**
+**Pi telemetry (Bash):**
 
-```powershell
+```bash
 az iot hub monitor-events --hub-name pjgiothubdemo002 --device-id skittlesorter2
 ```
 
