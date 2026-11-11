@@ -48,11 +48,16 @@ After it runs, ensure `appsettings.json` uses tokenized paths so switching ident
 **Note:** For detailed explanation of the certificate hierarchy and verification process, see [Azure Setup](./Azure-Setup.md).
 
 ### 3. Configuration
-Copy and configure the [safe template](../src/configuration/appsettings.template.json):
+Copy and configure the [safe default template](../appsettings.template.json):
 ```powershell
-cp src/configuration/appsettings.template.json appsettings.json
+Copy-Item .\appsettings.template.json .\appsettings.json
 # Edit with your Azure values (IdScope, RegistrationId, etc.)
 ```
+
+The root `appsettings.json` is the default certificate-based X.509 profile.
+Plain `dotnet run` loads it automatically. For an alternate symmetric-key or
+X.509 profile, use the matching `appsettings.sas.template.json` or
+`appsettings.x509.template.json` template; see [Configuration](./Configuration.md).
 
 See [Configuration](./Configuration.md) for full details.
 
@@ -62,18 +67,18 @@ See [Configuration](./Configuration.md) for full details.
 # Build
 dotnet build
 
-# Run
-dotnet run --project skittlesorter.csproj
+# Run using the root appsettings.json
+dotnet run
 ```
 
 ## Bounded connectivity check
 
 ```powershell
 # Offline JSON/configuration validation
-dotnet run --project .\skittlesorter.csproj -- --self-test --config .\appsettings.json
+dotnet run -- --self-test
 
 # Real DPS + Hub connection, representative telemetry, then graceful disconnect
-dotnet run --project .\skittlesorter.csproj -- --cloud-self-test --config .\appsettings.json
+dotnet run -- --cloud-self-test
 ```
 
 The cloud check never initializes physical hardware. It does contact Azure and

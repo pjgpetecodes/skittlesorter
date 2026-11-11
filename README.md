@@ -87,7 +87,13 @@ Complete Azure resource setup including:
 
 See full reference: [docs/Configuration.md](docs/Configuration.md)
 
-Create an `appsettings.json` file in the project root. Configuration includes:
+The root `appsettings.json` is the default runtime configuration and uses the
+certificate-based X.509 profile. `dotnet run` loads it automatically; no
+`--config` argument is needed. The ignored `appsettings.sas.json` and
+`appsettings.x509.json` files are optional alternative profiles. Start from the
+matching safe template under `src/configuration` and keep real credentials local.
+
+Configuration includes:
 - **Hardware**: Hardware-related settings grouped under one section
 - **Hardware.MockMode**: Simulate hardware for development/testing
 - **Hardware.ServoPositions**: Arm servo angles for pick/detect/drop operations
@@ -105,9 +111,7 @@ skittlesorter/
 │   ├── Program.cs                     # Entry point
 │   ├── configuration/                 # Configuration management
 │   │   ├── ConfigurationLoader.cs     # Loads appsettings.json
-│   │   ├── appsettings.template.json  # Configuration template (no secrets)
-│   │   ├── appsettings.sas.template.json
-│   │   └── appsettings.x509.template.json
+│   │   └── appsettings.device-update.template.json
 │   ├── drivers/                       # Hardware drivers
 │   │   ├── TCS3472x.cs                # Color sensor driver
 │   │   ├── SkittleSorterService.cs    # Main sorting logic
@@ -119,9 +123,12 @@ skittlesorter/
 │   └── comms/                         # Communication services
 │       ├── DpsInitializationService.cs # DPS provisioning
 │       └── TelemetryService.cs        # Telemetry to IoT Hub
-├── appsettings.json                   # Configuration (root level, gitignored)
-├── appsettings.sas.json
-├── appsettings.x509.json
+├── appsettings.json                   # Default X.509 config (gitignored)
+├── appsettings.sas.json               # Optional symmetric-key config (gitignored)
+├── appsettings.x509.json              # Optional X.509 config (gitignored)
+├── appsettings.template.json          # Default X.509 template (checked in)
+├── appsettings.sas.template.json      # Symmetric-key template (checked in)
+├── appsettings.x509.template.json    # X.509 template (checked in)
 ├── scripts/                           # Setup and automation scripts
 │   ├── setup-x509-attestation.ps1     # Certificate hierarchy setup
 │   └── X509_ATTESTATION_GUIDE.md      # X.509 guide
@@ -133,20 +140,21 @@ skittlesorter/
 ```
 
 **Configuration Files:**
-- **Root level**: `appsettings.json`, `appsettings.sas.json`, `appsettings.x509.json` (actual configs, gitignored)
-- **Templates**: `src/configuration/appsettings.*.template.json` (safe to commit, no secrets)
+- **Default**: `appsettings.json`, created from `appsettings.template.json`; used by plain `dotnet run`
+- **Alternatives**: `appsettings.sas.json` and `appsettings.x509.json`, created from their matching templates
+- All root-level runtime configs are gitignored; the three root templates contain placeholders only.
 
 ## Running the Application
 
 ```powershell
 dotnet build
-dotnet run --project skittlesorter.csproj
+dotnet run
 ```
 
 For a bounded cloud check without sensors or servos:
 
 ```powershell
-dotnet run --project .\skittlesorter.csproj -- --cloud-self-test --config .\appsettings.json
+dotnet run -- --cloud-self-test
 ```
 
 This has a two-minute bound, makes real Azure requests, waits for one representative telemetry acknowledgement, then disconnects gracefully. For exact-device reset and verification, see the [cloud test runbook](scripts/iot-hub-device-registry/README.md#bounded-unified-sdk-cloud-test); no reset is performed by default.

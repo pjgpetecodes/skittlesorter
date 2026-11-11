@@ -29,7 +29,7 @@ For focused runs, the test projects are `tests\SkittleSorter.Tests` and `tests\A
 
 ## Repository-specific conventions
 
-- Runtime configuration is selected with `--config`; the default is root `appsettings.json`. Use `src\configuration\appsettings.*.template.json` as safe examples. Keep credentials, private keys, and deployment state out of source control and release artifacts.
+- Runtime configuration is selected with `--config`; plain `dotnet run` uses root `appsettings.json`. Use the root `appsettings.*.template.json` files as safe examples; `appsettings.device-update.template.json` remains under `src\configuration`. Keep credentials, private keys, and deployment state out of source control and release artifacts.
 - Hardware supports mock and physical implementations. Keep configuration-driven hardware behavior testable without a Raspberry Pi; use `--self-test --config PATH` for configuration-only validation.
 - The app supports both standard DPS provisioning and preview operational-certificate issuance. Check the selected profile and preserve its compatibility defaults when changing provisioning behavior.
 - For remote WordPress articles, edit the matching Markdown under `blog-remote`, regenerate/sync its paired HTML locally, and review the push preview before any explicit `--apply`. Do not replace the separate drafts under `blog` or publish automatically. Preserve imported Gutenberg `wordpress-block` fences unless intentionally changing those blocks.

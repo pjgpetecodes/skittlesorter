@@ -502,8 +502,8 @@ Write-Host ""
 **⚠️ SECURITY**: Never commit `appsettings.json` to source control as it contains secrets!
 
 1. **Copy the template**:
-   ```bash
-   cp src/configuration/appsettings.template.json appsettings.json
+   ```powershell
+   Copy-Item .\appsettings.template.json .\appsettings.json
    ```
 
 2. **Update `appsettings.json`** based on your chosen attestation method:

@@ -27,7 +27,7 @@ param(
     [ValidatePattern('^[a-z0-9][a-z0-9-]{0,127}$')]
     [string]$RegistrationId = 'skittlesorter-002',
 
-    [string]$AppConfigPath = 'appsettings.002.json',
+    [string]$AppConfigPath = 'appsettings.json',
 
     [string]$BootstrapDirectory = 'certs\x509-bootstrap',
 
@@ -481,7 +481,7 @@ if ($writeAppConfig) {
         '--query', 'properties.idScope',
         '--output', 'tsv'
     )
-    $templatePath = Join-Path $PSScriptRoot '..\..\src\configuration\appsettings.template.json'
+    $templatePath = Join-Path $PSScriptRoot '..\..\appsettings.template.json'
     if (-not (Test-Path -LiteralPath $templatePath)) {
         throw "Application settings template was not found: $templatePath"
     }
@@ -587,5 +587,5 @@ Write-Host "Enrollment:    $EnrollmentId"
 Write-Host "Registration:  $RegistrationId (provisioned when the sorter runs, if not already present)"
 if ($writeAppConfig) {
     Write-Host "App config:    $resolvedAppConfigPath"
-    Write-Host "Run sorter:    dotnet run --project `"$repositoryRoot\skittlesorter.csproj`" -- --config `"$resolvedAppConfigPath`""
+    Write-Host 'Run sorter from the repository root with: dotnet run'
 }

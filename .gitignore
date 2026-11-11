@@ -16,6 +16,7 @@ certs/
 *.p12
 appsettings.json
 appsettings.*.json
+appsettings-backup/
 !appsettings.template.json
 !appsettings.sas.template.json
 !appsettings.x509.template.json

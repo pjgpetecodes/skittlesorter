@@ -87,13 +87,13 @@ the keys and use a dedicated demo Hub. Azure Policy can block or override this
 setting, in which case setup stops. Other settings on existing resources are not
 reconciled, so review their configuration before reusing them. Namespace links
 are kept if already present, and setup checks that they target the requested
-DPS and Hub. The default `appsettings.002.json` is created only
-if it does not already exist. Existing configs and enrollments are never
-overwritten: a reused config must match the X.509 enrollment, issuer, DPS scope
-and ADR policy. For an older symmetric-key config or enrollment, choose a new
-`-AppConfigPath` and enrollment ID. If an interrupted first run left bootstrap
-files or an enrollment without its config, inspect them before retrying; setup
-will not silently replace them.
+DPS and Hub. The default `appsettings.json` is created only if it does not
+already exist. Plain `dotnet run` uses that file automatically. Existing configs
+and enrollments are never overwritten: a reused config must match the X.509
+enrollment, issuer, DPS scope and ADR policy. For another X.509 profile, specify
+`-AppConfigPath appsettings.x509.json` and a distinct enrollment ID. If an
+interrupted first run left bootstrap files or an enrollment without its config,
+inspect them before retrying; setup will not silently replace them.
 
 The self-signed bootstrap CA and device key are stored under the ignored
 `certs\x509-bootstrap` directory. This CA is only for demonstrations: its
@@ -121,7 +121,7 @@ intermediate CA, provide its certificate, private key and full issuer chain:
 
 After reviewing the preview, rerun without `-WhatIf`. This registers the supplied
 issuer as a **verified** DPS CA (self-attestation), creates an X.509 enrollment,
-and creates an ignored `appsettings.x509-002.json` with an ignored bootstrap
+and creates an ignored `appsettings.x509.json` with an ignored bootstrap
 key and certificate under `certs\x509-demo`; existing files or an existing
 enrollment are never overwritten. Trust only a CA you control: verified DPS CAs
 establish trust for certificate-based enrollment. Protect the issuer and device private keys.
@@ -185,22 +185,22 @@ links, not the ADR namespace links.
 
 ## Run the sorter
 
-After setup, the script prints a `dotnet run` command that uses the generated
-local config. Running it starts the sorter and registers the configured
-registration ID through DPS, creating its device record. Stop it with
-Ctrl+C. For a hardware-free connectivity test, leave the generated mock sensor
-and servo settings enabled.
+After setup, run `dotnet run` from the repository root. It loads the generated
+`appsettings.json` automatically. Running it starts the sorter and registers
+the configured registration ID through DPS, creating its device record. Stop
+it with Ctrl+C. For a hardware-free connectivity test, leave the generated
+mock sensor and servo settings enabled.
 
 ## Bounded unified SDK cloud test
 
 For a finite connectivity check, use the generated configuration directly:
 
 ```powershell
-dotnet run --project .\skittlesorter.csproj -- --cloud-self-test --config .\appsettings.002.json
+dotnet run -- --cloud-self-test
 
 # Operator helper: no reset by default
 .\scripts\iot-hub-device-registry\test-unified.ps1 `
-  -AppConfigPath .\appsettings.002.json
+  -AppConfigPath .\appsettings.json
 ```
 
 The cloud self-test has a two-minute bound, bypasses physical hardware,
@@ -216,7 +216,7 @@ helper accepts an explicit `-ResetDevice` only with the matching resource names:
 
 ```powershell
 .\scripts\iot-hub-device-registry\test-unified.ps1 `
-  -AppConfigPath .\appsettings.002.json `
+  -AppConfigPath .\appsettings.json `
   -ResetDevice `
   -SubscriptionId "<subscription-id>" `
   -ResourceGroupName "my-iot-preview-rg" `

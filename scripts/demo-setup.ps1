@@ -72,7 +72,7 @@ Assert-NoReparsePoint (Join-Path (Join-Path $bootstrapRoot $target.EnrollmentId)
 Assert-NoReparsePoint (Join-Path (Join-Path $bootstrapRoot $target.EnrollmentId) 'ca')
 Assert-NoReparsePoint (Resolve-RepositoryPath $target.AppConfigPath)
 
-$templatePath = Join-Path $repositoryRoot 'src\configuration\appsettings.template.json'
+$templatePath = Join-Path $repositoryRoot 'appsettings.template.json'
 $appConfig = Get-Content -LiteralPath $templatePath -Raw | ConvertFrom-Json
 $appConfig.IoTHub.DeviceId = '{RegistrationId}'
 $appConfig.IoTHub.DpsProvisioning.IdScope = $target.DpsIdScope

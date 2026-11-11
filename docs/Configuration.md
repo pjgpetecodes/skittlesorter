@@ -11,12 +11,24 @@ rather than building DPS MQTT topics or SAS tokens.
 
 ## Configuration File
 
-Service deployments use `--config /etc/skittlesorter/appsettings.json`; the default
-repository invocation still reads `appsettings.json`. Published releases deliberately
-exclude the real configuration. `--self-test --config PATH` checks its JSON structure
-without moving hardware or making network requests; `--version` prints the running
-assembly version. `--ready-file PATH` enables service readiness and requires an
-explicit `Hardware` section.
+The default configuration is the root `appsettings.json`. Plain `dotnet run`
+loads it automatically; do not pass `--config` for the default profile.
+`appsettings.json` is configured for certificate-based X.509 provisioning.
+Published releases deliberately exclude runtime configurations.
+
+The root-level `appsettings.sas.json` and `appsettings.x509.json` are optional
+alternate runtime profiles. Copy the corresponding safe template to the desired
+runtime filename and pass `--config` only when intentionally selecting one of
+these alternate files. The templates are:
+
+- `appsettings.template.json` — default certificate profile
+- `appsettings.sas.template.json` — symmetric-key (SAS) profile
+- `appsettings.x509.template.json` — X.509 profile
+
+`--self-test` checks the default JSON configuration without moving hardware or
+making network requests; `--self-test --config PATH` checks an explicitly selected
+alternate file. `--version` prints the running assembly version. `--ready-file PATH`
+enables service readiness and requires an explicit `Hardware` section.
 
 `--cloud-self-test --config PATH` is a separate, bounded **online** check. It
 has a two-minute bound, provisions/connects, waits for one representative telemetry
@@ -46,22 +58,29 @@ credential instead.
 `Adr.DeviceUpdate` remains registry metadata, not OTA configuration. The optional
 custom updater has its own configuration; see [application updates](Application-Updates.md).
 
-Create an `appsettings.json` file at the project root. You can start from the template:
+Create an `appsettings.json` file at the project root. You can start from the root template:
 
-```bash
-cp src/configuration/appsettings.template.json appsettings.json
+```powershell
+Copy-Item .\appsettings.template.json .\appsettings.json
 ```
 
-See [appsettings.template.json](../src/configuration/appsettings.template.json) for the complete template.
+For the optional profiles, copy `appsettings.sas.template.json` to
+`appsettings.sas.json`, or `appsettings.x509.template.json` to
+`appsettings.x509.json`. Keep runtime files, credentials, certificates, and
+`appsettings-backup/` out of source control; the repository ignores them.
 
 Basic structure:
 
 ```json
 {
-  "MockMode": { /* mock sensors/servos */ },
-  "ServoPositions": { /* pick/detect/drop angles */ },
-  "ChutePositions": { /* angles per color */ },
-  "IoTHub": { "DpsProvisioning": { /* DPS settings */ } },
+  "Hardware": {
+    "MockMode": { /* mock sensors/servos */ },
+    "ServoPositions": { /* pick/detect/drop angles */ },
+    "ArmServoHardware": { /* arm PWM settings */ },
+    "ChuteServoHardware": { /* chute PWM settings */ },
+    "ChutePositions": { /* angles per color */ }
+  },
+  "IoTHub": { "DeviceId": "{RegistrationId}", "DpsProvisioning": { /* DPS settings */ } },
   "Adr": { "DeviceUpdate": { /* attributes/tags */ } }
 }
 ```

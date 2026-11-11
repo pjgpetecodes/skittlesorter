@@ -2,72 +2,52 @@
     "version": "0.2.0",
     "configurations": [
         {
-            "name": "SkittleSorter X.509 CSR (appsettings.rebuild-002.json)",
+            "name": "SkittleSorter (appsettings.json)",
+            "type": "coreclr",
+            "request": "launch",
+            "preLaunchTask": "build",
+            "program": "${workspaceFolder}\\bin\\Debug\\net10.0\\skittlesorter.dll",
+            "args": [],
+            "cwd": "${workspaceFolder}",
+            "console": "internalConsole",
+            "stopAtEntry": false
+        },
+        {
+            "name": "SkittleSorter Cloud Self-Test",
             "type": "coreclr",
             "request": "launch",
             "preLaunchTask": "build",
             "program": "${workspaceFolder}\\bin\\Debug\\net10.0\\skittlesorter.dll",
             "args": [
-                "--config",
-                "${workspaceFolder}\\appsettings.rebuild-002.json"
+                "--cloud-self-test"
             ],
             "cwd": "${workspaceFolder}",
             "console": "internalConsole",
             "stopAtEntry": false
         },
         {
-            "name": "SkittleSorter X.509 CSR Cloud Self-Test",
+            "name": "SkittleSorter SAS Profile",
             "type": "coreclr",
             "request": "launch",
             "preLaunchTask": "build",
             "program": "${workspaceFolder}\\bin\\Debug\\net10.0\\skittlesorter.dll",
             "args": [
-                "--cloud-self-test",
                 "--config",
-                "${workspaceFolder}\\appsettings.rebuild-002.json"
+                "${workspaceFolder}\\appsettings.sas.json"
             ],
             "cwd": "${workspaceFolder}",
             "console": "internalConsole",
             "stopAtEntry": false
         },
         {
-            "name": "SkittleSorter X.509 Demo (appsettings.x509-demo.json)",
+            "name": "SkittleSorter X.509 Profile",
             "type": "coreclr",
             "request": "launch",
             "preLaunchTask": "build",
             "program": "${workspaceFolder}\\bin\\Debug\\net10.0\\skittlesorter.dll",
             "args": [
                 "--config",
-                "${workspaceFolder}\\appsettings.x509-demo.json"
-            ],
-            "cwd": "${workspaceFolder}",
-            "console": "internalConsole",
-            "stopAtEntry": false
-        },
-        {
-            "name": "SkittleSorter (appsettings.002.json)",
-            "type": "coreclr",
-            "request": "launch",
-            "preLaunchTask": "build",
-            "program": "${workspaceFolder}\\bin\\Debug\\net10.0\\skittlesorter.dll",
-            "args": [
-                "--config",
-                "${workspaceFolder}\\appsettings.002.json"
-            ],
-            "cwd": "${workspaceFolder}",
-            "console": "internalConsole",
-            "stopAtEntry": false
-        },
-        {
-            "name": "SkittleSorter Cloud Self-Test (appsettings.002.json)",
-            "type": "coreclr",
-            "request": "launch",
-            "preLaunchTask": "build",
-            "program": "${workspaceFolder}\\bin\\Debug\\net10.0\\skittlesorter.dll",
-            "args": [
-                "--cloud-self-test",
-                "--config",
-                "${workspaceFolder}\\appsettings.002.json"
+                "${workspaceFolder}\\appsettings.x509.json"
             ],
             "cwd": "${workspaceFolder}",
             "console": "internalConsole",

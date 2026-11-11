@@ -24,7 +24,7 @@ From the repository root:
 
 ```powershell
 .\scripts\clean-test-start.ps1 `
-  -AppConfigPath .\appsettings.002.json `
+  -AppConfigPath .\appsettings.json `
   -SubscriptionId "<subscription-id>" `
   -ResourceGroup "my-iot-preview-rg" `
   -DpsName "my-iot-dps-002" `
@@ -42,10 +42,10 @@ and immediately run the bounded connectivity check instead, use
 `-ResetOnly`.
 
 For F5 demo profiles, use the config and enrollment group of the **previous**
-run when resetting. Existing local configurations may still use the earlier
-symmetric-key profile; `appsettings.x509-002.json` uses X.509 attestation and
-CSR issuance. Both may use `skittlesorter-002`; the reset checks that the
-specified group owns the current registration. Then select the desired profile.
+run when resetting. The default `appsettings.json` is the certificate-based
+profile; optional symmetric-key and X.509 profiles can be stored in
+`appsettings.sas.json` and `appsettings.x509.json`. The reset checks that the
+specified group owns the current registration before changing device state.
 
 The older cleanup script used to delete an enrollment group and the entire local
 `certs` directory. Those broad deletions are intentionally no longer performed.
