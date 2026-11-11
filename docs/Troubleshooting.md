@@ -45,6 +45,44 @@ If the current code still fails, inspect the exact issued-chain file and any
 saved assignment reported by the error, without sharing private keys. Do not
 reset working cloud resources solely because a local certificate cannot load.
 
+### Pi reset times out on enrollment-group show
+
+If `az iot dps show` succeeds but `az iot dps enrollment-group show` reaches
+the reset's 180-second command timeout, no deletion has started. The first
+request uses Azure Resource Manager; enrollment operations also need the
+DPS service HTTPS endpoint. Successful device provisioning over MQTT does not
+prove that this separate management path works.
+
+First align the Pi's extension with the preview-enabled Azure setup:
+
+```bash
+az extension add --name azure-iot --allow-preview true --upgrade --yes
+az extension show --name azure-iot --query version --output tsv
+```
+
+Test the failing request directly, explicitly selecting the default key-based
+DPS authentication rather than relying on local CLI defaults:
+
+```bash
+az iot dps enrollment-group show --dps-name "<dps-name>" --resource-group "<resource-group>" --enrollment-id "<enrollment-id>" --auth-type key --query "{Id:enrollmentGroupId,Namespace:namespaceName}" --output json
+```
+
+If it still stalls, test DNS/TLS/HTTPS reachability from the Pi:
+
+```bash
+dps_host=$(az iot dps show --name "<dps-name>" --resource-group "<resource-group>" --query properties.serviceOperationsHostName --output tsv)
+curl --connect-timeout 10 --max-time 20 --head "https://$dps_host"
+```
+
+An HTTP response such as 400, 401, or 404 demonstrates that the endpoint is
+reachable; the unauthenticated probe is not expected to return device data.
+A DNS, TLS, or connection timeout points to connectivity, proxy/firewall, or
+certificate-trust configuration to investigate. Do not disable TLS validation.
+A successful probe does not establish that the authenticated enrollment request
+will succeed. Compare the direct CLI result and CLI/extension versions with the
+working PC before blaming the Pi hardware or DPS itself. Do not skip the
+enrollment safety check or increase the timeout without identifying the delay.
+
 ## ADR
 - Authentication via DefaultAzureCredential
 - Permissions at subscription/RG/namespace

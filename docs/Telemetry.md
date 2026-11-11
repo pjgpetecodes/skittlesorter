@@ -31,7 +31,7 @@ sign in, select the subscription, and install the IoT extension first:
 ```powershell
 az login --use-device-code
 az account set --subscription "<subscription-id>"
-az extension add --name azure-iot
+az extension add --name azure-iot --allow-preview true --upgrade --yes
 ```
 
 For the Pi demo identity:

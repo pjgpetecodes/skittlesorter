@@ -15,7 +15,7 @@ cloud-resource migration is required. See [provisioning profiles](DPS-Provisioni
 - Windows with PowerShell (or cross-platform shell)
 - Azure subscription (required for IoT Hub, DPS, ADR)
 - [Azure CLI](https://learn.microsoft.com/cli/azure/install-azure-cli)
-- Azure IoT extension: `az extension add --name azure-iot`
+- Preview-enabled Azure IoT extension: `az extension add --name azure-iot --allow-preview true --upgrade --yes`
 
 ## Setup
 

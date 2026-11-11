@@ -11,11 +11,13 @@ On the machine used for Azure CLI commands:
 ```powershell
 az login --use-device-code
 az account set --subscription "<demo-subscription-id>"
-az extension add --name azure-iot
+az extension add --name azure-iot --allow-preview true --upgrade --yes
 ```
 
 See [ADR Integration](ADR-Integration.md#authentication-on-a-raspberry-pi)
 for Azure CLI installation on a 64-bit Pi.
+The demo requires the preview-enabled IoT extension, as installed by the Azure
+setup script. Installing Azure CLI alone does not install this extension.
 
 ## 1. Clean start
 

@@ -67,7 +67,12 @@ dotnet run
 Open the displayed login URL on another machine and enter the code. With
 `Adr.Enabled: true`, `DefaultAzureCredential` can use `AzureCliCredential`
 automatically; no IoT extension is needed for the app's ARM calls. Install
-`azure-iot` separately if you also want to run `az iot` commands.
+the preview-enabled `azure-iot` extension separately if you also want to run the
+demo's `az iot` commands:
+
+```bash
+az extension add --name azure-iot --allow-preview true --upgrade --yes
+```
 
 The signed-in account needs read permission on the namespace/devices for
 listing and getting resources, and write permission for enabled metadata
